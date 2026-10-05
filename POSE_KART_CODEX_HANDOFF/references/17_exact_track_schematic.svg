@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#ef4444"/></marker>
+    <style>
+      .title{font:700 42px Arial;fill:#0f172a}.h{font:700 25px Arial;fill:#0f172a}.t{font:600 20px Arial;fill:#0f172a}.s{font:500 17px Arial;fill:#334155}.cp{font:700 16px Arial;fill:#fff}.zone{font:700 19px Arial;fill:#fff}
+    </style>
+  </defs>
+  <rect width="1600" height="1000" fill="#eef6ff"/>
+  <text x="60" y="60" class="title">POSE KART — EXACT TRACK SCHEMATIC (Implementation Reference)</text>
+  <text x="60" y="95" class="s">Clockwise race direction • 12 ordered checkpoints • one AI racing line • optional shortcut • 3 boost pads • 1 jump ramp</text>
+
+  <!-- Environment zones -->
+  <rect x="75" y="610" width="400" height="275" rx="40" fill="#0ea5e9" opacity="0.22"/>
+  <rect x="90" y="265" width="460" height="330" rx="40" fill="#f59e0b" opacity="0.22"/>
+  <rect x="455" y="95" width="565" height="325" rx="40" fill="#16a34a" opacity="0.18"/>
+  <rect x="965" y="120" width="360" height="320" rx="40" fill="#7c3aed" opacity="0.16"/>
+  <rect x="1130" y="410" width="350" height="410" rx="40" fill="#64748b" opacity="0.18"/>
+  <rect x="540" y="640" width="600" height="255" rx="40" fill="#facc15" opacity="0.19"/>
+
+  <text x="125" y="850" class="h">HARBOR / START</text>
+  <text x="145" y="300" class="h">COASTAL VILLAGE</text>
+  <text x="640" y="145" class="h">ROCKY CANYON</text>
+  <text x="1080" y="180" class="h">CAVE</text>
+  <text x="1225" y="780" class="h">CLIFF ROAD</text>
+  <text x="710" y="860" class="h">BEACH / DIRT</text>
+
+  <!-- Track road -->
+  <path d="M260 760 C185 680,145 590,210 505 C260 440,320 400,360 330 C420 220,555 225,635 275 C725 330,760 235,850 210 C965 180,1090 210,1150 300 C1210 390,1250 430,1320 515 C1415 630,1320 760,1190 790 C1050 822,930 780,820 765 C685 745,565 810,455 820 C370 830,300 825,260 760" fill="none" stroke="#334155" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M260 760 C185 680,145 590,210 505 C260 440,320 400,360 330 C420 220,555 225,635 275 C725 330,760 235,850 210 C965 180,1090 210,1150 300 C1210 390,1250 430,1320 515 C1415 630,1320 760,1190 790 C1050 822,930 780,820 765 C685 745,565 810,455 820 C370 830,300 825,260 760" fill="none" stroke="#e2e8f0" stroke-width="68" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M260 760 C185 680,145 590,210 505 C260 440,320 400,360 330 C420 220,555 225,635 275 C725 330,760 235,850 210 C965 180,1090 210,1150 300 C1210 390,1250 430,1320 515 C1415 630,1320 760,1190 790 C1050 822,930 780,820 765 C685 745,565 810,455 820 C370 830,300 825,260 760" fill="none" stroke="#ef4444" stroke-width="8" stroke-dasharray="20 16" marker-end="url(#arrow)"/>
+  <!-- AI racing line -->
+  <path d="M255 750 C195 675,175 590,225 515 C280 435,330 410,380 335 C440 245,545 250,625 292 C715 340,780 262,858 236 C965 204,1065 230,1125 308 C1190 392,1218 452,1295 525 C1370 600,1310 710,1180 755 C1035 805,935 755,820 740 C690 722,570 785,458 790 C372 798,305 810,255 750" fill="none" stroke="#22c55e" stroke-width="6" stroke-dasharray="10 12"/>
+
+  <!-- Start/finish -->
+  <line x1="230" y1="715" x2="305" y2="790" stroke="#111827" stroke-width="16"/>
+  <line x1="242" y1="703" x2="317" y2="778" stroke="#fff" stroke-width="8" stroke-dasharray="12 10"/>
+  <text x="95" y="730" class="t">START / FINISH</text>
+
+  <!-- Checkpoints -->
+  <g>
+    <g transform="translate(215 650)"><circle r="24" fill="#dc2626"/><text text-anchor="middle" dy="6" class="cp">01</text></g>
+    <g transform="translate(205 520)"><circle r="24" fill="#dc2626"/><text text-anchor="middle" dy="6" class="cp">02</text></g>
+    <g transform="translate(325 405)"><circle r="24" fill="#dc2626"/><text text-anchor="middle" dy="6" class="cp">03</text></g>
+    <g transform="translate(430 275)"><circle r="24" fill="#dc2626"/><text text-anchor="middle" dy="6" class="cp">04</text></g>
+    <g transform="translate(620 280)"><circle r="24" fill="#dc2626"/><text text-anchor="middle" dy="6" class="cp">05</text></g>
+    <g transform="translate(825 225)"><circle r="24" fill="#dc2626"/><text text-anchor="middle" dy="6" class="cp">06</text></g>
+    <g transform="translate(1055 245)"><circle r="24" fill="#dc2626"/><text text-anchor="middle" dy="6" class="cp">07</text></g>
+    <g transform="translate(1185 385)"><circle r="24" fill="#dc2626"/><text text-anchor="middle" dy="6" class="cp">08</text></g>
+    <g transform="translate(1325 535)"><circle r="24" fill="#dc2626"/><text text-anchor="middle" dy="6" class="cp">09</text></g>
+    <g transform="translate(1280 730)"><circle r="24" fill="#dc2626"/><text text-anchor="middle" dy="6" class="cp">10</text></g>
+    <g transform="translate(940 765)"><circle r="24" fill="#dc2626"/><text text-anchor="middle" dy="6" class="cp">11</text></g>
+    <g transform="translate(540 805)"><circle r="24" fill="#dc2626"/><text text-anchor="middle" dy="6" class="cp">12</text></g>
+  </g>
+
+  <!-- Boost pads -->
+  <g fill="#2563eb" stroke="#fff" stroke-width="4">
+    <rect x="520" y="280" width="55" height="34" rx="8" transform="rotate(16 548 297)"/>
+    <rect x="1200" y="510" width="55" height="34" rx="8" transform="rotate(50 1228 527)"/>
+    <rect x="690" y="760" width="55" height="34" rx="8" transform="rotate(-5 718 777)"/>
+  </g>
+  <text x="500" y="345" class="s">BOOST A</text><text x="1180" y="485" class="s">BOOST B</text><text x="675" y="735" class="s">BOOST C</text>
+
+  <!-- Ramp -->
+  <rect x="1010" y="742" width="72" height="40" rx="8" fill="#f97316" transform="rotate(6 1046 762)"/>
+  <text x="995" y="835" class="s">SMALL JUMP RAMP</text>
+
+  <!-- Shortcut -->
+  <path d="M300 420 C415 465,505 445,590 390" fill="none" stroke="#f59e0b" stroke-width="8" stroke-dasharray="14 10"/>
+  <text x="390" y="475" class="s">OPTIONAL SHORTCUT (post-MVP)</text>
+
+  <!-- Legend -->
+  <rect x="60" y="105" width="365" height="150" rx="20" fill="#fff" stroke="#cbd5e1" stroke-width="2"/>
+  <line x1="90" y1="145" x2="160" y2="145" stroke="#ef4444" stroke-width="7" stroke-dasharray="14 10"/><text x="180" y="152" class="s">Race direction</text>
+  <line x1="90" y1="185" x2="160" y2="185" stroke="#22c55e" stroke-width="6" stroke-dasharray="10 10"/><text x="180" y="192" class="s">AI racing line</text>
+  <circle cx="125" cy="225" r="18" fill="#dc2626"/><text x="180" y="232" class="s">Ordered checkpoints CP01 → CP12</text>
+
+  <text x="60" y="950" class="s">Implementation rule: checkpoint order is authoritative. Visual positions are schematic, not world coordinates. Graybox the route first, then dress each zone.</text>
+</svg>

@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/PoseKart_VehicleSelect.unity
+    guid: be15bc73380d9bd48b9d499b478cd846
+  - enabled: 1
+    path: Assets/Scenes/SampleScene.unity
+    guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 1
+    path: Assets/Scenes/PoseKart_FinalIsland.unity
+    guid: e3d2d9258dda3ef4e8e686927a082ddc
+  - enabled: 1
+    path: Assets/Scenes/PoseKart_ReferenceIsland.unity
+    guid: d24a98cb564ee25468e3f06ef46361a3
+  - enabled: 1
+    path: Assets/ImportedAssignments/Bailam/Cau1_2D/Scenes/Cau1_MemoryGame.unity
+    guid: 5569fb31bddb3304fa4d5f39bff1a9b9
+  - enabled: 1
+    path: Assets/ImportedAssignments/Bailam/Cau2_3D/Scenes/Cau2_RobotArm.unity
+    guid: 58df0c473129dfb488a2b346685cce42
+  - enabled: 1
+    path: Assets/Scenes/bai1kiemtra.unity
+    guid: fa7e40bb7e6806049af37fe68de4b6d4
+  - enabled: 1
+    path: Assets/Scenes/bai2robot.unity
+    guid: 31e9bd80be87bd343b8acaae27cae443
+  - enabled: 1
+    path: Assets/Scenes/ThiThu_Cau1_VatLy2D.unity
+    guid: 27f3681d37fc0de45a97ad2166551628
+  - enabled: 1
+    path: Assets/Scenes/ThiThu_Cau2_Tank.unity
+    guid: 2989d8ef278b41f44ba466233f7dc073
+  - enabled: 1
+    path: Assets/Scenes/ThiGiuaKy2026_Cau1_TimSo.unity
+    guid: 3b285e671759a944caddc91d8e79f604
+  - enabled: 1
+    path: Assets/Scenes/ThiGiuaKy2026_Cau2_RobotSensor.unity
+    guid: 7914dfef797215341847c78bfa50b62b
+  m_configObjects:
+    com.unity.dt.app-ui: {fileID: 11400000, guid: 1b1c20d82303e4b5781c3ef50ac1449f, type: 2}
+    com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  m_UseUCBPForAssetBundles: 0

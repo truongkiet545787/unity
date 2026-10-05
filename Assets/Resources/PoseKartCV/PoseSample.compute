@@ -1,0 +1,23 @@
+#pragma kernel Sample
+Texture2D<float4> Source;
+SamplerState sampler_LinearClamp;
+RWStructuredBuffer<float> Output;
+int Size;
+float4x4 Affine;
+float2 SourceSize;
+float InputScale;
+float InputBias;
+int LinearProject;
+[numthreads(8,8,1)]
+void Sample(uint3 id:SV_DispatchThreadID)
+{
+    if(id.x>=Size||id.y>=Size)return;
+    float2 uv=mul(Affine,float4(id.xy,1,1)).xy/SourceSize;
+    float3 c=Source.SampleLevel(sampler_LinearClamp,uv,0).rgb;
+    if(LinearProject!=0)
+        c=lerp(c*12.92,1.055*pow(max(c,0),1.0/2.4)-0.055,step(0.0031308,c));
+    if(any(uv<0)||any(uv>1))c=0;
+    c=c*InputScale+InputBias;
+    uint index=(id.y*Size+id.x)*3;
+    Output[index]=c.r;Output[index+1]=c.g;Output[index+2]=c.b;
+}

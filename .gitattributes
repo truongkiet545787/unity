@@ -1,0 +1,2 @@
+Assets/PoseKart/ReferenceIslandArt/RoadFittedTerrain.asset filter=lfs diff=lfs merge=lfs -text
+Assets/PoseKart/GeneratedMeshes/Clearance_0003.asset filter=lfs diff=lfs merge=lfs -text

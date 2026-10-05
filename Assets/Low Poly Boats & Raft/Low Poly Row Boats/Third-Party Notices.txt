@@ -1,0 +1,9 @@
+Third-Party Notices
+
+This asset package includes textures sourced from AmbientCG, which are provided under the Creative Commons Zero (CC0) license, allowing unrestricted use, modification, and distribution.
+
+Textures Used:
+
+[Metal 055A] - Sourced from AmbientCG (https://ambientcg.com/view?id=Metal055A)
+[Planks 037A] - Sourced from AmbientCG (https://ambientcg.com/view?id=Planks037A)
+License: The textures in this package are available under the Creative Commons Zero (CC0) license. This license waives all copyright, allowing for free use in commercial and non-commercial applications. For more details, see: https://creativecommons.org/publicdomain/zero/1.0/

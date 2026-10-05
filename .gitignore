@@ -1,0 +1,49 @@
+# Unity-generated directories
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+UserSettings/
+
+# IDE and generated project files
+.vs/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.csproj
+*.sln
+*.slnx
+*.user
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Local tooling and temporary outputs
+tmp/
+agent_bridge/__pycache__/
+*.py[cod]
+
+# Local agent/editor state and unrelated Unity coursework
+.agent-bridge/
+.agents/
+Assets/ImportedAssignments/
+Assets/TutorialInfo/
+Assets/Scripts/Assignments/
+Assets/Scripts/Mqtt/
+Assets/Art/ThiThuExam/
+Assets/Art/ThiThuExam.meta
+Assets/ThirdParty/M2MqttUnity/
+Assets/Materials/Bai2Robot/
+Assets/Materials/Bai2Robot.meta
+Assets/Materials/ThiThuExam/
+Assets/Materials/ThiThuExam.meta
+Assets/BrokenVector/LowPolyBrickHouses/Scenes/
+Packages/com.local.unity-mcp/
