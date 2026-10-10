@@ -1,0 +1,45 @@
+PoseKart Smooth Road Physics diagnostics
+========================================
+
+Scene: Assets/Scenes/PoseKart_ReferenceIsland.unity
+Road: ReferenceIsland_ART_ONLY/Track • reference silhouette/Continuous sand and dirt road
+
+Asset references
+----------------
+Visual MeshFilter: Assets/PoseKart/ReferenceIslandArt/002_Continuous sand and dirt road.asset
+Visual mesh GUID: 123c435d3ad0e244a8f68538886d4097
+Physics MeshCollider: Assets/PoseKart/GeneratedMeshes/Physics/SmoothMainRoadCollision.asset
+Physics mesh GUID: a6d8450c1d7d4f9c9a7b2d9e4a5103f2
+Original retained collider: disabled, still assigned to the original mesh for restore.
+
+Both meshes have 560 vertices and 560 triangles. X/Z positions and the triangle
+index buffer are preserved. The original road is a 280-point closed strip.
+Original height analysis: max adjacent height change 2.6648u, average 1.1862u,
+maximum neighboring slope angle 46.61 degrees.
+Generated physics mesh: max vertex displacement 0.15u, max adjacent height change
+2.6611u, average 1.1817u, maximum neighboring slope angle 46.52 degrees.
+The generated mesh keeps the original slope/track shape while removing only the
+bounded local height component. It does not change the visible low-poly road.
+
+Root cause
+----------
+The earlier scene setup assigned the same generated smoothed asset to both the
+MeshFilter and MeshCollider. The active collider therefore exposed the road
+strip's low-poly triangle height transitions directly to the Rigidbody and
+VehicleGroundProbe raycasts. A fitted terrain MeshCollider also overlaps the
+road region; it was not deleted because it is part of island scenery and must
+be validated in Play Mode before any layer/collider change.
+
+Vehicle inspection
+------------------
+CarController uses Rigidbody-based arcade physics and downward
+Physics.RaycastNonAlloc ground probing. No WheelCollider-based fix or vehicle
+physics change was made. Waypoints, boosts, triggers, ramps and bridges remain
+untouched.
+
+Validation status
+-----------------
+Static scene and asset references were verified. Unity runtime driving across
+the full route, bridge, ramp, shortcut, boost triggers and AI behavior still
+require a manual Play Mode pass because this Editor instance was not available
+for runtime control during the change.

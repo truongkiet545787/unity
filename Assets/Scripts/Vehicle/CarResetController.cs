@@ -58,7 +58,7 @@ namespace PoseKart.Vehicle
             {
                 // Terrain beside the course must never replace the last on-track recovery point.
                 string surface=hit.collider.name;
-                if(surface!="Continuous sand and dirt road"&&!surface.Contains("alley")&&!surface.Contains("ridge cut")&&!surface.Contains("sand trail"))return;
+                if(surface!="Continuous sand and dirt road"&&surface!="SmoothRoadPhysics"&&!surface.Contains("alley")&&!surface.Contains("ridge cut")&&!surface.Contains("sand trail"))return;
                 var line=racingLine;
                 Quaternion heading=targetBody.rotation;
                 if(line!=null&&line.IsConfigured)

@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using PoseKart.Vehicle;
 using UnityEngine;
@@ -24,6 +25,9 @@ namespace PoseKart.Race
         [SerializeField] private RaceState state = RaceState.Waiting;
         [SerializeField] private double raceTimeSeconds;
         [SerializeField] private string countdownDisplay;
+        [SerializeField] private double playerFinishTimeSeconds;
+        [SerializeField] private int playerFinishPosition;
+        [SerializeField] private bool playerFinished;
 
         private double raceStartTime;
         private int finishedRacerCount;
@@ -31,6 +35,9 @@ namespace PoseKart.Race
         public RaceState State => state;
         public double RaceTimeSeconds => raceTimeSeconds;
         public string CountdownDisplay => countdownDisplay;
+        public bool PlayerFinished => playerFinished;
+        public double PlayerFinishTimeSeconds => playerFinishTimeSeconds;
+        public int PlayerFinishPosition => playerFinishPosition > 0 ? playerFinishPosition : PlayerPosition;
         public int TotalLaps => totalLaps;
         public int CurrentLap => PlayerRacer != null
             ? PlayerRacer.LapTracker.CurrentLap
@@ -38,6 +45,7 @@ namespace PoseKart.Race
         public LapTracker LapTracker => lapTracker;
         public int RacerCount => HasRacers ? racers.Length : 1;
         public int PlayerPosition => PlayerRacer != null ? PlayerRacer.RacePosition : 1;
+        public event Action<RaceManager> PlayerFinishedEvent;
         public bool IsConfigured =>
             checkpointManager != null
             && checkpointManager.IsConfigured
@@ -122,6 +130,9 @@ namespace PoseKart.Race
             state = RaceState.Waiting;
             raceTimeSeconds = 0d;
             countdownDisplay = string.Empty;
+            playerFinishTimeSeconds = 0d;
+            playerFinishPosition = 0;
+            playerFinished = false;
             finishedRacerCount = 0;
             if (HasRacers)
             {
@@ -179,6 +190,11 @@ namespace PoseKart.Race
 
         public void CompleteRace()
         {
+            if (playerFinished)
+            {
+                return;
+            }
+
             if (HasRacers)
             {
                 RaceParticipant player = PlayerRacer;
@@ -200,6 +216,7 @@ namespace PoseKart.Race
             countdownDisplay = "FINISH";
             checkpointManager.SetAcceptingCheckpoints(false);
             playerController.SetControlPermission(false, true);
+            CompletePlayerFinish(raceTimeSeconds, 1);
         }
 
         public void NotifyParticipantFinished(RaceParticipant racer)
@@ -220,6 +237,7 @@ namespace PoseKart.Race
                 raceTimeSeconds = elapsed;
                 state = RaceState.Finished;
                 countdownDisplay = "FINISH";
+                CompletePlayerFinish(elapsed, racer.RacePosition);
             }
 
             if (finishedRacerCount >= racers.Length)
@@ -244,6 +262,19 @@ namespace PoseKart.Race
             }
 
             return true;
+        }
+
+        private void CompletePlayerFinish(double finishTime, int finishPosition)
+        {
+            if (playerFinished)
+            {
+                return;
+            }
+
+            playerFinished = true;
+            playerFinishTimeSeconds = Math.Max(0d, finishTime);
+            playerFinishPosition = Mathf.Max(1, finishPosition);
+            PlayerFinishedEvent?.Invoke(this);
         }
     }
 }
