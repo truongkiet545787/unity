@@ -6,6 +6,15 @@ namespace PoseKart.AI
     [DisallowMultipleComponent]
     public sealed class AIInputProvider : MonoBehaviour, ICarInputProvider
     {
+        [Header("AI Drift")]
+        [SerializeField] private bool drift;
+
+        public bool Drift => drift;
+
+        public void SetDrift(bool value)
+        {
+            drift = value;
+        }
         [Header("Runtime Output (Read Only)")]
         [SerializeField, Range(-1f, 1f)] private float steering;
         [SerializeField, Range(0f, 1f)] private float throttle;
@@ -27,6 +36,7 @@ namespace PoseKart.AI
         private void OnDisable()
         {
             SetInput(0f, 0f, 0f);
+            drift = false;
         }
     }
 }

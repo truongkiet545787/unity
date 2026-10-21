@@ -14,7 +14,7 @@ namespace PoseKart.Editor
     /// <summary>One-pass, repeatable production builder for the final island race scene.</summary>
     public static partial class PoseKartFinalIslandSetup
     {
-        private const string SourceScene = "Assets/Scenes/Milestone6_BuggyBeach.unity";
+        private const string SourceScene = "Assets/Scenes/Milestones_Archive/Milestone6_BuggyBeach.unity";
         private const string FinalScene = "Assets/Scenes/PoseKart_FinalIsland.unity";
         private const int TotalLaps = 3;
         private const string BuggyPrefab = "Assets/Free Adventure Vehicles/Prefabs/Vehicle19.prefab";

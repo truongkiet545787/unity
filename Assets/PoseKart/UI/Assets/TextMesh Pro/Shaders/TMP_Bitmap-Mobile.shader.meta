@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 5fb36fecea59fff46a7fe4dfdb3ceac9
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 231178
+  packageName: Dragon Crashers - UI Toolkit Sample project
+  packageVersion: 1.692
+  assetPath: Assets/TextMesh Pro/Shaders/TMP_Bitmap-Mobile.shader
+  uploadId: 714966

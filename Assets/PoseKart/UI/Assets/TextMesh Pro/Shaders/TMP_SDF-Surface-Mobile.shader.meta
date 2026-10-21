@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 4314698e41033404ea517deb930573a7
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 231178
+  packageName: Dragon Crashers - UI Toolkit Sample project
+  packageVersion: 1.692
+  assetPath: Assets/TextMesh Pro/Shaders/TMP_SDF-Surface-Mobile.shader
+  uploadId: 714966

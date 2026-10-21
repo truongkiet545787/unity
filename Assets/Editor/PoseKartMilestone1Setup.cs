@@ -12,7 +12,7 @@ namespace PoseKart.Editor
 {
     public static class PoseKartMilestone1Setup
     {
-        private const string ScenePath = "Assets/Scenes/Milestone1_TestDrive.unity";
+        private const string ScenePath = "Assets/Scenes/Milestones_Archive/Milestone1_TestDrive.unity";
 
         private static readonly string[] ManagedRootNames =
         {

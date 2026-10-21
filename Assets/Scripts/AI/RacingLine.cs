@@ -15,8 +15,9 @@ namespace PoseKart.AI
             waypoints = orderedWaypoints;
         }
 
-        public int FindStartingWaypoint(Vector3 position)
+        public int FindClosestWaypoint(Vector3 position)
         {
+            if (Count == 0) return 0;
             int nearest = 0;
             float nearestDistance = float.PositiveInfinity;
             for (int index = 0; index < Count; index++)
@@ -29,12 +30,48 @@ namespace PoseKart.AI
                 }
             }
 
+            return nearest;
+        }
+
+        public int FindNextWaypoint(Vector3 position)
+        {
+            if (Count == 0) return 0;
+            int nearest = FindClosestWaypoint(position);
+            int next = (nearest + 1) % Count;
+            Vector3 trackForward = (GetPosition(next) - GetPosition(nearest)).normalized;
+            bool passed = Vector3.Dot(position - GetPosition(nearest), trackForward) > 0f;
+            return passed ? next : nearest;
+        }
+
+        public int FindStartingWaypoint(Vector3 position)
+        {
+            if (Count == 0) return 0;
+            int nearest = FindClosestWaypoint(position);
             return (nearest + 1) % Count;
+        }
+
+        public Vector3 GetTrackTangent(int waypointIndex)
+        {
+            if (Count < 2) return Vector3.forward;
+            int next = (waypointIndex + 1) % Count;
+            Vector3 dir = GetPosition(next) - GetPosition(waypointIndex);
+            dir.y = 0f;
+            return dir.sqrMagnitude > 0.001f ? dir.normalized : Vector3.forward;
         }
 
         public void AdvanceProgress(ref int nextWaypointIndex, Vector3 position, float reachDistance)
         {
-            for (int iteration = 0; iteration < 3; iteration++)
+            if (Count == 0) return;
+
+            // Safety re-sync nếu xe bị chệch quá xa (va chạm mạnh, bay dốc hoặc reset)
+            Vector3 currTarget = GetPosition(nextWaypointIndex);
+            if (Vector3.Distance(position, currTarget) > 35f)
+            {
+                nextWaypointIndex = FindNextWaypoint(position);
+                return;
+            }
+
+            for (int iteration = 0; iteration < 10; iteration++)
             {
                 int previousIndex = (nextWaypointIndex - 1 + Count) % Count;
                 Vector3 previous = GetPosition(previousIndex);
@@ -53,9 +90,29 @@ namespace PoseKart.AI
 
         public Vector3 GetLookAheadPoint(int nextWaypointIndex, Vector3 position, float lookAheadDistance)
         {
-            Vector3 cursor = position;
-            float remaining = Mathf.Max(0f, lookAheadDistance);
-            int index = nextWaypointIndex;
+            if (Count == 0) return position;
+
+            int prevIndex = (nextWaypointIndex - 1 + Count) % Count;
+            Vector3 prevPos = GetPosition(prevIndex);
+            Vector3 nextPos = GetPosition(nextWaypointIndex);
+            Vector3 seg = nextPos - prevPos;
+            float segLen = seg.magnitude;
+            Vector3 segDir = segLen > 0.001f ? seg / segLen : Vector3.forward;
+
+            // Chiếu vị trí hiện tại lên tim đường segment để làm mốc xuất phát chuẩn
+            float proj = Mathf.Clamp(Vector3.Dot(position - prevPos, segDir), 0f, segLen);
+            Vector3 cursor = prevPos + segDir * proj;
+            float distToNext = segLen - proj;
+
+            float remaining = Mathf.Max(0.5f, lookAheadDistance);
+            if (remaining <= distToNext)
+            {
+                return cursor + segDir * remaining;
+            }
+
+            remaining -= distToNext;
+            cursor = nextPos;
+            int index = (nextWaypointIndex + 1) % Count;
 
             for (int iteration = 0; iteration < Count; iteration++)
             {

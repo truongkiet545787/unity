@@ -1,4 +1,6 @@
-using PoseKart.Race;
+﻿using PoseKart.Race;
+using PoseKart.Vehicle;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -12,29 +14,31 @@ namespace PoseKart.UI
         private static readonly Color Yellow = new Color(1f, 0.82f, 0.22f, 1f);
         private static readonly Color White = new Color(0.96f, 0.99f, 1f, 1f);
 
+        [Header("Race References")]
         [SerializeField] private RaceManager raceManager;
         [SerializeField] private Text positionText;
         [SerializeField] private Text lapText;
         [SerializeField] private Text timeText;
-        [SerializeField] private Text countdownText;
         [SerializeField] private Text raceStatusText;
 
-        [Header("Countdown Audio")]
-        [Tooltip("Assign a short, non-looping beep. It is played once when RaceManager changes to 3, 2 or 1.")]
-        [SerializeField] private AudioClip countdownBeepClip;
-        [Tooltip("Assign a distinct short, non-looping GO sound. It is played once when RaceManager changes to GO!.")]
-        [SerializeField] private AudioClip countdownGoClip;
-        [SerializeField, Range(0f, 1f)] private float countdownAudioVolume = 0.85f;
+        [Header("Nitro Meter (Independent of Legacy HUD)")]
+        [Tooltip("Optional. If empty, uses RaceManager.PlayerController automatically.")]
+        [SerializeField] private CarController nitroPlayerCar;
+        [Tooltip("Drag NitroMeterUI/Bar/Fill here. Keep its Source Image sprite.")]
+        [SerializeField] private Image nitroFillImage;
+        [Tooltip("Assign NitroMeterUI/Percentage here if it uses UI Legacy Text.")]
+        [SerializeField] private Text nitroPercentageText;
+        [Tooltip("Alternatively assign Percentage here if it uses TextMeshPro UI.")]
+        [SerializeField] private TMP_Text nitroPercentageTMP;
+        [Tooltip("How quickly earned Nitro is animated. Spending always follows the real fuel amount.")]
+        [SerializeField, Min(0.01f)] private float nitroFillSpeed = 0.65f;
+        [Tooltip("Optional. If empty, NitroMeterUI/Label is used (Legacy Text).")]
+        [SerializeField] private Text nitroModeText;
+        [Tooltip("Optional TextMeshPro alternative for the mode label.")]
+        [SerializeField] private TMP_Text nitroModeTMP;
+        [Tooltip("Creates the Perfect Timing zone and moving cursor over the existing Bar at runtime.")]
+        [SerializeField] private bool autoCreateNitroTimingUI = true;
 
-        [Header("Countdown Presentation")]
-        [SerializeField, Min(0.05f)] private float countdownPunchDuration = 0.28f;
-        [SerializeField, Min(1f)] private float countdownPunchScale = 1.22f;
-
-        private AudioSource countdownAudioSource;
-        private CanvasGroup countdownCanvasGroup;
-        private RectTransform countdownRect;
-        private string lastCountdownDisplay;
-        private float countdownAnimationTime;
         private float lastTimeRefresh = -1f;
         private int lastPosition = int.MinValue;
         private int lastRacerCount = int.MinValue;
@@ -42,12 +46,21 @@ namespace PoseKart.UI
         private RaceState lastState = (RaceState)(-1);
         private bool presentationReady;
 
+        private Image preparedNitroFillImage;
+        private float displayedNitroFill;
+        private bool nitroDisplayInitialized;
+        private int lastNitroPercentage = int.MinValue;
+        private CarController.NitroMode lastNitroMode = (CarController.NitroMode)(-1);
+        private RectTransform nitroTimingOverlay;
+        private RectTransform nitroPerfectZone;
+        private RectTransform nitroTimingCursor;
+
+        // Bỏ kiểm tra countdownText khỏi IsConfigured
         public bool IsConfigured =>
             raceManager != null
             && positionText != null
             && lapText != null
             && timeText != null
-            && countdownText != null
             && raceStatusText != null;
 
         public void Configure(
@@ -55,87 +68,331 @@ namespace PoseKart.UI
             Text position,
             Text lap,
             Text time,
-            Text countdown,
             Text raceStatus)
         {
             raceManager = manager;
             positionText = position;
             lapText = lap;
             timeText = time;
-            countdownText = countdown;
             raceStatusText = raceStatus;
+
             SetupPresentation();
+            SetupNitroPresentation();
+            RefreshNitroMeter();
             Refresh();
         }
 
         private void Awake()
         {
+            if (raceManager == null)
+                raceManager = FindFirstObjectByType<RaceManager>();
             SetupPresentation();
+            SetupNitroPresentation();
         }
 
         private void Update()
         {
             SetupPresentation();
+            SetupNitroPresentation();
+
+            RefreshNitroMeter();
             Refresh();
-            AnimateCountdown(Time.unscaledDeltaTime);
+        }
+
+        private void TryAutoBindNitroUI()
+        {
+            if (HasDedicatedNitroMeter())
+            {
+                nitroFillImage = null;
+                nitroPercentageText = null;
+                nitroPercentageTMP = null;
+                nitroModeText = null;
+                nitroModeTMP = null;
+                return;
+            }
+
+            Transform meter = transform.Find("NitroMeterUI");
+            if (meter == null)
+                return;
+
+            if (nitroFillImage == null)
+            {
+                Transform fill = meter.Find("Bar/Fill");
+                if (fill != null)
+                    nitroFillImage = fill.GetComponent<Image>();
+            }
+
+            if (nitroPercentageText == null && nitroPercentageTMP == null)
+            {
+                Transform percentage = meter.Find("Percentage");
+                if (percentage != null)
+                {
+                    nitroPercentageTMP = percentage.GetComponent<TMP_Text>();
+                    if (nitroPercentageTMP == null)
+                        nitroPercentageText = percentage.GetComponent<Text>();
+                    lastNitroPercentage = int.MinValue;
+                }
+            }
+
+            if (nitroModeText == null && nitroModeTMP == null)
+            {
+                Transform label = meter.Find("Label");
+                if (label != null)
+                {
+                    nitroModeTMP = label.GetComponent<TMP_Text>();
+                    if (nitroModeTMP == null)
+                        nitroModeText = label.GetComponent<Text>();
+                    lastNitroMode = (CarController.NitroMode)(-1);
+                }
+            }
+        }
+
+        private void SetupNitroPresentation()
+        {
+            TryAutoBindNitroUI();
+            if (nitroFillImage == null)
+                return;
+
+            if (preparedNitroFillImage != nitroFillImage)
+            {
+                nitroFillImage.type = Image.Type.Filled;
+                nitroFillImage.fillMethod = Image.FillMethod.Horizontal;
+                nitroFillImage.fillOrigin = (int)Image.OriginHorizontal.Left;
+                nitroFillImage.fillAmount = 0f;
+                preparedNitroFillImage = nitroFillImage;
+                nitroDisplayInitialized = false;
+                lastNitroPercentage = int.MinValue;
+                SetNitroPercentage(0f);
+            }
+
+            if (autoCreateNitroTimingUI && nitroTimingOverlay == null)
+                SetupTimingOverlay();
+        }
+
+        private void SetupTimingOverlay()
+        {
+            Transform bar = nitroFillImage.transform.parent;
+            if (bar == null)
+                return;
+
+            nitroTimingOverlay = GetOrCreateUIRect(bar, "NitroTimingOverlay");
+            StretchToParent(nitroTimingOverlay);
+            nitroTimingOverlay.SetAsLastSibling();
+
+            nitroPerfectZone = GetOrCreateUIRect(nitroTimingOverlay, "PerfectZone");
+            EnsureTimingImage(nitroPerfectZone, new Color(0.12f, 0.95f, 1f, 0.75f));
+
+            nitroTimingCursor = GetOrCreateUIRect(nitroTimingOverlay, "TimingCursor");
+            EnsureTimingImage(nitroTimingCursor, Color.white);
+            nitroTimingCursor.SetAsLastSibling();
+            nitroTimingOverlay.gameObject.SetActive(false);
+        }
+
+        private static RectTransform GetOrCreateUIRect(Transform parent, string objectName)
+        {
+            Transform existing = parent.Find(objectName);
+            if (existing != null)
+                return existing as RectTransform;
+
+            GameObject created = new GameObject(objectName,
+                typeof(RectTransform), typeof(CanvasRenderer));
+            RectTransform rect = created.GetComponent<RectTransform>();
+            rect.SetParent(parent, false);
+            return rect;
+        }
+
+        private static void StretchToParent(RectTransform rect)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+        }
+
+        private static void EnsureTimingImage(RectTransform rect, Color defaultColor)
+        {
+            Image image = rect.GetComponent<Image>();
+            if (image == null)
+            {
+                image = rect.gameObject.AddComponent<Image>();
+                image.color = defaultColor;
+            }
+            image.raycastTarget = false;
+        }
+
+        private void RefreshNitroMeter()
+        {
+            if (HasDedicatedNitroMeter())
+                return;
+
+            if (nitroPlayerCar == null && raceManager != null)
+                nitroPlayerCar = raceManager.PlayerController;
+
+            if (nitroPlayerCar == null)
+            {
+                if (nitroTimingOverlay != null)
+                    nitroTimingOverlay.gameObject.SetActive(false);
+                return;
+            }
+
+            float targetFill = Mathf.Clamp01(nitroPlayerCar.NitroFill01);
+            if (!nitroDisplayInitialized)
+            {
+                displayedNitroFill = targetFill;
+                nitroDisplayInitialized = true;
+            }
+            else if (nitroPlayerCar.IsNitroBoosting || targetFill < displayedNitroFill)
+            {
+                displayedNitroFill = targetFill;
+            }
+            else
+            {
+                displayedNitroFill = Mathf.MoveTowards(displayedNitroFill, targetFill,
+                    nitroFillSpeed * Time.unscaledDeltaTime);
+            }
+
+            if (nitroFillImage != null)
+            {
+                nitroFillImage.fillAmount = displayedNitroFill;
+                if (nitroPlayerCar.IsNitroBoosting)
+                {
+                    switch (nitroPlayerCar.CurrentNitroMode)
+                    {
+                        case CarController.NitroMode.Single:
+                            nitroFillImage.color = new Color(1f, 0.85f, 0.15f, 1f);
+                            break;
+                        case CarController.NitroMode.Double:
+                            nitroFillImage.color = new Color(1f, 0.45f, 0.05f, 1f);
+                            break;
+                        case CarController.NitroMode.Perfect:
+                            nitroFillImage.color = new Color(0.12f, 0.88f, 1f, 1f);
+                            break;
+                        case CarController.NitroMode.Shockwave:
+                            nitroFillImage.color = new Color(0.82f, 0.22f, 1f, 1f);
+                            break;
+                        default:
+                            nitroFillImage.color = new Color(1f, 0.78f, 0.08f, 1f);
+                            break;
+                    }
+                }
+                else
+                {
+                    nitroFillImage.color = new Color(1f, 0.78f, 0.08f, 1f);
+                }
+            }
+            SetNitroPercentage(displayedNitroFill);
+            RefreshNitroMode();
+            RefreshNitroTiming();
+        }
+
+        private bool HasDedicatedNitroMeter()
+        {
+            return GetComponent<PoseKartNitroMeterUI>() != null;
+        }
+
+        private void RefreshNitroMode()
+        {
+            CarController.NitroMode mode = nitroPlayerCar.CurrentNitroMode;
+            if (mode == lastNitroMode)
+                return;
+
+            lastNitroMode = mode;
+            string label;
+            Color modeColor;
+            switch (mode)
+            {
+                case CarController.NitroMode.Single:
+                    label = "SINGLE NITRO";
+                    modeColor = new Color(1f, 0.85f, 0.15f, 1f);
+                    break;
+                case CarController.NitroMode.Double:
+                    label = "DOUBLE NITRO";
+                    modeColor = new Color(1f, 0.45f, 0.05f, 1f);
+                    break;
+                case CarController.NitroMode.Shockwave:
+                    label = "SHOCKWAVE";
+                    modeColor = new Color(0.82f, 0.22f, 1f, 1f);
+                    break;
+                case CarController.NitroMode.Perfect:
+                    label = "PERFECT NITRO";
+                    modeColor = new Color(0.12f, 0.88f, 1f, 1f);
+                    break;
+                default:
+                    label = "NITRO";
+                    modeColor = Color.white;
+                    break;
+            }
+
+            if (nitroModeText != null)
+            {
+                nitroModeText.text = label;
+                nitroModeText.color = modeColor;
+            }
+            if (nitroModeTMP != null)
+            {
+                nitroModeTMP.text = label;
+                nitroModeTMP.color = modeColor;
+            }
+        }
+
+        private void RefreshNitroTiming()
+        {
+            if (nitroTimingOverlay == null || nitroPerfectZone == null || nitroTimingCursor == null)
+                return;
+
+            bool active = nitroPlayerCar.IsNitroTimingActive;
+            if (nitroTimingOverlay.gameObject.activeSelf != active)
+                nitroTimingOverlay.gameObject.SetActive(active);
+            if (!active)
+                return;
+
+            float start = nitroPlayerCar.NitroPerfectStart01;
+            float end = nitroPlayerCar.NitroPerfectEnd01;
+            nitroPerfectZone.anchorMin = new Vector2(start, 0f);
+            nitroPerfectZone.anchorMax = new Vector2(end, 1f);
+            nitroPerfectZone.offsetMin = Vector2.zero;
+            nitroPerfectZone.offsetMax = Vector2.zero;
+
+            float progress = nitroPlayerCar.NitroTimingProgress01;
+            nitroTimingCursor.anchorMin = new Vector2(progress, 0f);
+            nitroTimingCursor.anchorMax = new Vector2(progress, 1f);
+            nitroTimingCursor.anchoredPosition = Vector2.zero;
+            nitroTimingCursor.sizeDelta = new Vector2(4f, 0f);
+        }
+
+        private void SetNitroPercentage(float fill01)
+        {
+            int percentage = Mathf.Clamp(Mathf.RoundToInt(fill01 * 100f), 0, 100);
+            if (percentage == lastNitroPercentage)
+                return;
+
+            lastNitroPercentage = percentage;
+            string display = $"{percentage:000}%";
+
+            if (nitroPercentageText != null)
+                nitroPercentageText.text = display;
+
+            if (nitroPercentageTMP != null)
+                nitroPercentageTMP.text = display;
         }
 
         private void SetupPresentation()
         {
             if (presentationReady)
-            {
                 return;
-            }
 
-            if (countdownAudioSource == null)
-            {
-                countdownAudioSource = GetComponent<AudioSource>();
-                if (countdownAudioSource == null)
-                {
-                    countdownAudioSource = gameObject.AddComponent<AudioSource>();
-                }
+            StyleText(positionText, Yellow, 30, TextAnchor.UpperLeft);
+            StyleText(lapText, Cyan, 30, TextAnchor.UpperLeft);
+            StyleText(timeText, White, 30, TextAnchor.UpperCenter);
+            StyleText(raceStatusText, Cyan, 24, TextAnchor.UpperRight);
 
-                countdownAudioSource.playOnAwake = false;
-                countdownAudioSource.loop = false;
-                countdownAudioSource.spatialBlend = 0f;
-                countdownAudioSource.volume = countdownAudioVolume;
-            }
-            else
-            {
-                countdownAudioSource.volume = countdownAudioVolume;
-            }
-
-            if (countdownText != null)
-            {
-                countdownRect = countdownText.rectTransform;
-                countdownCanvasGroup = countdownText.GetComponent<CanvasGroup>();
-                if (countdownCanvasGroup == null)
-                {
-                    countdownCanvasGroup = countdownText.gameObject.AddComponent<CanvasGroup>();
-                }
-
-                StyleText(positionText, Yellow, 30, TextAnchor.UpperLeft);
-                StyleText(lapText, Cyan, 30, TextAnchor.UpperLeft);
-                StyleText(timeText, White, 30, TextAnchor.UpperCenter);
-                StyleText(raceStatusText, Cyan, 24, TextAnchor.UpperRight);
-                StyleText(countdownText, Yellow, 96, TextAnchor.MiddleCenter);
-
-                if (lastCountdownDisplay == null)
-                {
-                    lastCountdownDisplay = countdownText.text;
-                    countdownCanvasGroup.alpha = string.IsNullOrEmpty(lastCountdownDisplay) ? 0f : 1f;
-                }
-
-                presentationReady = true;
-            }
+            presentationReady = true;
         }
 
         private static void StyleText(Text text, Color color, int fontSize, TextAnchor alignment)
         {
             if (text == null)
-            {
                 return;
-            }
 
             text.color = color;
             text.fontSize = fontSize;
@@ -144,9 +401,7 @@ namespace PoseKart.UI
 
             Outline outline = text.GetComponent<Outline>();
             if (outline == null)
-            {
                 outline = text.gameObject.AddComponent<Outline>();
-            }
 
             outline.effectColor = Navy;
             outline.effectDistance = new Vector2(2f, -2f);
@@ -156,9 +411,7 @@ namespace PoseKart.UI
         private void Refresh()
         {
             if (!IsConfigured)
-            {
                 return;
-            }
 
             int position = raceManager.PlayerPosition;
             int racerCount = raceManager.RacerCount;
@@ -182,58 +435,11 @@ namespace PoseKart.UI
                 lastTimeRefresh = Time.unscaledTime;
             }
 
-            string countdown = raceManager.CountdownDisplay;
-            if (countdown != lastCountdownDisplay)
-            {
-                HandleCountdownChanged(countdown);
-            }
-
             if (lastState != raceManager.State)
             {
                 raceStatusText.text = $"RACE STATUS\n{raceManager.State.ToString().ToUpperInvariant()}";
                 lastState = raceManager.State;
             }
-        }
-
-        private void HandleCountdownChanged(string display)
-        {
-            lastCountdownDisplay = display;
-            countdownAnimationTime = 0f;
-
-            if (countdownText != null)
-            {
-                countdownText.text = display;
-            }
-
-            if (countdownCanvasGroup != null)
-            {
-                countdownCanvasGroup.alpha = string.IsNullOrEmpty(display) ? 0f : 1f;
-            }
-
-            if (string.IsNullOrEmpty(display) || countdownAudioSource == null)
-            {
-                return;
-            }
-
-            AudioClip clip = display == "GO!" ? countdownGoClip : countdownBeepClip;
-            if (clip != null)
-            {
-                countdownAudioSource.PlayOneShot(clip, countdownAudioVolume);
-            }
-        }
-
-        private void AnimateCountdown(float deltaTime)
-        {
-            if (countdownRect == null || countdownCanvasGroup == null || string.IsNullOrEmpty(lastCountdownDisplay))
-            {
-                return;
-            }
-
-            countdownAnimationTime += deltaTime;
-            float normalized = Mathf.Clamp01(countdownAnimationTime / countdownPunchDuration);
-            float punch = 1f + (countdownPunchScale - 1f) * (1f - Mathf.SmoothStep(0f, 1f, normalized));
-            countdownRect.localScale = new Vector3(punch, punch, 1f);
-            countdownCanvasGroup.alpha = Mathf.Lerp(1f, 0.92f, normalized);
         }
 
         private static string FormatTime(double totalSeconds)

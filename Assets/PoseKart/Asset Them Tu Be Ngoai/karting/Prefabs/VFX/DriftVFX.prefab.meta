@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 83d0ce15c25af954bbd1425a9ddf8458
+PrefabImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 150956
+  packageName: Karting Microgame | 3D Sample Project
+  packageVersion: 4.1.0
+  assetPath: Assets/Karting/Prefabs/VFX/DriftVFX.prefab
+  uploadId: 990568

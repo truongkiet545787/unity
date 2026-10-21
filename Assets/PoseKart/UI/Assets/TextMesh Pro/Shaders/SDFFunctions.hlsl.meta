@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 5e6bfc455f6d0a34f81860d984d9c01d
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  preprocessorOverride: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 231178
+  packageName: Dragon Crashers - UI Toolkit Sample project
+  packageVersion: 1.692
+  assetPath: Assets/TextMesh Pro/Shaders/SDFFunctions.hlsl
+  uploadId: 714966

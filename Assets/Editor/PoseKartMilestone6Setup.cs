@@ -9,8 +9,8 @@ namespace PoseKart.Editor
     /// <summary>Builds presentation only; the ML5 race hierarchy remains untouched.</summary>
     public static class PoseKartMilestone6Setup
     {
-        private const string SourceScenePath = "Assets/Scenes/Milestone5_ArcadeRace.unity";
-        private const string ScenePath = "Assets/Scenes/Milestone6_BuggyBeach.unity";
+        private const string SourceScenePath = "Assets/Scenes/Milestones_Archive/Milestone5_ArcadeRace.unity";
+        private const string ScenePath = "Assets/Scenes/Milestones_Archive/Milestone6_BuggyBeach.unity";
         private const string ImportedRootName = "ImportedLocalArt";
         private const string GrandRootName = "GrandBuggyBeach";
         private const string ImportedMeshRoot = "Assets/Art/Environment/ImportedLocal/BoatAttack/Meshes/";

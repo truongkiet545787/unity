@@ -20,8 +20,23 @@ namespace PoseKart.Input
         public bool Drift { get; private set; }
         public bool IsInputValid=>isActiveAndEnabled&&cameraMode&&started&&tracker!=null&&tracker.TrackingValid&&!paused;
 
+        private void Awake()
+        {
+            if (GetComponent<PoseKartHandInputProvider>() != null || GetComponent<PoseKartHandInputSwitcher>() != null)
+            {
+                enabled = false;
+                Destroy(this);
+            }
+        }
+
         private void Start()
         {
+            if (GetComponent<PoseKartHandInputProvider>() != null || GetComponent<PoseKartHandInputSwitcher>() != null)
+            {
+                enabled = false;
+                Destroy(this);
+                return;
+            }
             car=GetComponent<CarController>();keyboard=car.InputProviderSource;
             tracker=gameObject.AddComponent<LocalPoseTracker>();
         }

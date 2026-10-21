@@ -1501,6 +1501,108 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.AI.RacingWaypoint
   index: 55
   recommendedSpeedFactor: 1.0157936
+--- !u!1001 &65342244
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 658634748}
+    m_Modifications:
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_Pivot.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_Pivot.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_AnchorMin.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_AnchorMin.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9160747088459853667, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+      propertyPath: m_Name
+      value: MissileWarning_UI
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+--- !u!224 &65342245 stripped
+RectTransform:
+  m_CorrespondingSourceObject: {fileID: 3156773451698668121, guid: fbf2bc7b275fbf64ebd2d67da0a8d2bb, type: 3}
+  m_PrefabInstance: {fileID: 65342244}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &74272890
 GameObject:
   m_ObjectHideFlags: 0
@@ -9289,6 +9391,7 @@ GameObject:
   m_Component:
   - component: {fileID: 368310211}
   - component: {fileID: 368310212}
+  - component: {fileID: 368310213}
   m_Layer: 0
   m_Name: Network
   m_TagString: Untagged
@@ -9335,6 +9438,8 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
+  mode: 0
+  shape: 0
   roads:
   - points:
     - {x: -295, y: 1, z: -225}
@@ -9798,6 +9903,49 @@ MonoBehaviour:
   - {fileID: 1294341836}
   minimum: {x: -325.37613, y: -250.0815}
   maximum: {x: 310.3769, y: 245.34438}
+  playerRacer: {fileID: 1294341836}
+  playerCar: {fileID: 1294341832}
+  playerCenterOffsetY: -0.15
+  viewRadiusLowSpeed: 70
+  viewRadiusNormalSpeed: 100
+  viewRadiusHighSpeed: 145
+  zoomSmoothing: 4.5
+  positionSmoothing: 14
+  rotationSmoothing: 12
+  showDarkBackground: 1
+  backgroundColor: {r: 0.012, g: 0.024, b: 0.045, a: 0.9}
+  borderColor: {r: 0.2, g: 0.85, b: 0.98, a: 0.9}
+  borderOuterGlowColor: {r: 0.05, g: 0.4, b: 0.65, a: 0.45}
+  circularBorderWidth: 4
+  showCompassCardinals: 1
+  cardinalMarkColor: {r: 0.85, g: 0.95, b: 1, a: 0.8}
+  roadOutlineColor: {r: 0.01, g: 0.03, b: 0.07, a: 1}
+  mainRoadColor: {r: 0.95, g: 0.98, b: 1, a: 1}
+  sideRoadColor: {r: 1, g: 0.82, b: 0.2, a: 0.95}
+  playerColor: {r: 0.05, g: 0.92, b: 1, a: 1}
+  markerOutlineColor: {r: 0.012, g: 0.024, b: 0.045, a: 1}
+  aiColors:
+  - {r: 1, g: 0.8, b: 0.16, a: 1}
+  - {r: 1, g: 0.3, b: 0.35, a: 1}
+  - {r: 0.37, g: 1, b: 0.55, a: 1}
+  padding: 12
+  mainRoadWidth: 9.5
+  sideRoadWidth: 6.5
+  aiMarkerRadius: 7
+  playerMarkerSize: 13.5
+  mapZoom: 1
+  showFinishLine: 1
+  showSecondaryRoads: 1
+  cullingDistanceMultiplier: 1.75
+  markerRefreshRate: 60
+--- !u!222 &368310213
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 368310210}
+  m_CullTransparentMesh: 1
 --- !u!1 &371696815
 GameObject:
   m_ObjectHideFlags: 0
@@ -12912,9 +13060,47 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7465e1996a2270e41a7b6c13b29d77aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
+  maxNitroCharge: 2.5
+  minimumNitroToStart: 0.7
+  driftNitroPerSecond: 0.4
+  airNitroPerSecond: 0.25
+  minimumRewardAirTime: 0.55
+  maximumAirNitroReward: 0.45
+  minimumTakeoffSpeed: 6
+  bananaStunSteeringStrength: 1
+  bananaStunWobbleFrequency: 7
+  bananaSideImpulse: 4
+  maximumLandingSpeedLoss: 0.15
+  maximumLandingRecoveryTime: 0.24
+  minimumLandingThrottleScale: 0.12
+  singleNitroDrain: 0.28
+  doubleNitroDrain: 0.42
+  tripleNitroDrain: 0.6
+  perfectNitroDrain: 0.32
+  nitroTimingDuration: 0.9
+  perfectTimingStartSeconds: 0.35
+  perfectTimingEndSeconds: 0.58
+  shockwaveTimingEndSeconds: 0.85
+  nitroPressCooldown: 0.08
+  singleNitroAccelerationMultiplier: 1.35
+  doubleNitroAccelerationMultiplier: 1.55
+  tripleNitroAccelerationMultiplier: 1.9
+  perfectNitroAccelerationMultiplier: 1.7
+  nitroAirAcceleration: 3
+  singleNitroImpulse: 3
+  doubleNitroImpulse: 4
+  tripleNitroImpulse: 6
+  perfectNitroImpulse: 4.5
   targetBody: {fileID: 502858980}
   inputProviderSource: {fileID: 502858979}
   maxForwardSpeed: 30
+  boostLaneMaxSpeedKmh: 110
+  itemBoostMaxSpeedKmh: 130
+  singleNitroMaxSpeedKmh: 105
+  doubleNitroMaxSpeedKmh: 115
+  tripleNitroMaxSpeedKmh: 130
+  perfectNitroMaxSpeedKmh: 125
+  boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
   acceleration: 8.5
   reverseAcceleration: 11
@@ -12927,6 +13113,7 @@ MonoBehaviour:
   steeringDegreesPerSecond: 92
   steeringAtMaxSpeedMultiplier: 0.5
   steeringResponse: 4.5
+  uphillAssist: 8
   minimumSteeringSpeed: 0.5
   cornerPenaltySteeringThreshold: 0.18
   cornerPenaltyStartSpeed: 7
@@ -12940,6 +13127,14 @@ MonoBehaviour:
   maximumGroundedUpwardSpeed: 0.75
   centerOfMassOffset: {x: 0, y: -0.45, z: 0}
   lockPitchAndRoll: 1
+  enableAirControl: 1
+  airYawStrength: 8
+  airPitchControl: 0
+  airRollControl: 0
+  airSteeringResponsiveness: 6
+  maximumAirRotationSpeed: 90
+  airLateralAssist: 0
+  airLateralAssistStrength: 1.5
   controlEnabled: 1
   brakeAllowedWhenControlDisabled: 0
   minimumImpactSpeed: 2
@@ -12947,6 +13142,9 @@ MonoBehaviour:
   maximumCollisionSpeedLoss: 14
   collisionLossCooldown: 0.25
   sideImpactLossMultiplier: 0.12
+  debugBananaStunned: 0
+  debugLandingRecovery: 0
+  debugLastLandingSeverity: 0
   inputProviderValid: 0
   debugSteering: 0
   debugThrottle: 0
@@ -12964,6 +13162,12 @@ MonoBehaviour:
   debugLastContactUpDot: 0
   debugObservedSpeedDrop: 0
   debugObservedVerticalDelta: 0
+  debugAirborne: 0
+  debugAirControlActive: 0
+  debugAirSteering: 0
+  debugAirYawRate: 0
+  debugImpactRecovery: 0
+  debugLastMissileImpactDelta: {x: 0, y: 0, z: 0}
 --- !u!114 &502858979
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12976,6 +13180,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1c67196430a26bf458a7092ba089f952, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.AI.AIInputProvider
+  drift: 0
   steering: 0
   throttle: 0
   brake: 0
@@ -13022,6 +13227,9 @@ MonoBehaviour:
   body: {fileID: 502858980}
   carController: {fileID: 502858978}
   inputProvider: {fileID: 502858979}
+  participant: {fileID: 0}
+  inventory: {fileID: 0}
+  raceManager: {fileID: 0}
   skill: 0.85999995
   targetSpeedMultiplier: 1
   cornerCaution: 1
@@ -13034,19 +13242,56 @@ MonoBehaviour:
   cornerPreviewSegments: 2
   minimumCornerSpeedFactor: 0.55
   brakeSpeedMargin: 1.2
-  obstacleLookAhead: 9
-  obstacleCastRadius: 0.75
-  obstacleSteeringInfluence: 0.65
+  enableApexCutting: 1
+  apexCutDistance: 2.2
+  cornerEntryOutsideBias: 1.4
+  apexSteerAnticipation: 0.35
+  enableDriftCornering: 1
+  enableTrackBoundaryProtection: 1
+  boundarySafetyCorridor: 3.2
+  boundaryProbeDistance: 12
+  boundaryProbeRadius: 0.6
+  emergencyBrakeSensitivity: 0.85
+  cliffDropThreshold: 2.5
+  enablePerfectNitro: 1
+  enableTripleNitro: 1
+  nitroTacticalThreshold: 0.22
+  unlimitedDemonNitro: 0
+  demonPassiveNitroRate: 0.05
+  enableSlipstreamAndOvertake: 1
+  slipstreamMinDistance: 3
+  slipstreamMaxDistance: 24
+  slipstreamAngleTolerance: 24
+  slipstreamSpeedBonus: 1.12
+  overtakePredictionHorizon: 0.75
+  overtakeTriggerDistance: 7.5
+  overtakeCommitmentDuration: 1.1
+  overtakeLateralOffset: 2.2
+  doorToDoorContactAllowed: 1
+  enableTacticalCombat: 1
+  missileDefenseRange: 32
+  bananaRearAmbushRange: 9.5
+  shieldReactionDelay: 0.1
+  enableCompetitivePressure: 1
+  chaseSpeedBonus: 1.15
+  defensiveSpeedFactor: 1.08
   stuckSpeedThreshold: 0.75
   reverseAfterSeconds: 3
   reverseDuration: 1.25
   hardResetAfterSeconds: 8
-  nextWaypointIndex: 0
+  spinRecoveryAngleThreshold: 60
+  aiState: 0
+  targetOpponent: {fileID: 0}
+  overtakeLane: 0
   cornerSeverity: 0
   desiredSpeed: 0
-  smoothedSteering: 0
-  stuckTime: 0
-  reversingToRecover: 0
+  slipstreamTarget: {fileID: 0}
+  slipstreamActive: 0
+  nitroDecision: Idle
+  combatAction: Standby
+  trackBoundaryRisk: 0
+  recoveryState: Normal
+  actualRacePosition: 1
 --- !u!65 &502858982
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -15020,6 +15265,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2cef068e0f00c77438b1684c85c9476e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Race.RaceManager
+  raceIntroCamera: {fileID: 0}
   playerController: {fileID: 1294341832}
   checkpointManager: {fileID: 600730434}
   lapTracker: {fileID: 600730433}
@@ -15030,12 +15276,28 @@ MonoBehaviour:
   - {fileID: 502858976}
   positionCalculator: {fileID: 600730436}
   totalLaps: 3
+  skipCountdown: 1
   countdownFrom: 3
   countdownStepSeconds: 1
   goDisplaySeconds: 0.75
+  useStartingGrid: 1
+  startingGridReference: {fileID: 0}
+  frontRowLateralSpacing: 3.2
+  backRowLateralSpacing: 3.2
+  rowSeparation: 5.5
+  backRowStagger: 0.45
+  startingHeightOffset: 0.06
+  frontLeftRacer: {fileID: 0}
+  frontRightRacer: {fileID: 0}
+  backLeftRacer: {fileID: 0}
+  backRightRacer: {fileID: 0}
+  clearVelocitiesOnGridPlacement: 1
   state: 0
   raceTimeSeconds: 0
   countdownDisplay: 
+  playerFinishTimeSeconds: 0
+  playerFinishPosition: 0
+  playerFinished: 0
 --- !u!114 &600730433
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -16552,6 +16814,9 @@ RectTransform:
   - {fileID: 669105344}
   - {fileID: 1510738182}
   - {fileID: 542188426}
+  - {fileID: 801919511}
+  - {fileID: 65342245}
+  - {fileID: 2006187070}
   m_Father: {fileID: 1110057059}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -16575,8 +16840,15 @@ MonoBehaviour:
   positionText: {fileID: 499089770}
   lapText: {fileID: 886812947}
   timeText: {fileID: 669105345}
-  countdownText: {fileID: 1510738183}
   raceStatusText: {fileID: 542188427}
+  nitroPlayerCar: {fileID: 0}
+  nitroFillImage: {fileID: 0}
+  nitroPercentageText: {fileID: 0}
+  nitroPercentageTMP: {fileID: 0}
+  nitroFillSpeed: 0.65
+  nitroModeText: {fileID: 0}
+  nitroModeTMP: {fileID: 0}
+  autoCreateNitroTimingUI: 1
 --- !u!114 &658634750
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -20555,6 +20827,112 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 801867513}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1001 &801919510
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 658634748}
+    m_Modifications:
+    - target: {fileID: 1479745357197760520, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: raceManager
+      value: 
+      objectReference: {fileID: 600730432}
+    - target: {fileID: 3323182011783840157, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_Name
+      value: RaceFinishUI
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_Pivot.x
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_Pivot.y
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_AnchorMin.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_AnchorMin.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+--- !u!224 &801919511 stripped
+RectTransform:
+  m_CorrespondingSourceObject: {fileID: 4357948573158665602, guid: 68ae33f1168c9ed459ed03463823d8d8, type: 3}
+  m_PrefabInstance: {fileID: 801919510}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &803000754
 GameObject:
   m_ObjectHideFlags: 0
@@ -34970,7 +35348,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarResetController
   targetBody: {fileID: 1294341834}
   autoResetWhenFallen: 1
+  offTrackResetDelay: 6
   fallenHeight: -8
+  groundProbeDistance: 3
+  debugOffTrackSeconds: 0
+  debugLastSafeSnapshotAge: 0
+  debugAutomaticResetArmed: 0
 --- !u!114 &1294341832
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -34983,9 +35366,47 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7465e1996a2270e41a7b6c13b29d77aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
+  maxNitroCharge: 2.5
+  minimumNitroToStart: 0.7
+  driftNitroPerSecond: 0.4
+  airNitroPerSecond: 0.25
+  minimumRewardAirTime: 0.55
+  maximumAirNitroReward: 0.45
+  minimumTakeoffSpeed: 6
+  bananaStunSteeringStrength: 1
+  bananaStunWobbleFrequency: 7
+  bananaSideImpulse: 4
+  maximumLandingSpeedLoss: 0.15
+  maximumLandingRecoveryTime: 0.24
+  minimumLandingThrottleScale: 0.12
+  singleNitroDrain: 0.28
+  doubleNitroDrain: 0.42
+  tripleNitroDrain: 0.6
+  perfectNitroDrain: 0.32
+  nitroTimingDuration: 0.9
+  perfectTimingStartSeconds: 0.35
+  perfectTimingEndSeconds: 0.58
+  shockwaveTimingEndSeconds: 0.85
+  nitroPressCooldown: 0.08
+  singleNitroAccelerationMultiplier: 1.35
+  doubleNitroAccelerationMultiplier: 1.55
+  tripleNitroAccelerationMultiplier: 1.9
+  perfectNitroAccelerationMultiplier: 1.7
+  nitroAirAcceleration: 3
+  singleNitroImpulse: 3
+  doubleNitroImpulse: 4
+  tripleNitroImpulse: 6
+  perfectNitroImpulse: 4.5
   targetBody: {fileID: 1294341834}
   inputProviderSource: {fileID: 1294341833}
   maxForwardSpeed: 30
+  boostLaneMaxSpeedKmh: 110
+  itemBoostMaxSpeedKmh: 130
+  singleNitroMaxSpeedKmh: 105
+  doubleNitroMaxSpeedKmh: 115
+  tripleNitroMaxSpeedKmh: 130
+  perfectNitroMaxSpeedKmh: 125
+  boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
   acceleration: 8.5
   reverseAcceleration: 11
@@ -34998,6 +35419,7 @@ MonoBehaviour:
   steeringDegreesPerSecond: 92
   steeringAtMaxSpeedMultiplier: 0.5
   steeringResponse: 4.5
+  uphillAssist: 8
   minimumSteeringSpeed: 0.5
   cornerPenaltySteeringThreshold: 0.18
   cornerPenaltyStartSpeed: 7
@@ -35011,6 +35433,14 @@ MonoBehaviour:
   maximumGroundedUpwardSpeed: 0.75
   centerOfMassOffset: {x: 0, y: -0.45, z: 0}
   lockPitchAndRoll: 1
+  enableAirControl: 1
+  airYawStrength: 8
+  airPitchControl: 0
+  airRollControl: 0
+  airSteeringResponsiveness: 6
+  maximumAirRotationSpeed: 90
+  airLateralAssist: 0
+  airLateralAssistStrength: 1.5
   controlEnabled: 1
   brakeAllowedWhenControlDisabled: 0
   minimumImpactSpeed: 2
@@ -35018,6 +35448,9 @@ MonoBehaviour:
   maximumCollisionSpeedLoss: 14
   collisionLossCooldown: 0.25
   sideImpactLossMultiplier: 0.12
+  debugBananaStunned: 0
+  debugLandingRecovery: 0
+  debugLastLandingSeverity: 0
   inputProviderValid: 0
   debugSteering: 0
   debugThrottle: 0
@@ -35035,6 +35468,12 @@ MonoBehaviour:
   debugLastContactUpDot: 0
   debugObservedSpeedDrop: 0
   debugObservedVerticalDelta: 0
+  debugAirborne: 0
+  debugAirControlActive: 0
+  debugAirSteering: 0
+  debugAirYawRate: 0
+  debugImpactRecovery: 0
+  debugLastMissileImpactDelta: {x: 0, y: 0, z: 0}
 --- !u!114 &1294341833
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -35132,8 +35571,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f17f3ac8f3d362c4295df1bf6308570d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.UI.PoseKartVehiclePaint
-  bodyRenderers:
-  - {fileID: 8578268453026672005}
+  vehicleModels: []
   useSavedSelection: 1
 --- !u!1 &1295311712
 GameObject:
@@ -42777,6 +43215,9 @@ MonoBehaviour:
   body: {fileID: 1626331770}
   carController: {fileID: 1626331768}
   inputProvider: {fileID: 1626331769}
+  participant: {fileID: 0}
+  inventory: {fileID: 0}
+  raceManager: {fileID: 0}
   skill: 0.82
   targetSpeedMultiplier: 1
   cornerCaution: 1
@@ -42789,19 +43230,56 @@ MonoBehaviour:
   cornerPreviewSegments: 2
   minimumCornerSpeedFactor: 0.55
   brakeSpeedMargin: 1.2
-  obstacleLookAhead: 9
-  obstacleCastRadius: 0.75
-  obstacleSteeringInfluence: 0.65
+  enableApexCutting: 1
+  apexCutDistance: 2.2
+  cornerEntryOutsideBias: 1.4
+  apexSteerAnticipation: 0.35
+  enableDriftCornering: 1
+  enableTrackBoundaryProtection: 1
+  boundarySafetyCorridor: 3.2
+  boundaryProbeDistance: 12
+  boundaryProbeRadius: 0.6
+  emergencyBrakeSensitivity: 0.85
+  cliffDropThreshold: 2.5
+  enablePerfectNitro: 1
+  enableTripleNitro: 1
+  nitroTacticalThreshold: 0.22
+  unlimitedDemonNitro: 0
+  demonPassiveNitroRate: 0.05
+  enableSlipstreamAndOvertake: 1
+  slipstreamMinDistance: 3
+  slipstreamMaxDistance: 24
+  slipstreamAngleTolerance: 24
+  slipstreamSpeedBonus: 1.12
+  overtakePredictionHorizon: 0.75
+  overtakeTriggerDistance: 7.5
+  overtakeCommitmentDuration: 1.1
+  overtakeLateralOffset: 2.2
+  doorToDoorContactAllowed: 1
+  enableTacticalCombat: 1
+  missileDefenseRange: 32
+  bananaRearAmbushRange: 9.5
+  shieldReactionDelay: 0.1
+  enableCompetitivePressure: 1
+  chaseSpeedBonus: 1.15
+  defensiveSpeedFactor: 1.08
   stuckSpeedThreshold: 0.75
   reverseAfterSeconds: 3
   reverseDuration: 1.25
   hardResetAfterSeconds: 8
-  nextWaypointIndex: 0
+  spinRecoveryAngleThreshold: 60
+  aiState: 0
+  targetOpponent: {fileID: 0}
+  overtakeLane: 0
   cornerSeverity: 0
   desiredSpeed: 0
-  smoothedSteering: 0
-  stuckTime: 0
-  reversingToRecover: 0
+  slipstreamTarget: {fileID: 0}
+  slipstreamActive: 0
+  nitroDecision: Idle
+  combatAction: Standby
+  trackBoundaryRisk: 0
+  recoveryState: Normal
+  actualRacePosition: 1
 --- !u!114 &1626331767
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -42833,9 +43311,47 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7465e1996a2270e41a7b6c13b29d77aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
+  maxNitroCharge: 2.5
+  minimumNitroToStart: 0.7
+  driftNitroPerSecond: 0.4
+  airNitroPerSecond: 0.25
+  minimumRewardAirTime: 0.55
+  maximumAirNitroReward: 0.45
+  minimumTakeoffSpeed: 6
+  bananaStunSteeringStrength: 1
+  bananaStunWobbleFrequency: 7
+  bananaSideImpulse: 4
+  maximumLandingSpeedLoss: 0.15
+  maximumLandingRecoveryTime: 0.24
+  minimumLandingThrottleScale: 0.12
+  singleNitroDrain: 0.28
+  doubleNitroDrain: 0.42
+  tripleNitroDrain: 0.6
+  perfectNitroDrain: 0.32
+  nitroTimingDuration: 0.9
+  perfectTimingStartSeconds: 0.35
+  perfectTimingEndSeconds: 0.58
+  shockwaveTimingEndSeconds: 0.85
+  nitroPressCooldown: 0.08
+  singleNitroAccelerationMultiplier: 1.35
+  doubleNitroAccelerationMultiplier: 1.55
+  tripleNitroAccelerationMultiplier: 1.9
+  perfectNitroAccelerationMultiplier: 1.7
+  nitroAirAcceleration: 3
+  singleNitroImpulse: 3
+  doubleNitroImpulse: 4
+  tripleNitroImpulse: 6
+  perfectNitroImpulse: 4.5
   targetBody: {fileID: 1626331770}
   inputProviderSource: {fileID: 1626331769}
   maxForwardSpeed: 30
+  boostLaneMaxSpeedKmh: 110
+  itemBoostMaxSpeedKmh: 130
+  singleNitroMaxSpeedKmh: 105
+  doubleNitroMaxSpeedKmh: 115
+  tripleNitroMaxSpeedKmh: 130
+  perfectNitroMaxSpeedKmh: 125
+  boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
   acceleration: 8.5
   reverseAcceleration: 11
@@ -42848,6 +43364,7 @@ MonoBehaviour:
   steeringDegreesPerSecond: 92
   steeringAtMaxSpeedMultiplier: 0.5
   steeringResponse: 4.5
+  uphillAssist: 8
   minimumSteeringSpeed: 0.5
   cornerPenaltySteeringThreshold: 0.18
   cornerPenaltyStartSpeed: 7
@@ -42861,6 +43378,14 @@ MonoBehaviour:
   maximumGroundedUpwardSpeed: 0.75
   centerOfMassOffset: {x: 0, y: -0.45, z: 0}
   lockPitchAndRoll: 1
+  enableAirControl: 1
+  airYawStrength: 8
+  airPitchControl: 0
+  airRollControl: 0
+  airSteeringResponsiveness: 6
+  maximumAirRotationSpeed: 90
+  airLateralAssist: 0
+  airLateralAssistStrength: 1.5
   controlEnabled: 1
   brakeAllowedWhenControlDisabled: 0
   minimumImpactSpeed: 2
@@ -42868,6 +43393,9 @@ MonoBehaviour:
   maximumCollisionSpeedLoss: 14
   collisionLossCooldown: 0.25
   sideImpactLossMultiplier: 0.12
+  debugBananaStunned: 0
+  debugLandingRecovery: 0
+  debugLastLandingSeverity: 0
   inputProviderValid: 0
   debugSteering: 0
   debugThrottle: 0
@@ -42885,6 +43413,12 @@ MonoBehaviour:
   debugLastContactUpDot: 0
   debugObservedSpeedDrop: 0
   debugObservedVerticalDelta: 0
+  debugAirborne: 0
+  debugAirControlActive: 0
+  debugAirSteering: 0
+  debugAirYawRate: 0
+  debugImpactRecovery: 0
+  debugLastMissileImpactDelta: {x: 0, y: 0, z: 0}
 --- !u!114 &1626331769
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -42897,6 +43431,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1c67196430a26bf458a7092ba089f952, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.AI.AIInputProvider
+  drift: 0
   steering: 0
   throttle: 0
   brake: 0
@@ -50270,6 +50805,9 @@ MonoBehaviour:
   body: {fileID: 1889706914}
   carController: {fileID: 1889706912}
   inputProvider: {fileID: 1889706913}
+  participant: {fileID: 0}
+  inventory: {fileID: 0}
+  raceManager: {fileID: 0}
   skill: 0.9
   targetSpeedMultiplier: 1
   cornerCaution: 1
@@ -50282,19 +50820,56 @@ MonoBehaviour:
   cornerPreviewSegments: 2
   minimumCornerSpeedFactor: 0.55
   brakeSpeedMargin: 1.2
-  obstacleLookAhead: 9
-  obstacleCastRadius: 0.75
-  obstacleSteeringInfluence: 0.65
+  enableApexCutting: 1
+  apexCutDistance: 2.2
+  cornerEntryOutsideBias: 1.4
+  apexSteerAnticipation: 0.35
+  enableDriftCornering: 1
+  enableTrackBoundaryProtection: 1
+  boundarySafetyCorridor: 3.2
+  boundaryProbeDistance: 12
+  boundaryProbeRadius: 0.6
+  emergencyBrakeSensitivity: 0.85
+  cliffDropThreshold: 2.5
+  enablePerfectNitro: 1
+  enableTripleNitro: 1
+  nitroTacticalThreshold: 0.22
+  unlimitedDemonNitro: 0
+  demonPassiveNitroRate: 0.05
+  enableSlipstreamAndOvertake: 1
+  slipstreamMinDistance: 3
+  slipstreamMaxDistance: 24
+  slipstreamAngleTolerance: 24
+  slipstreamSpeedBonus: 1.12
+  overtakePredictionHorizon: 0.75
+  overtakeTriggerDistance: 7.5
+  overtakeCommitmentDuration: 1.1
+  overtakeLateralOffset: 2.2
+  doorToDoorContactAllowed: 1
+  enableTacticalCombat: 1
+  missileDefenseRange: 32
+  bananaRearAmbushRange: 9.5
+  shieldReactionDelay: 0.1
+  enableCompetitivePressure: 1
+  chaseSpeedBonus: 1.15
+  defensiveSpeedFactor: 1.08
   stuckSpeedThreshold: 0.75
   reverseAfterSeconds: 3
   reverseDuration: 1.25
   hardResetAfterSeconds: 8
-  nextWaypointIndex: 0
+  spinRecoveryAngleThreshold: 60
+  aiState: 0
+  targetOpponent: {fileID: 0}
+  overtakeLane: 0
   cornerSeverity: 0
   desiredSpeed: 0
-  smoothedSteering: 0
-  stuckTime: 0
-  reversingToRecover: 0
+  slipstreamTarget: {fileID: 0}
+  slipstreamActive: 0
+  nitroDecision: Idle
+  combatAction: Standby
+  trackBoundaryRisk: 0
+  recoveryState: Normal
+  actualRacePosition: 1
 --- !u!114 &1889706911
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -50326,9 +50901,47 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7465e1996a2270e41a7b6c13b29d77aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
+  maxNitroCharge: 2.5
+  minimumNitroToStart: 0.7
+  driftNitroPerSecond: 0.4
+  airNitroPerSecond: 0.25
+  minimumRewardAirTime: 0.55
+  maximumAirNitroReward: 0.45
+  minimumTakeoffSpeed: 6
+  bananaStunSteeringStrength: 1
+  bananaStunWobbleFrequency: 7
+  bananaSideImpulse: 4
+  maximumLandingSpeedLoss: 0.15
+  maximumLandingRecoveryTime: 0.24
+  minimumLandingThrottleScale: 0.12
+  singleNitroDrain: 0.28
+  doubleNitroDrain: 0.42
+  tripleNitroDrain: 0.6
+  perfectNitroDrain: 0.32
+  nitroTimingDuration: 0.9
+  perfectTimingStartSeconds: 0.35
+  perfectTimingEndSeconds: 0.58
+  shockwaveTimingEndSeconds: 0.85
+  nitroPressCooldown: 0.08
+  singleNitroAccelerationMultiplier: 1.35
+  doubleNitroAccelerationMultiplier: 1.55
+  tripleNitroAccelerationMultiplier: 1.9
+  perfectNitroAccelerationMultiplier: 1.7
+  nitroAirAcceleration: 3
+  singleNitroImpulse: 3
+  doubleNitroImpulse: 4
+  tripleNitroImpulse: 6
+  perfectNitroImpulse: 4.5
   targetBody: {fileID: 1889706914}
   inputProviderSource: {fileID: 1889706913}
   maxForwardSpeed: 30
+  boostLaneMaxSpeedKmh: 110
+  itemBoostMaxSpeedKmh: 130
+  singleNitroMaxSpeedKmh: 105
+  doubleNitroMaxSpeedKmh: 115
+  tripleNitroMaxSpeedKmh: 130
+  perfectNitroMaxSpeedKmh: 125
+  boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
   acceleration: 8.5
   reverseAcceleration: 11
@@ -50341,6 +50954,7 @@ MonoBehaviour:
   steeringDegreesPerSecond: 92
   steeringAtMaxSpeedMultiplier: 0.5
   steeringResponse: 4.5
+  uphillAssist: 8
   minimumSteeringSpeed: 0.5
   cornerPenaltySteeringThreshold: 0.18
   cornerPenaltyStartSpeed: 7
@@ -50354,6 +50968,14 @@ MonoBehaviour:
   maximumGroundedUpwardSpeed: 0.75
   centerOfMassOffset: {x: 0, y: -0.45, z: 0}
   lockPitchAndRoll: 1
+  enableAirControl: 1
+  airYawStrength: 8
+  airPitchControl: 0
+  airRollControl: 0
+  airSteeringResponsiveness: 6
+  maximumAirRotationSpeed: 90
+  airLateralAssist: 0
+  airLateralAssistStrength: 1.5
   controlEnabled: 1
   brakeAllowedWhenControlDisabled: 0
   minimumImpactSpeed: 2
@@ -50361,6 +50983,9 @@ MonoBehaviour:
   maximumCollisionSpeedLoss: 14
   collisionLossCooldown: 0.25
   sideImpactLossMultiplier: 0.12
+  debugBananaStunned: 0
+  debugLandingRecovery: 0
+  debugLastLandingSeverity: 0
   inputProviderValid: 0
   debugSteering: 0
   debugThrottle: 0
@@ -50378,6 +51003,12 @@ MonoBehaviour:
   debugLastContactUpDot: 0
   debugObservedSpeedDrop: 0
   debugObservedVerticalDelta: 0
+  debugAirborne: 0
+  debugAirControlActive: 0
+  debugAirSteering: 0
+  debugAirYawRate: 0
+  debugImpactRecovery: 0
+  debugLastMissileImpactDelta: {x: 0, y: 0, z: 0}
 --- !u!114 &1889706913
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -50390,6 +51021,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1c67196430a26bf458a7092ba089f952, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.AI.AIInputProvider
+  drift: 0
   steering: 0
   throttle: 0
   brake: 0
@@ -53757,6 +54389,108 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2002944697}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1001 &2006187069
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 658634748}
+    m_Modifications:
+    - target: {fileID: 5540811436661784569, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_Name
+      value: ShieldBlocked_UI
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_Pivot.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_Pivot.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_AnchorMin.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_AnchorMin.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+--- !u!224 &2006187070 stripped
+RectTransform:
+  m_CorrespondingSourceObject: {fileID: 8271457495999247590, guid: 015552a57152d0d4abace389b848fe3c, type: 3}
+  m_PrefabInstance: {fileID: 2006187069}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &2009761190
 GameObject:
   m_ObjectHideFlags: 0

@@ -30,6 +30,8 @@ UserSettings/
 tmp/
 agent_bridge/__pycache__/
 *.py[cod]
+*.log
+install_hud.log
 
 # Local agent/editor state and unrelated Unity coursework
 .agent-bridge/
@@ -47,3 +49,21 @@ Assets/Materials/ThiThuExam/
 Assets/Materials/ThiThuExam.meta
 Assets/BrokenVector/LowPolyBrickHouses/Scenes/
 Packages/com.local.unity-mcp/
+Packages/com.coplaydev.unity-mcp/
+Packages/*unity-mcp*/
+
+# Temporary backups and archives
+*.unitypackage
+*.bak
+*.bak.meta
+Assets/_Recovery/
+Assets/_Recovery.meta
+
+# Oversized raw PSD source files (>100MB GitHub limit)
+Assets/PoseKart/UI/Assets/UI/Textures/UI_atlas.psd
+Assets/PoseKart/UI/Assets/UI/Textures/UI_atlas.psd.meta
+Assets/PoseKart/UI/Assets/UI/Textures/Icons/CheckIcon.psd
+Assets/PoseKart/UI/Assets/UI/Textures/Icons/CheckIcon.psd.meta
+
+# Local hardware calibration
+HandTracking/calibration.json

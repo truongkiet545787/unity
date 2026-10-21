@@ -1,0 +1,83 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b081b01b10f334413754dd8379da1f37, type: 3}
+  m_Name: Parchment
+  m_EditorClassIdentifier: HeyHeyThere.PixelUIFantasyFree::HeyHeyThere.PixelUIFantasyFree.PixelTheme
+  names:
+  - Panel
+  - Window
+  - InsetPanel
+  - PortraitPanel
+  - SkillSlot
+  - ActiveSkillSlot
+  - ParchmentPanel
+  - CommonSlot
+  - UncommonSlot
+  - RareSlot
+  - EpicSlot
+  - LegendarySlot
+  - Label
+  - Title
+  - Ink
+  - Nameplate
+  - Ribbon
+  - Button
+  - Checkbox
+  - Radio
+  - Slider
+  - Bar
+  - RedBar
+  - BlueBar
+  - GreenBar
+  - GoldBar
+  - Scrollbar
+  - ScrollView
+  - InputField
+  - Dropdown
+  - Tabs
+  - Tooltip
+  - Separator
+  prefabs:
+  - {fileID: 472817177690049732, guid: cf47791e1e4bf1eda033270145019c0e, type: 3}
+  - {fileID: 41881597286194277, guid: 55f92ca9e96da48b63e3fbd6d76b6d68, type: 3}
+  - {fileID: 8057077937632006729, guid: b0bc7ac94a3077ea773922db9b49c886, type: 3}
+  - {fileID: 2955601173363520396, guid: 29419f66b474f0edf2e2d6e136dfc7a2, type: 3}
+  - {fileID: 3946709417526084266, guid: 3412fdc65373df497a6271364bd4940d, type: 3}
+  - {fileID: 7120127745370032328, guid: 47a5fa423374a1c4d02f96c52322377c, type: 3}
+  - {fileID: 2896076824163394659, guid: 2adca23d7bb1c64e681baf4ecfb67bfe, type: 3}
+  - {fileID: 2277534518994300961, guid: 0de24df6e4fd1ea53151fd60ad43399c, type: 3}
+  - {fileID: 8227756388005447080, guid: 58361fb378c988e145113c6d01110354, type: 3}
+  - {fileID: 4229882590943537825, guid: 6d6d93af2761fba4870078ef5ae177ae, type: 3}
+  - {fileID: 5342349827115082758, guid: 53e0812b0ddf69e7595a1a739909364e, type: 3}
+  - {fileID: 9179721796205929596, guid: d1c472f55e41b875efb1158b76042f00, type: 3}
+  - {fileID: 8749988003249969270, guid: e837f9e64f15868ac0570e32b4568179, type: 3}
+  - {fileID: 6442766298924452692, guid: f1f911d2f972e8b2bf648de739dd9b2a, type: 3}
+  - {fileID: 6090751455496809026, guid: 0e7c9a43f4ad4652364edb8d49fd7151, type: 3}
+  - {fileID: 957845216840574236, guid: b99c45b6d959a883c6c52001210ce619, type: 3}
+  - {fileID: 3455864760851375729, guid: 2269baad6facee8d7133263a444d0f61, type: 3}
+  - {fileID: 4567360336623979037, guid: b0784c45c91092bcebba53109d5b1c23, type: 3}
+  - {fileID: 6641255774850980287, guid: cf85b8b9fa73d2d24f37257ee419ba05, type: 3}
+  - {fileID: 6836789924039584187, guid: 92f21898f902246c3376d049cf44a88b, type: 3}
+  - {fileID: 2116147418487190339, guid: 24d9cbd87fc4b0ec460f126854c76315, type: 3}
+  - {fileID: 3893566930810318090, guid: 1cd72617a76f0f55663eb98427ca6054, type: 3}
+  - {fileID: 1328718444536405838, guid: 1acf9a095e6130599a104273536d2af7, type: 3}
+  - {fileID: 1489950310476417688, guid: 04cccefc067926098511ad4c83d936e6, type: 3}
+  - {fileID: 6458417407829664363, guid: 537ab9ba36b74984c696dbe1d985d9e8, type: 3}
+  - {fileID: 2854888544191382649, guid: b4e8f2dedd14c424a1fe737cf453b699, type: 3}
+  - {fileID: 76742523884839212, guid: e12dfea3fb117895b00e127fe74f56c5, type: 3}
+  - {fileID: 8394704880959292975, guid: ab1c64672080afa79d76a4ac4a833470, type: 3}
+  - {fileID: 4036244346369309953, guid: b43e01041702b7db5e413d6418f3cfdb, type: 3}
+  - {fileID: 5248108323862831320, guid: 5e0971bbab2e4d5fbeffcbcac9f691d5, type: 3}
+  - {fileID: 543402520496824337, guid: 6bd633dfc530e48fd4febf1132b75d23, type: 3}
+  - {fileID: 5626370273394116925, guid: 6aa4c185e5afad7526e677f763ea8078, type: 3}
+  - {fileID: 7719509188007186390, guid: d46f94c79ed47e3fff702c9c3e9cc1d9, type: 3}
+  iconColor: {r: 1, g: 1, b: 1, a: 1}

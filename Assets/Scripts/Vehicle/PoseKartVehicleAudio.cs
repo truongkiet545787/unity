@@ -1,5 +1,6 @@
 using PoseKart.Input;
 using PoseKart.Audio;
+using PoseKart.Race;
 using UnityEngine;
 
 namespace PoseKart.Vehicle
@@ -19,7 +20,8 @@ namespace PoseKart.Vehicle
             AutomaticFallback,
             LegacyOnly,
             MultiSampleRPMBank,
-            SpeedSynchronizedArcade
+            SpeedSynchronizedArcade,
+            SpeedLockedRPM
         }
 
         [Header("Vehicle profile")]
@@ -39,8 +41,8 @@ namespace PoseKart.Vehicle
         [SerializeField, Min(1)] private int minimumSampleRpm = 1000;
         [SerializeField, Min(1)] private int maximumSampleRpm = 8500;
         [SerializeField, Min(1)] private int rpmStep = 500;
-        [SerializeField, Range(0.5f, 1.5f)] private float minimumPitchCorrection = 0.94f;
-        [SerializeField, Range(0.5f, 1.5f)] private float maximumPitchCorrection = 1.06f;
+        [SerializeField, Range(0.5f, 1.5f)] private float minimumPitchCorrection = 0.80f;
+        [SerializeField, Range(0.5f, 1.5f)] private float maximumPitchCorrection = 1.25f;
         [SerializeField, Min(0.1f)] private float pitchSmoothing = 8f;
         [SerializeField, Range(0f, 1f)] private float engineVolume = 0.6f;
         [SerializeField, Range(0f, 1f)] private float accelerationLayerVolume = 0.28f;
@@ -59,32 +61,73 @@ namespace PoseKart.Vehicle
 
         [Header("Speed-synchronized arcade RPM")]
         [Tooltip("Smooths Rigidbody speed before it drives the audio RPM target.")]
-        [SerializeField, Min(0.01f)] private float speedSmoothingTime = 0.14f;
+        [SerializeField, Min(0.01f)] private float speedSmoothingTime = 0.05f;
         [Tooltip("Smooth acceleration of the audio RPM target without changing vehicle physics.")]
-        [SerializeField, Min(0.01f)] private float rpmRiseSmoothingTime = 0.26f;
+        [SerializeField, Min(0.01f)] private float rpmRiseSmoothingTime = 0.12f;
         [Tooltip("Smooth deceleration/coasting of the audio RPM target.")]
-        [SerializeField, Min(0.01f)] private float rpmFallSmoothingTime = 0.34f;
+        [SerializeField, Min(0.01f)] private float rpmFallSmoothingTime = 0.20f;
         [Tooltip("Small throttle-only RPM addition while the vehicle is moving. Speed remains the primary driver.")]
         [SerializeField, Range(0f, 0.25f)] private float movingThrottleBoost = 0.12f;
         [Tooltip("Maximum simulated RPM while stationary and holding throttle.")]
         [SerializeField, Min(1000f)] private float stationaryRevLimit = 3200f;
         [SerializeField, Min(0f)] private float stationarySpeedThresholdKmh = 1f;
 
+        [Header("Reverse engine audio")]
+        [Tooltip("Lower RPM floor used only while the Rigidbody is actually moving backwards.")]
+        [SerializeField, Min(400f)] private float reverseAudioRpmMinimum = 1000f;
+        [Tooltip("Upper RPM cap used only while the Rigidbody is actually moving backwards.")]
+        [SerializeField, Min(500f)] private float reverseAudioRpmMaximum = 2000f;
+        [Tooltip("Reverse speed in km/h that reaches Reverse Audio RPM Maximum.")]
+        [SerializeField, Min(1f)] private float reverseSpeedReferenceKmh = 35f;
+        [Tooltip("Signed-speed dead zone used to avoid forward/reverse chatter near rest.")]
+        [SerializeField, Min(0f)] private float directionChangeDeadZoneKmh = 1.5f;
+        [Tooltip("Smoothing time used when entering or leaving the reverse RPM range.")]
+        [SerializeField, Min(0.01f)] private float reverseTransitionSmoothing = 0.24f;
+
+        [Header("Race countdown audio")]
+        [Tooltip("When a configured RaceManager is waiting or counting down, hold the engine at its idle sample until GO.")]
+        [SerializeField] private bool lockRpmDuringRaceCountdown = true;
+
         [Header("Nitro clips")]
         [SerializeField] private AudioClip nitroStartClip;
         [SerializeField] private AudioClip nitroLoopClip;
         [SerializeField] private AudioClip nitroEndClip;
+        [Header("Nitro Mode Specific Clips")]
+        [Tooltip("Played when Single Nitro activates (Yellow)")]
+        [SerializeField] private AudioClip singleNitroClip;
+        [Tooltip("Played when Double Nitro activates (Orange)")]
+        [SerializeField] private AudioClip doubleNitroClip;
+        [Tooltip("Played when Perfect Nitro activates (Cyan / Blue)")]
+        [SerializeField] private AudioClip perfectNitroClip;
+        [Tooltip("Played when Shockwave / Triple Nitro activates (Purple / Magenta)")]
+        [SerializeField] private AudioClip shockwaveNitroClip;
         [SerializeField, Range(0f, 1f)] private float nitroVolume = 0.8f;
         [SerializeField, Range(0f, 1f)] private float nitroEngineBoost = 0.22f;
 
-        [Header("Tires and speed")]
+        [Header("Tire / Drift Audio")]
+        [InspectorName("Tire Skid Clip")]
         [SerializeField] private AudioClip tireSkidClip;
+        [InspectorName("Brake Skid Clip")]
+        [SerializeField] private AudioClip brakeSkidClip;
         [SerializeField] private AudioClip windRushClip;
+        [InspectorName("Tire Volume")]
         [SerializeField, Range(0f, 1f)] private float tireVolume = 0.55f;
+        [InspectorName("Brake Volume")]
+        [SerializeField, Range(0f, 1f)] private float brakeVolume = 0.55f;
         [SerializeField, Range(0f, 1f)] private float windVolume = 0.3f;
+        [InspectorName("Minimum Skid Speed (km/h)")]
+        [SerializeField, Min(0f)] private float minimumSkidSpeedKmh = 8f;
+        [InspectorName("Brake Slip Threshold")]
+        [SerializeField, Min(0f)] private float brakeSlipThreshold = 0.28f;
+        [InspectorName("Drift Slip Threshold")]
         [SerializeField, Min(0f)] private float skidStartSlip = 0.18f;
         [SerializeField, Min(0f)] private float skidFullSlip = 0.65f;
+        [InspectorName("Skid Fade Speed")]
         [SerializeField, Min(0.1f)] private float skidResponse = 8f;
+        [Tooltip("Minimum brake deceleration required before the separate brake squeal can become audible.")]
+        [SerializeField, Min(0f)] private float brakeDecelerationThreshold = 9f;
+        [Tooltip("Brake input must exceed this value before brake squeal is considered.")]
+        [SerializeField, Range(0f, 1f)] private float brakeInputThreshold = 0.45f;
 
         [Header("Collision clips")]
         [SerializeField] private AudioClip collisionLightClip;
@@ -110,8 +153,14 @@ namespace PoseKart.Vehicle
         [SerializeField] private float currentRpm;
         [SerializeField] private float targetAudioRpm;
         [SerializeField] private float actualSpeedKmh;
+        [InspectorName("Signed Speed")]
+        [SerializeField] private float signedSpeedKmh;
+        [InspectorName("Movement Direction")]
+        [SerializeField] private string movementDirectionLabel = "Stationary";
         [SerializeField] private float hudSpeedKmh;
         [SerializeField, Range(0f, 1f)] private float skidNormalized;
+        [SerializeField, Range(0f, 1f)] private float brakeSkidNormalized;
+        [SerializeField] private float brakeDeceleration;
         [SerializeField, Range(0f, 1f)] private float throttle;
         [SerializeField] private bool nitroActive;
         [SerializeField] private string activeAudioMode = "Legacy fallback";
@@ -134,6 +183,14 @@ namespace PoseKart.Vehicle
         [SerializeField] private int nitroPlayCalls;
         [SerializeField] private int nitroStopCalls;
         [SerializeField] private bool debugOverlayEnabled;
+        [InspectorName("Current Race State")]
+        [SerializeField] private string currentRaceState = "No RaceManager";
+        [InspectorName("Is Countdown Active")]
+        [SerializeField] private bool countdownActive;
+        [InspectorName("Is Race Started")]
+        [SerializeField] private bool raceStarted;
+        [InspectorName("RPM Lock Active")]
+        [SerializeField] private bool rpmLockActive;
 
         private Rigidbody body;
         private CarController car;
@@ -146,13 +203,23 @@ namespace PoseKart.Vehicle
         private AudioSource nitroLoopSource;
         private AudioSource effectsSource;
         private AudioSource skidSource;
+        private AudioSource brakeSkidSource;
         private AudioSource windSource;
         private AudioSource collisionSource;
         private float lastCrashTime = float.NegativeInfinity;
         private bool wasBoosting;
+        private CarController.NitroMode lastPlayedNitroMode = (CarController.NitroMode)(-1);
         private float smoothedSpeedKmh;
         private float speedSmoothVelocity;
+        private float smoothedSignedSpeedKmh;
+        private float signedSpeedSmoothVelocity;
         private float rpmSmoothVelocity;
+        private float previousSpeedKmh;
+        private float smoothedDeceleration;
+        private bool hasPreviousSpeedSample;
+        private int movementDirection;
+        private RaceManager raceManager;
+        private bool raceManagerLookupAttempted;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AttachToSceneCars()
@@ -175,8 +242,13 @@ namespace PoseKart.Vehicle
             if (style == VehicleAudioStyle.Auto) style = isPlayer ? VehicleAudioStyle.PlayerRally : VehicleAudioStyle.AI;
             inputProvider = car == null ? null : car.InputProviderSource as ICarInputProvider;
             wheels = GetComponentsInChildren<WheelCollider>(true);
+            raceManager = FindFirstObjectByType<RaceManager>();
+            raceManagerLookupAttempted = true;
             ConfigureSources();
-            wasBoosting = car != null && car.IsBoosting;
+            if (speedSmoothingTime > 0.08f) speedSmoothingTime = 0.05f;
+            if (rpmRiseSmoothingTime > 0.16f) rpmRiseSmoothingTime = 0.12f;
+            if (rpmFallSmoothingTime > 0.25f) rpmFallSmoothingTime = 0.20f;
+            wasBoosting = car != null && car.IsNitroBoosting;
             GetAudioRpmRange(out float minimumRpm, out _);
             currentRpm = minimumRpm;
             targetAudioRpm = minimumRpm;
@@ -188,24 +260,52 @@ namespace PoseKart.Vehicle
             if (body == null) body = GetComponent<Rigidbody>();
             if (inputProvider == null && car != null) inputProvider = car.InputProviderSource as ICarInputProvider;
 
+            UpdateRaceState();
+
             float dt = Mathf.Max(0.0001f, Time.deltaTime);
             float speedKmh = GetSpeedKmh();
+            float currentSignedSpeedKmh = GetSignedSpeedKmh();
+            float measuredDeceleration = hasPreviousSpeedSample
+                ? Mathf.Max(0f, previousSpeedKmh - speedKmh) / dt
+                : 0f;
+            smoothedDeceleration = Mathf.MoveTowards(
+                smoothedDeceleration,
+                measuredDeceleration,
+                40f * dt);
+            brakeDeceleration = smoothedDeceleration;
+            previousSpeedKmh = speedKmh;
+            hasPreviousSpeedSample = true;
             actualSpeedKmh = speedKmh;
+            signedSpeedKmh = currentSignedSpeedKmh;
             hudSpeedKmh = speedKmh;
             smoothedSpeedKmh = Mathf.SmoothDamp(smoothedSpeedKmh, speedKmh, ref speedSmoothVelocity,
                 Mathf.Max(0.01f, speedSmoothingTime), Mathf.Infinity, dt);
+            smoothedSignedSpeedKmh = Mathf.SmoothDamp(smoothedSignedSpeedKmh, currentSignedSpeedKmh,
+                ref signedSpeedSmoothVelocity, Mathf.Max(0.01f, reverseTransitionSmoothing),
+                Mathf.Infinity, dt);
+            movementDirection = ResolveMovementDirection(currentSignedSpeedKmh);
+            movementDirectionLabel = movementDirection < 0
+                ? "Reversing"
+                : movementDirection > 0 ? "Forward" : "Stationary";
             float speedNormalized = Mathf.Clamp01(smoothedSpeedKmh / Mathf.Max(1f, maxSpeedKmh));
             throttle = inputProvider == null ? 0f : Mathf.Clamp01(inputProvider.Throttle);
             float brake = inputProvider == null ? 0f : Mathf.Clamp01(inputProvider.Brake);
             bool grounded = car == null || car.IsGrounded;
-            bool boost = car != null && car.IsBoosting;
+            bool boost = car != null && car.IsNitroBoosting;
             gameplayNitroActive = boost;
             nitroActive = gameplayNitroActive;
 
             GetAudioRpmRange(out float audioMinimumRpm, out float audioMaximumRpm);
-            if (engineAudioMode == EngineAudioMode.SpeedSynchronizedArcade)
+            if (rpmLockActive)
             {
-                UpdateSpeedSynchronizedRpm(smoothedSpeedKmh, throttle, dt, audioMinimumRpm, audioMaximumRpm);
+                ForceCountdownIdleRpm(audioMinimumRpm);
+            }
+            else if (ShouldUseRpmBank()
+                || engineAudioMode == EngineAudioMode.SpeedSynchronizedArcade
+                || engineAudioMode == EngineAudioMode.SpeedLockedRPM)
+            {
+                UpdateSpeedSynchronizedRpm(smoothedSpeedKmh, smoothedSignedSpeedKmh, throttle, dt,
+                    audioMinimumRpm, audioMaximumRpm, engineAudioMode == EngineAudioMode.SpeedLockedRPM, grounded);
             }
             else
             {
@@ -219,11 +319,90 @@ namespace PoseKart.Vehicle
             nitroLoopIsPlaying = nitroLoopSource != null && nitroLoopSource.isPlaying;
             nitroLoopVolume = nitroLoopSource == null ? 0f : nitroLoopSource.volume;
             audioNitroActive = gameplayNitroActive && nitroLoopIsPlaying && nitroLoopVolume > 0.001f;
-            UpdateTireSkid(grounded, dt);
-            UpdateWind(speedNormalized, boost, dt);
-            if (boost && !wasBoosting) PlayOneShot(effectsSource, nitroStartClip, 1f, 0.98f, 1.04f);
-            if (!boost && wasBoosting) PlayOneShot(effectsSource, nitroEndClip, 0.8f, 0.96f, 1.04f);
+            UpdateTireSkid(grounded, brake, smoothedDeceleration, dt);
+            CarController.NitroMode currentNitroMode = car != null ? car.CurrentNitroMode : CarController.NitroMode.None;
+            if (boost)
+            {
+                if (currentNitroMode != lastPlayedNitroMode)
+                {
+                    AudioClip modeClip = null;
+                    switch (currentNitroMode)
+                    {
+                        case CarController.NitroMode.Single:
+                            modeClip = singleNitroClip != null ? singleNitroClip : nitroStartClip;
+                            break;
+                        case CarController.NitroMode.Double:
+                            modeClip = doubleNitroClip != null ? doubleNitroClip : nitroStartClip;
+                            break;
+                        case CarController.NitroMode.Perfect:
+                            modeClip = perfectNitroClip != null ? perfectNitroClip : nitroStartClip;
+                            break;
+                        case CarController.NitroMode.Shockwave:
+                            modeClip = shockwaveNitroClip != null ? shockwaveNitroClip : nitroStartClip;
+                            break;
+                        default:
+                            modeClip = nitroStartClip;
+                            break;
+                    }
+                    if (modeClip != null)
+                    {
+                        PlayOneShot(effectsSource, modeClip, 1f, 0.98f, 1.04f);
+                    }
+                    lastPlayedNitroMode = currentNitroMode;
+                }
+            }
+            else
+            {
+                if (wasBoosting)
+                {
+                    PlayOneShot(effectsSource, nitroEndClip, 0.8f, 0.96f, 1.04f);
+                }
+                lastPlayedNitroMode = CarController.NitroMode.None;
+            }
             wasBoosting = boost;
+        }
+
+        private void UpdateRaceState()
+        {
+            if (!raceManagerLookupAttempted)
+            {
+                raceManager = FindFirstObjectByType<RaceManager>();
+                raceManagerLookupAttempted = true;
+            }
+
+            bool hasActiveRaceManager = raceManager != null
+                && raceManager.isActiveAndEnabled
+                && raceManager.IsConfigured;
+            if (!hasActiveRaceManager)
+            {
+                currentRaceState = raceManager == null ? "No RaceManager" : "No active countdown";
+                countdownActive = false;
+                raceStarted = true;
+                rpmLockActive = false;
+                return;
+            }
+
+            RaceState state = raceManager.State;
+            currentRaceState = state.ToString();
+            countdownActive = state == RaceState.Countdown;
+            raceStarted = state == RaceState.Racing || state == RaceState.Finished;
+            // Waiting is included so the engine is already at idle on the grid,
+            // before RunCountdown changes the state to Countdown.
+            rpmLockActive = lockRpmDuringRaceCountdown
+                && (state == RaceState.Waiting || state == RaceState.Countdown);
+        }
+
+        private void ForceCountdownIdleRpm(float minimumRpm)
+        {
+            // The configured bank starts at 1000 RPM. Use the legacy idle value
+            // only for scenes that do not have an RPM bank.
+            float lockedRpm = engineSoundBank != null
+                ? engineSoundBank.MinimumSampleRpm
+                : Mathf.Max(minimumRpm, idleRpm);
+            targetAudioRpm = lockedRpm;
+            currentRpm = lockedRpm;
+            rpmNormalized = 0f;
+            rpmSmoothVelocity = 0f;
         }
 
         private void UpdateEngineLayers(float simulatedRpm, bool boost, float dt)
@@ -232,17 +411,21 @@ namespace PoseKart.Vehicle
             legacyEngineAudioActive = !usingRpmBank;
             if (usingRpmBank)
             {
-                activeAudioMode = engineAudioMode == EngineAudioMode.SpeedSynchronizedArcade
-                    ? "Speed synchronized arcade + 16-step RPM bank"
-                    : "16-step RPM bank";
+                activeAudioMode = engineAudioMode == EngineAudioMode.SpeedLockedRPM
+                    ? "Speed locked RPM + 16-step RPM bank"
+                    : engineAudioMode == EngineAudioMode.SpeedSynchronizedArcade
+                        ? "Speed synchronized arcade + 16-step RPM bank"
+                        : "16-step RPM bank";
                 UpdateRpmBankEngine(simulatedRpm, boost, dt);
                 UpdateLoop(idleSource, null, 0f, 1f, dt);
             }
             else
             {
-                activeAudioMode = engineAudioMode == EngineAudioMode.SpeedSynchronizedArcade
-                    ? "Speed synchronized arcade (legacy clips)"
-                    : "Legacy fallback";
+                activeAudioMode = engineAudioMode == EngineAudioMode.SpeedLockedRPM
+                    ? "Speed locked RPM (legacy clips)"
+                    : engineAudioMode == EngineAudioMode.SpeedSynchronizedArcade
+                        ? "Speed synchronized arcade (legacy clips)"
+                        : "Legacy fallback";
                 lowerActiveSampleRpm = 0;
                 upperActiveSampleRpm = 0;
                 sampleBlend = 0f;
@@ -276,24 +459,77 @@ namespace PoseKart.Vehicle
             currentRpm = Mathf.Lerp(minimumRpm, Mathf.Max(minimumRpm + rpmStep, maximumRpmValue), rpmNormalized);
         }
 
-        private void UpdateSpeedSynchronizedRpm(float speedKmh, float currentThrottle, float dt,
-            float minimumRpm, float maximumRpmValue)
+        private void UpdateSpeedSynchronizedRpm(float speedKmh, float signedSpeedKmhValue,
+            float currentThrottle, float dt, float minimumRpm, float maximumRpmValue, bool speedLocked, bool grounded = true)
         {
-            float speed01 = Mathf.Clamp01(speedKmh / Mathf.Max(1f, maxSpeedKmh));
-            float baseRpm = Mathf.Lerp(minimumRpm, maximumRpmValue, speed01);
-            float rpmRange = Mathf.Max(0f, maximumRpmValue - minimumRpm);
-            float throttleRpm;
-            if (speedKmh <= stationarySpeedThresholdKmh)
+            // Reverse direction audio: applies whenever the vehicle is actively reversing
+            if (movementDirection < 0)
             {
-                throttleRpm = Mathf.Lerp(0f,
-                    Mathf.Max(0f, Mathf.Min(stationaryRevLimit, maximumRpmValue) - minimumRpm), currentThrottle);
+                float reverseMinimum = Mathf.Clamp(reverseAudioRpmMinimum, minimumRpm, maximumRpmValue);
+                float reverseMaximum = Mathf.Clamp(Mathf.Max(reverseAudioRpmMaximum, reverseMinimum),
+                    reverseMinimum, maximumRpmValue);
+                float reverse01 = Mathf.Clamp01(Mathf.Abs(signedSpeedKmhValue)
+                    / Mathf.Max(1f, reverseSpeedReferenceKmh));
+                targetAudioRpm = Mathf.Lerp(reverseMinimum, reverseMaximum, reverse01);
+                currentRpm = Mathf.SmoothDamp(currentRpm, targetAudioRpm, ref rpmSmoothVelocity,
+                    Mathf.Max(0.01f, reverseTransitionSmoothing), Mathf.Infinity, dt);
+                currentRpm = Mathf.Clamp(currentRpm, minimumRpm, maximumRpmValue);
+                rpmNormalized = Mathf.InverseLerp(minimumRpm, maximumRpmValue, currentRpm);
+                return;
+            }
+
+            // Determine normal forward top speed vs maximum boost/nitro speed
+            float normalTopSpeed = car != null ? Mathf.Max(30f, car.MaxForwardSpeed * 3.6f) : Mathf.Min(maxSpeedKmh, 80f);
+            float boostTopSpeed = Mathf.Max(normalTopSpeed * 1.5f, 130f);
+
+            // Map speed to RPM across the entire sound bank:
+            // 0 -> normalTopSpeed maps smoothly from minimumRpm (1000) to peak normal powerband (~7200 RPM)
+            // normalTopSpeed -> boostTopSpeed maps during Nitro/Boost from 7200 RPM to maximumRpmValue (8500 RPM)
+            float normalTopRpm = Mathf.Lerp(minimumRpm, maximumRpmValue, 0.82f);
+            float baseRpm;
+            if (speedKmh <= normalTopSpeed)
+            {
+                float t = Mathf.Clamp01(speedKmh / Mathf.Max(1f, normalTopSpeed));
+                baseRpm = Mathf.Lerp(minimumRpm, normalTopRpm, t);
             }
             else
             {
-                throttleRpm = currentThrottle * movingThrottleBoost * rpmRange;
+                float tBoost = Mathf.Clamp01((speedKmh - normalTopSpeed) / Mathf.Max(1f, boostTopSpeed - normalTopSpeed));
+                baseRpm = Mathf.Lerp(normalTopRpm, maximumRpmValue, tBoost);
+            }
+
+            float rpmRange = Mathf.Max(0f, maximumRpmValue - minimumRpm);
+            float throttleRpm;
+            if (speedLocked)
+            {
+                // Speed Locked RPM follows only the vehicle forward speed
+                throttleRpm = 0f;
+            }
+            else
+            {
+                // Smoothly blend stationary burnout rev into moving throttle response across 0-12 km/h launch
+                float stationaryThrottleRpm = Mathf.Lerp(0f,
+                    Mathf.Max(0f, Mathf.Min(stationaryRevLimit, maximumRpmValue) - minimumRpm), currentThrottle);
+                float movingThrottleRpm = currentThrottle * movingThrottleBoost * rpmRange;
+                float launchBlend = Mathf.Clamp01(speedKmh / 12f);
+                throttleRpm = Mathf.Lerp(stationaryThrottleRpm, movingThrottleRpm, launchBlend);
             }
 
             targetAudioRpm = Mathf.Clamp(baseRpm + throttleRpm, minimumRpm, maximumRpmValue);
+
+            // Airborne handling: holding throttle revs engine freely; releasing throttle glides down
+            if (!grounded && speedKmh > 5f)
+            {
+                if (currentThrottle > 0.1f)
+                {
+                    targetAudioRpm = Mathf.Max(targetAudioRpm, Mathf.Lerp(targetAudioRpm, maximumRpmValue * 0.90f, currentThrottle));
+                }
+                else
+                {
+                    targetAudioRpm = Mathf.Lerp(targetAudioRpm, minimumRpm, 0.5f);
+                }
+            }
+
             float smoothingTime = targetAudioRpm >= currentRpm ? rpmRiseSmoothingTime : rpmFallSmoothingTime;
             currentRpm = Mathf.SmoothDamp(currentRpm, targetAudioRpm, ref rpmSmoothVelocity,
                 Mathf.Max(0.01f, smoothingTime), Mathf.Infinity, dt);
@@ -472,7 +708,9 @@ namespace PoseKart.Vehicle
         private float GetRpmCorrectedPitch(float simulatedRpm, int sampleRpm)
         {
             float correction = sampleRpm <= 0 ? 1f : simulatedRpm / sampleRpm;
-            correction = Mathf.Clamp(correction, minimumPitchCorrection, maximumPitchCorrection);
+            float minPitch = Mathf.Min(minimumPitchCorrection, 0.80f);
+            float maxPitch = Mathf.Max(maximumPitchCorrection, 1.25f);
+            correction = Mathf.Clamp(correction, minPitch, maxPitch);
             float styleMultiplier = 1f + GetStylePitchOffset() * 0.25f;
             return Mathf.Clamp(correction * styleMultiplier, 0.1f, 3f);
         }
@@ -518,7 +756,7 @@ namespace PoseKart.Vehicle
             }
         }
 
-        private void UpdateTireSkid(bool grounded, float dt)
+        private void UpdateTireSkid(bool grounded, float brakeInput, float deceleration, float dt)
         {
             float slip = 0f;
             bool gotWheelSlip = false;
@@ -538,14 +776,53 @@ namespace PoseKart.Vehicle
             if (!gotWheelSlip && grounded && body != null)
             {
                 Vector3 localVelocity = transform.InverseTransformDirection(body.linearVelocity);
-                float speed = Mathf.Max(1f, new Vector2(localVelocity.x, localVelocity.z).magnitude);
-                slip = Mathf.Abs(localVelocity.x) / speed;
+                float planarSpeed = Mathf.Max(1f, new Vector2(localVelocity.x, localVelocity.z).magnitude);
+                slip = Mathf.Abs(localVelocity.x) / planarSpeed;
                 if (car != null && car.IsDrifting) slip = Mathf.Max(slip, 0.38f);
             }
-            float target = Mathf.InverseLerp(skidStartSlip, Mathf.Max(skidStartSlip + 0.01f, skidFullSlip), slip);
-            skidNormalized = Mathf.MoveTowards(skidNormalized, target, skidResponse * dt);
-            UpdateLoop(skidSource, tireSkidClip, skidNormalized * tireVolume,
+            float speed = smoothedSpeedKmh;
+            float driftTarget = grounded && speed >= minimumSkidSpeedKmh && car != null && car.IsDrifting
+                ? Mathf.InverseLerp(skidStartSlip, Mathf.Max(skidStartSlip + 0.01f, skidFullSlip), slip)
+                : 0f;
+            if (car != null && car.IsDrifting && speed >= minimumSkidSpeedKmh)
+            {
+                // CarController.IsDrifting is the authoritative gameplay state.
+                // The fallback slip value only controls how loud the loop becomes.
+                driftTarget = Mathf.Max(driftTarget, 0.35f);
+            }
+
+            float brakeTarget = 0f;
+            bool movingFastEnoughToBrake = grounded
+                && signedSpeedKmh > minimumSkidSpeedKmh
+                && brakeInput >= brakeInputThreshold;
+            if (movingFastEnoughToBrake)
+            {
+                float slipIntensity = Mathf.InverseLerp(
+                    brakeSlipThreshold,
+                    Mathf.Max(brakeSlipThreshold + 0.01f, skidFullSlip),
+                    slip);
+                float decelerationIntensity = Mathf.InverseLerp(
+                    brakeDecelerationThreshold,
+                    Mathf.Max(brakeDecelerationThreshold + 0.01f, brakeDecelerationThreshold * 2.2f),
+                    deceleration);
+                if (slip >= brakeSlipThreshold || deceleration >= brakeDecelerationThreshold)
+                {
+                    brakeTarget = Mathf.Clamp01(Mathf.Max(slipIntensity, decelerationIntensity * brakeInput));
+                }
+            }
+
+            skidNormalized = Mathf.MoveTowards(skidNormalized, driftTarget, skidResponse * dt);
+            brakeSkidNormalized = Mathf.MoveTowards(brakeSkidNormalized, brakeTarget, skidResponse * dt);
+
+            // Drift and hard-brake sounds share the same tire event. Keep the dominant
+            // layer full-volume and duck the other one to avoid a harsh double squeal.
+            bool brakeDominant = brakeSkidNormalized > skidNormalized * 0.85f;
+            float driftGain = brakeDominant ? 0.18f : 1f;
+            float brakeGain = brakeDominant ? 1f : 0.35f;
+            UpdateLoop(skidSource, tireSkidClip, skidNormalized * tireVolume * driftGain,
                 Mathf.Lerp(0.9f, 1.12f, skidNormalized), dt);
+            UpdateLoop(brakeSkidSource, brakeSkidClip, brakeSkidNormalized * brakeVolume * brakeGain,
+                Mathf.Lerp(0.86f, 1.04f, brakeSkidNormalized), dt);
         }
 
         private void UpdateWind(float speedNormalized, bool boost, float dt)
@@ -617,21 +894,35 @@ namespace PoseKart.Vehicle
             nitroLoopSource.mute = false;
             nitroLoopSource.volume = 0f;
             effectsSource = GetOrCreateSource("Vehicle Effects", false, spatial, engineMinDistance, engineMaxDistance);
-            skidSource = GetOrCreateSource("Tire Skid", true, 1f, engineMinDistance, engineMaxDistance);
+            skidSource = GetOrCreateSource("Tire Skid", true, isPlayer ? 0.25f : 1f, engineMinDistance, engineMaxDistance);
+            brakeSkidSource = GetOrCreateSource("Brake Skid", true, isPlayer ? 0.25f : 1f, engineMinDistance, engineMaxDistance);
             windSource = GetOrCreateSource("Wind Rush", true, isPlayer ? 0.35f : 1f, engineMinDistance, engineMaxDistance);
             collisionSource = GetOrCreateSource("Collision Audio", false, spatial, engineMinDistance, collisionMaxDistance);
         }
 
         private AudioSource GetOrCreateSource(string sourceName, bool loop, float spatialBlend, float minDistance, float maxDistance)
         {
-            AudioSource source = null;
-            AudioSource[] existing = GetComponents<AudioSource>();
-            for (int i = 0; i < existing.Length; i++)
-                if (existing[i] != null && existing[i].name == sourceName) { source = existing[i]; break; }
-            if (source == null) source = gameObject.AddComponent<AudioSource>();
-            source.name = sourceName; source.loop = loop; source.playOnAwake = false;
-            source.spatialBlend = spatialBlend; source.minDistance = minDistance; source.maxDistance = maxDistance;
-            source.rolloffMode = AudioRolloffMode.Logarithmic; source.dopplerLevel = 0f; source.spatialize = spatialBlend > 0.8f;
+            Transform child = transform.Find(sourceName);
+            GameObject go;
+            if (child != null)
+            {
+                go = child.gameObject;
+            }
+            else
+            {
+                go = new GameObject(sourceName);
+                go.transform.SetParent(transform, false);
+            }
+            AudioSource source = go.GetComponent<AudioSource>();
+            if (source == null) source = go.AddComponent<AudioSource>();
+            source.loop = loop;
+            source.playOnAwake = false;
+            source.spatialBlend = spatialBlend;
+            source.minDistance = minDistance;
+            source.maxDistance = maxDistance;
+            source.rolloffMode = AudioRolloffMode.Logarithmic;
+            source.dopplerLevel = 0f;
+            source.spatialize = spatialBlend > 0.8f;
             return source;
         }
 
@@ -646,25 +937,73 @@ namespace PoseKart.Vehicle
 
         private float GetSpeedKmh()
         {
+            if (car != null)
+            {
+                return Mathf.Abs(car.ForwardSpeed) * 3.6f;
+            }
             if (body != null)
             {
                 Vector3 velocity = body.linearVelocity;
                 velocity.y = 0f;
                 return velocity.magnitude * 3.6f;
             }
-            return car == null ? 0f : Mathf.Abs(car.ForwardSpeed) * 3.6f;
+            return 0f;
+        }
+
+        private float GetSignedSpeedKmh()
+        {
+            if (car != null)
+            {
+                return car.ForwardSpeed * 3.6f;
+            }
+            if (body != null)
+            {
+                Vector3 planarVelocity = Vector3.ProjectOnPlane(body.linearVelocity, Vector3.up);
+                Vector3 planarForward = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+                if (planarForward.sqrMagnitude > 0.0001f)
+                {
+                    return Vector3.Dot(planarVelocity, planarForward.normalized) * 3.6f;
+                }
+            }
+
+            return 0f;
+        }
+
+        private int ResolveMovementDirection(float currentSignedSpeedKmh)
+        {
+            float deadZone = Mathf.Max(0f, directionChangeDeadZoneKmh);
+            if (movementDirection > 0)
+            {
+                if (currentSignedSpeedKmh < -deadZone) return -1;
+                if (currentSignedSpeedKmh <= deadZone) return 0;
+                return 1;
+            }
+
+            if (movementDirection < 0)
+            {
+                if (currentSignedSpeedKmh > deadZone) return 1;
+                if (currentSignedSpeedKmh >= -deadZone) return 0;
+                return -1;
+            }
+
+            if (currentSignedSpeedKmh > deadZone) return 1;
+            if (currentSignedSpeedKmh < -deadZone) return -1;
+            return 0;
         }
 
         private void OnGUI()
         {
             if (!debugOverlayEnabled || !isPlayer) return;
-            GUI.Box(new Rect(16f, 16f, 360f, 275f),
+            GUI.Box(new Rect(16f, 16f, 360f, 320f),
                 $"POSEKART AUDIO\nMode: {activeAudioMode}\n"
+                + $"Race: {currentRaceState}  Countdown: {countdownActive}  Started: {raceStarted}\n"
                 + $"Speed Rigidbody: {actualSpeedKmh:0.0} km/h\nHUD speed: {hudSpeedKmh:0.0} km/h\n"
+                + $"Signed speed: {signedSpeedKmh:0.0} km/h  Direction: {movementDirectionLabel}\n"
                 + $"Throttle: {throttle:0.00}   Nitro: {nitroActive}\n"
                 + $"Target RPM: {targetAudioRpm:0}\nSmoothed RPM: {currentRpm:0}\n"
                 + $"Samples: {lowerActiveSampleRpm}/{upperActiveSampleRpm}  Blend: {sampleBlend:0.00}\n"
                 + $"Engine sources audible: {engineSourcesPlaying}\n"
+                + $"RPM lock active: {rpmLockActive}\n"
                 + $"Transitions: {sampleTransitionEvents}\n"
                 + $"RPM Play/Stop: {rpmPlayCalls}/{rpmStopCalls}\n"
                 + $"Legacy engine active: {legacyEngineAudioActive}\n"
@@ -695,7 +1034,7 @@ namespace PoseKart.Vehicle
         private void OnDisable()
         {
             StopLoop(idleSource); StopLoop(lowRpmSource); StopLoop(highRpmSource); StopLoop(accelerationSource);
-            StopLoop(nitroLoopSource); StopLoop(skidSource); StopLoop(windSource);
+            StopLoop(nitroLoopSource); StopLoop(skidSource); StopLoop(brakeSkidSource); StopLoop(windSource);
         }
 
         private static void StopLoop(AudioSource source)
@@ -709,6 +1048,10 @@ namespace PoseKart.Vehicle
             mediumImpactSpeed = Mathf.Max(minImpactSpeed, mediumImpactSpeed);
             heavyImpactSpeed = Mathf.Max(mediumImpactSpeed, heavyImpactSpeed);
             skidFullSlip = Mathf.Max(skidStartSlip + 0.01f, skidFullSlip);
+            minimumSkidSpeedKmh = Mathf.Max(0f, minimumSkidSpeedKmh);
+            brakeSlipThreshold = Mathf.Max(0f, brakeSlipThreshold);
+            brakeDecelerationThreshold = Mathf.Max(0f, brakeDecelerationThreshold);
+            brakeInputThreshold = Mathf.Clamp01(brakeInputThreshold);
             minimumSampleRpm = Mathf.Max(1, minimumSampleRpm);
             maximumSampleRpm = Mathf.Max(minimumSampleRpm, maximumSampleRpm);
             rpmStep = Mathf.Max(1, rpmStep);

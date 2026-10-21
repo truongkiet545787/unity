@@ -8,8 +8,19 @@ namespace PoseKart.UI
         public const string VehiclePreferenceKey="PoseKart.SelectedVehicle";
         public const string ColorPreferenceKey="PoseKart.SelectedColor";
         public static readonly string[] VehicleNames={"Rally","Sport","Buggy"};
-        public static readonly string[] ColorNames={"Coral","Azure","Sunshine"};
-        private static readonly Color[] Colors={new Color(1,.22f,.12f),new Color(.18f,.58f,1),new Color(1,.84f,.14f)};
+        // The first three names remain unchanged for saved PlayerPrefs and for
+        // existing UI text. The extra arcade colors are intentionally high
+        // contrast so they stay readable against the island environment.
+        public static readonly string[] ColorNames={"Coral","Azure","Sunshine","Midnight","Emerald","Violet"};
+        private static readonly Color[] Colors=
+        {
+            new Color(1f,.22f,.12f),
+            new Color(.18f,.58f,1f),
+            new Color(1f,.84f,.14f),
+            new Color(.035f,.08f,.18f),
+            new Color(.08f,.86f,.42f),
+            new Color(.62f,.22f,.95f)
+        };
         [SerializeField] private GameObject[] vehicleModels;
         [SerializeField] private bool useSavedSelection=true;
         private int vehicleIndex,colorIndex;

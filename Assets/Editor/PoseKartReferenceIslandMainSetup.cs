@@ -16,6 +16,7 @@ namespace PoseKart.Editor
     public static partial class PoseKartFinalIslandSetup
     {
         private const string ReferenceMainScene="Assets/Scenes/PoseKart_ReferenceIsland.unity";
+        private const string NitroModelPath="Assets/PoseKart/Asset Them Tu Be Ngoai/nitro-pickups/source/nitro.fbx";
         private static readonly string[] GameplayRoots={"Racers","Race","UI","Main Camera","PoseKart_Minimap"};
 
         [MenuItem("PoseKart/Reference/Use As Main Race Scene")]
@@ -43,6 +44,7 @@ namespace PoseKart.Editor
             SceneManager.SetActiveScene(reference);
             ConfigureReferenceRace();
             BuildReferenceSafetyAndItems();
+            BuildReferenceNitroPickups();
             PoseKartReferenceRoadRepair.Repair(GameObject.Find("ReferenceIsland_ART_ONLY").transform);
             BuildReferenceBoostPads();
             InstallPlayerSelection();
@@ -52,6 +54,28 @@ namespace PoseKart.Editor
             RegisterScene(ReferenceMainScene);
             BuildVehicleSelectScene();
             Debug.Log("PoseKart: Reference Island is now the main race scene with vehicle type and color selection.");
+        }
+
+        [MenuItem("PoseKart/Reference/Add Nitro Pickups To Current Scene")]
+        public static void AddNitroPickupsToCurrentScene()
+        {
+            if(EditorApplication.isPlaying||EditorApplication.isPlayingOrWillChangePlaymode||EditorApplication.isCompiling)
+            {
+                Debug.LogWarning("PoseKart: Nitro pickup placement waits until Unity returns to Edit Mode.");
+                return;
+            }
+
+            Scene active=SceneManager.GetActiveScene();
+            if(!active.IsValid()||active.name!="PoseKart_ReferenceIsland")
+            {
+                EditorUtility.DisplayDialog("PoseKart Nitro Pickups", "Open PoseKart_ReferenceIsland first, then run this command again.", "OK");
+                return;
+            }
+
+            BuildReferenceNitroPickups();
+            EditorSceneManager.MarkSceneDirty(active);
+            if(EditorSceneManager.SaveScene(active))
+                Debug.Log("PoseKart: Nitro pickups were placed on the Reference Island racing line.");
         }
 
         private static void ConfigureReferenceRace()
@@ -142,6 +166,43 @@ namespace PoseKart.Editor
                 serialized.FindProperty("acceleration").floatValue=20f;
                 serialized.FindProperty("coastingResistance").floatValue=.45f;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
+            }
+        }
+
+        private static void BuildReferenceNitroPickups()
+        {
+            GameObject old=GameObject.Find("Track Nitro Pickups");
+            if(old!=null)
+                UnityEngine.Object.DestroyImmediate(old);
+
+            GameObject model=AssetDatabase.LoadAssetAtPath<GameObject>(NitroModelPath);
+            if(model==null)
+            {
+                Debug.LogWarning("PoseKart: Could not find the Nitro model at "+NitroModelPath+". Nitro pickup gameplay was not placed.");
+                return;
+            }
+
+            Vector3[] path=ReferenceRoute();
+            Transform root=new GameObject("Track Nitro Pickups").transform;
+            int pickupIndex=0;
+            for(int i=36;i<path.Length;i+=42)
+            {
+                int lane=(pickupIndex%3)-1;
+                Vector3 forward=(path[(i+1)%path.Length]-path[i]).normalized;
+                Vector3 flatForward=Vector3.ProjectOnPlane(forward,Vector3.up).normalized;
+                if(flatForward.sqrMagnitude<.001f)flatForward=Vector3.forward;
+                Vector3 right=Vector3.Cross(Vector3.up,flatForward);
+                GameObject pickup=(GameObject)PrefabUtility.InstantiatePrefab(model);
+                pickup.name="Nitro Pickup "+(pickupIndex+1).ToString("00");
+                pickup.transform.SetParent(root,false);
+                pickup.transform.SetPositionAndRotation(path[i]+right*(lane*3.5f)+Vector3.up*1.1f,Quaternion.LookRotation(flatForward));
+                BoxCollider trigger=pickup.AddComponent<BoxCollider>();
+                trigger.isTrigger=true;
+                trigger.size=new Vector3(1.4f,1.8f,1.4f);
+                trigger.center=new Vector3(0f,.9f,0f);
+                PoseKartNitroPickup collectible=pickup.AddComponent<PoseKartNitroPickup>();
+                collectible.Configure(.75f,6f);
+                pickupIndex++;
             }
         }
 

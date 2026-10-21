@@ -7,6 +7,15 @@ namespace PoseKart.Race
     {
         private Mesh mesh;
         private Material material;
+
+        public static KartMissileModel Attach(GameObject target)
+        {
+            if (target == null) return null;
+            var model = target.GetComponent<KartMissileModel>();
+            if (model == null) model = target.AddComponent<KartMissileModel>();
+            return model;
+        }
+
         private void Awake()
         {
             var vertices=new List<Vector3>();var triangles=new List<int>();var colors=new List<Color>();

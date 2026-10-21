@@ -15,7 +15,7 @@ namespace PoseKart.Editor
 {
     public static class PoseKartMilestone3Setup
     {
-        private const string ScenePath = "Assets/Scenes/Milestone3_TrackGraybox.unity";
+        private const string ScenePath = "Assets/Scenes/Milestones_Archive/Milestone3_TrackGraybox.unity";
         private const int TotalLaps = 3;
 
         // Clockwise center line derived from the authoritative exact-track schematic.
@@ -446,7 +446,7 @@ namespace PoseKart.Editor
             Text time = CreateHudText(hudObject.transform, "Time", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -20f), new Vector2(360f, 90f), 28, TextAnchor.UpperCenter);
             Text countdown = CreateHudText(hudObject.transform, "Countdown", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(500f, 180f), 72, TextAnchor.MiddleCenter);
             Text status = CreateHudText(hudObject.transform, "RaceStatus", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-25f, -20f), new Vector2(300f, 90f), 28, TextAnchor.UpperRight);
-            raceHud.Configure(raceManager, position, lap, time, countdown, status);
+            
             return uiRoot;
         }
 

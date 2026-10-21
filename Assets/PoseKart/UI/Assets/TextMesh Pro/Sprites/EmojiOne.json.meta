@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 8fa71962a7901e7408b770bf9c9fdbd2
+timeCreated: 1480316860
+licenseType: Store
+TextScriptImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 231178
+  packageName: Dragon Crashers - UI Toolkit Sample project
+  packageVersion: 1.692
+  assetPath: Assets/TextMesh Pro/Sprites/EmojiOne.json
+  uploadId: 714966

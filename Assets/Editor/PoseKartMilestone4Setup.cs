@@ -14,8 +14,8 @@ namespace PoseKart.Editor
 {
     public static class PoseKartMilestone4Setup
     {
-        private const string SourceScenePath = "Assets/Scenes/Milestone3_TrackGraybox.unity";
-        private const string ScenePath = "Assets/Scenes/Milestone4_AIRace.unity";
+        private const string SourceScenePath = "Assets/Scenes/Milestones_Archive/Milestone3_TrackGraybox.unity";
+        private const string ScenePath = "Assets/Scenes/Milestones_Archive/Milestone4_AIRace.unity";
         private const int TotalLaps = 3;
 
         // Matches the frozen Milestone 3 graybox center line.

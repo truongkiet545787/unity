@@ -15,8 +15,8 @@ namespace PoseKart.Editor
 {
     public static class PoseKartMilestone5Setup
     {
-        private const string SourceScenePath = "Assets/Scenes/Milestone4_AIRace.unity";
-        private const string ScenePath = "Assets/Scenes/Milestone5_ArcadeRace.unity";
+        private const string SourceScenePath = "Assets/Scenes/Milestones_Archive/Milestone4_AIRace.unity";
+        private const string ScenePath = "Assets/Scenes/Milestones_Archive/Milestone5_ArcadeRace.unity";
         private const int TotalLaps = 3;
 
         // A substantially larger loop than ML4. The long southern straight also provides
