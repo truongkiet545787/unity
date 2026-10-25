@@ -278,10 +278,7 @@ namespace PoseKart.Race
                 ExpireItem();
                 return;
             }
-
-            var bananaLauncher = GetComponent<PoseKartBananaTripleLauncher>() ?? GetComponentInChildren<PoseKartBananaTripleLauncher>();
-            if (bananaLauncher != null && bananaLauncher.IsFiring)
-                return;
+            
 
             bool player = racer != null && racer.IsPlayer;
             if (player)
@@ -293,12 +290,42 @@ namespace PoseKart.Race
 
                 if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
                 {
+                    if (PoseKartNetworkItemBridge.IsOnlineRace)
+                    {
+                        var bridge = GetComponent<PoseKartNetworkItemBridge>();
+                        if (bridge != null)
+                        {
+                            bridge.RequestUseItem();
+                            return;
+                        }
+                    }
                     UseItem();
                 }
             }
             else
             {
                 var brain = GetComponent<PoseKart.AI.AIRacerBrain>();
+
+                if (PoseKartNetworkItemBridge.IsOnlineRace)
+                {
+                    var networkManager = Unity.Netcode.NetworkManager.Singleton;
+                    var networkObject = GetComponent<Unity.Netcode.NetworkObject>();
+
+                    // Remote human player:
+                    // racer.IsPlayer == false trên máy không sở hữu nó,
+                    // nhưng tuyệt đối không được coi nó là AI để auto-use item.
+                    if (networkObject != null && networkObject.IsPlayerObject)
+                        return;
+
+                    // AI online chỉ Server/Host được quyền quyết định dùng item.
+                    if (networkManager != null &&
+                        networkManager.IsListening &&
+                        !networkManager.IsServer)
+                    {
+                        return;
+                    }
+                }
+
                 if (brain == null || !brain.enabled)
                 {
                     if (Time.time >= aiUseTime)
@@ -315,36 +342,82 @@ namespace PoseKart.Race
         }
         public void UseItem()
         {
-            if (!hasItem || car == null || !car.ControlEnabled) return;
+            if (!hasItem || car == null || !car.ControlEnabled)
+                return;
+
+            // =========================================================
+            // ONLINE
+            // Human player luôn phải đi qua NetworkItemBridge.
+            // AI chỉ được phép Activate trực tiếp trên Server.
+            // =========================================================
+            if (PoseKartNetworkItemBridge.IsOnlineRace)
+            {
+                var networkObject = GetComponent<Unity.Netcode.NetworkObject>();
+                var networkManager = Unity.Netcode.NetworkManager.Singleton;
+                var bridge = GetComponent<PoseKartNetworkItemBridge>();
+
+                // Human network player:
+                if (networkObject != null && networkObject.IsPlayerObject)
+                {
+                    // Chỉ local human owner mới gửi request qua ServerRpc
+                    if (networkObject.IsOwner && bridge != null)
+                    {
+                        bridge.RequestUseItem();
+                    }
+                    // Remote human player tuyệt đối không chạy Activate local
+                    return;
+                }
+
+                // Bất kỳ non-server peer nào trong Online Race tuyệt đối không được chạy Activate local
+                if (networkManager != null &&
+                    networkManager.IsListening &&
+                    !networkManager.IsServer)
+                {
+                    return;
+                }
+            }
+
+            // =========================================================
+            // OFFLINE hoặc AI trên SERVER
+            // =========================================================
             if (!KartItemPickup.Activate(car, held, this))
             {
-                // A missile with no valid target stays in the inventory.
                 if ((held == KartItemPickup.ItemType.HomingMissile ||
-                     held == KartItemPickup.ItemType.InkShot) && racer != null && racer.IsPlayer)
+                     held == KartItemPickup.ItemType.InkShot) &&
+                    racer != null && racer.IsPlayer)
                 {
                     noTargetFeedbackUntil = Time.unscaledTime + 1.5f;
+
                     if (Time.unscaledTime >= nextNoTargetLog)
                     {
                         bool ink = held == KartItemPickup.ItemType.InkShot;
-                        Debug.Log($"[PoseKart {(ink ? "Ink" : "Missile")}] No target in range " +
-                                  $"{(ink ? inkTargetRange : missileTargetRange):0}m / " +
-                                  $"angle {(ink ? inkTargetAngle : missileTargetAngle):0} degrees. Item NOT consumed.", this);
+
+                        Debug.Log(
+                            $"[PoseKart {(ink ? "Ink" : "Missile")}] No target in range " +
+                            $"{(ink ? inkTargetRange : missileTargetRange):0}m / " +
+                            $"angle {(ink ? inkTargetAngle : missileTargetAngle):0} degrees. Item NOT consumed.",
+                            this
+                        );
+
                         nextNoTargetLog = Time.unscaledTime + 2f;
                     }
                 }
+
                 aiUseTime = Time.time + 1f;
                 ItemActivationFailed?.Invoke(held);
                 return;
             }
 
             KartItemPickup.ItemType usedItem = held;
-            if (usedItem == KartItemPickup.ItemType.HomingMissile && itemCharges > 1)
+
+            if (usedItem == KartItemPickup.ItemType.HomingMissile &&
+                itemCharges > 1)
             {
                 itemCharges--;
                 currentItemLabel = $"{usedItem} ({itemCharges})";
-                // AI gets a short gap between shots; the player still controls the
-                // cadence with Space/skill input.
-                aiUseTime = Time.time + UnityEngine.Random.Range(0.35f, 0.8f);
+
+                aiUseTime =
+                    Time.time + UnityEngine.Random.Range(0.35f, 0.8f);
             }
             else
             {
@@ -353,8 +426,33 @@ namespace PoseKart.Race
                 itemTimeRemaining = 0f;
                 currentItemLabel = "Empty";
             }
+
             noTargetFeedbackUntil = 0f;
             ItemUsed?.Invoke(usedItem);
+        }
+
+        public void SyncFromNetworkUse(int remainingCharges, bool stillHasItem, KartItemPickup.ItemType usedItem)
+        {
+            held = usedItem;
+            itemCharges = remainingCharges;
+            hasItem = stillHasItem;
+            if (!hasItem)
+            {
+                itemTimeRemaining = 0f;
+                currentItemLabel = "Empty";
+            }
+            else
+            {
+                currentItemLabel = $"{held} ({itemCharges})";
+            }
+            noTargetFeedbackUntil = 0f;
+            ItemUsed?.Invoke(usedItem);
+        }
+
+        public void NotifyActivationFailedDirect(KartItemPickup.ItemType failedItem)
+        {
+            noTargetFeedbackUntil = Time.unscaledTime + 1.5f;
+            ItemActivationFailed?.Invoke(failedItem);
         }
 
         public void ConsumeHeldCharge()

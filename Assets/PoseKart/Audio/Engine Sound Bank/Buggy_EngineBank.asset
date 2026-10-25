@@ -20,7 +20,7 @@ MonoBehaviour:
     clip: {fileID: 8300000, guid: 88fa039f7542ba842b316d1f0430567f, type: 3}
   - rpm: 1500
     clip: {fileID: 8300000, guid: bf51014d816f9df49a85c94edcffa304, type: 3}
-  - rpm: 2000
+  - rpm: 1914
     clip: {fileID: 8300000, guid: 97cf63f7bd531b94fa5741a3bc48faa7, type: 3}
   - rpm: 2500
     clip: {fileID: 8300000, guid: d08c5fbbf4c0bcf449fec48c9772b7fc, type: 3}

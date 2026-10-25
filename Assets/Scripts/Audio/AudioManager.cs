@@ -116,6 +116,9 @@ namespace PoseKart.Audio
         #region Serialized Fields - UI & Race HUD (Giao diện)
 
         [Header("Countdown Audio")]
+        [SerializeField] private AudioClip countdown3Clip;
+        [SerializeField] private AudioClip countdown2Clip;
+        [SerializeField] private AudioClip countdown1Clip;
         [SerializeField] private AudioClip countdownBeepClip;
         [SerializeField] private AudioClip countdownGoClip;
         [SerializeField, Range(0f, 1f)] private float countdownVolume = 0.85f;
@@ -164,18 +167,26 @@ namespace PoseKart.Audio
         {
             if (_instance != null && _instance != this)
             {
+                // Nếu bản cũ là bản sinh tự động rỗng ruột còn bản này có dữ liệu AudioClip
+                if (_instance.pickupClip == null && this.pickupClip != null)
+                {
+                    Destroy(_instance.gameObject);
+                    _instance = this;
+                    DontDestroyOnLoad(gameObject);
+                    Initialize2DSource();
+                    InitializePool();
+                    EnsureSingleAudioListener();
+                    StartEnvironmentAmbience();
+                    return;
+                }
+
                 Destroy(gameObject);
                 return;
             }
 
             _instance = this;
             DontDestroyOnLoad(gameObject);
-
-            Initialize2DSource();
-            InitializePool();
-            EnsureSingleAudioListener();
-            StartEnvironmentAmbience();
-            ScheduleNextBird();
+            // ...
         }
 
         protected virtual void Start()
@@ -603,7 +614,13 @@ namespace PoseKart.Audio
             AudioManager mgr = Instance;
             if (mgr == null || string.IsNullOrEmpty(display)) return;
 
-            AudioClip clip = display == "GO!" ? mgr.countdownGoClip : mgr.countdownBeepClip;
+            AudioClip clip = null;
+            if (display == "3") clip = mgr.countdown3Clip != null ? mgr.countdown3Clip : mgr.countdownBeepClip;
+            else if (display == "2") clip = mgr.countdown2Clip != null ? mgr.countdown2Clip : mgr.countdownBeepClip;
+            else if (display == "1") clip = mgr.countdown1Clip != null ? mgr.countdown1Clip : mgr.countdownBeepClip;
+            else if (display == "GO!" || display == "0") clip = mgr.countdownGoClip;
+            else clip = mgr.countdownBeepClip;
+
             if (clip != null)
             {
                 mgr.PlaySFX(clip, mgr.countdownVolume);

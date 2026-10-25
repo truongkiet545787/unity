@@ -12,9 +12,12 @@ EditorBuildSettings:
     path: Assets/Scenes/PoseKart_ReferenceIsland.unity
     guid: d24a98cb564ee25468e3f06ef46361a3
   - enabled: 1
+    path: Assets/Scenes/PoseKart_OnlineLobby.unity
+    guid: 1ed22dd874348aa438cb9c5aebace4b5
+  - enabled: 0
     path: Assets/Scenes/PoseKart_FinalIsland.unity
     guid: e3d2d9258dda3ef4e8e686927a082ddc
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/CHAOTIC_POSEKART.unity
     guid: f21a56982b128754c85cb60ae90d2308
   m_configObjects:

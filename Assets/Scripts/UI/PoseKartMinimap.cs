@@ -91,11 +91,15 @@ namespace PoseKart.UI
         [SerializeField] private Color markerOutlineColor = new Color(0.012f, 0.024f, 0.045f, 1f);
         [SerializeField]
         private Color[] aiColors =
-        {
-            new Color(1f, 0.80f, 0.16f), // Gold AI
-            new Color(1f, 0.30f, 0.35f), // Red/Pink AI
-            new Color(0.37f, 1f, 0.55f)  // Green AI
-        };
+{
+    new Color(1f, 0.80f, 0.16f),  // AI 1 - Gold
+    new Color(1f, 0.30f, 0.35f),  // AI 2 - Red
+    new Color(0.37f, 1f, 0.55f),  // AI 3 - Green
+    new Color(0.35f, 0.65f, 1f),  // AI 4 - Blue
+    new Color(0.85f, 0.35f, 1f),  // AI 5 - Purple
+    new Color(1f, 0.45f, 0.85f),  // AI 6 - Pink
+    new Color(1f, 0.55f, 0.18f)   // AI 7 - Orange
+};
 
         [Header("Map Readability & Stroke Thickness")]
         [SerializeField, Range(0f, 48f)] private float padding = 12f;
@@ -153,7 +157,44 @@ namespace PoseKart.UI
 
             SetVerticesDirty();
         }
+        public void ConfigureRuntimeRacers(
+    RaceParticipant[] participants)
+        {
+            racers =
+                participants == null
+                    ? null
+                    : (RaceParticipant[])participants.Clone();
 
+            // Xóa reference player offline cũ.
+            playerRacer = null;
+            playerCar = null;
+
+            if (racers != null)
+            {
+                Array.Sort(
+                    racers,
+                    (a, b) => string.CompareOrdinal(
+                        a == null ? "" : a.name,
+                        b == null ? "" : b.name
+                    )
+                );
+            }
+
+            // Tìm lại đúng local player
+            // từ IsPlayer của runtime roster.
+            ResolvePlayer();
+
+            isTrackingInitialized = false;
+
+            Debug.Log(
+                $"[Minimap] Runtime racers configured | " +
+                $"Racers={(racers == null ? 0 : racers.Length)} | " +
+                $"Player={(playerRacer != null ? playerRacer.RacerName : "NONE")}",
+                this
+            );
+
+            SetVerticesDirty();
+        }
         private void CalculateStaticBounds()
         {
             minimum = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
@@ -264,14 +305,20 @@ namespace PoseKart.UI
 
         private void AutoPopulateRacersIfEmpty()
         {
-            if (racers != null && racers.Length > 0) return;
-            racers = FindObjectsByType<RaceParticipant>(FindObjectsSortMode.None);
-            if (racers != null)
-            {
-                Array.Sort(racers, (a, b) => string.CompareOrdinal(
-                    a == null ? "" : a.name,
-                    b == null ? "" : b.name));
-            }
+            RaceParticipant[] foundRacers =
+                FindObjectsByType<RaceParticipant>(
+                    FindObjectsSortMode.None);
+
+            if (foundRacers == null || foundRacers.Length == 0)
+                return;
+
+            racers = foundRacers;
+
+            Array.Sort(racers, (a, b) => string.CompareOrdinal(
+                a == null ? "" : a.name,
+                b == null ? "" : b.name));
+
+            ResolvePlayer();
         }
 
         protected override void OnEnable()

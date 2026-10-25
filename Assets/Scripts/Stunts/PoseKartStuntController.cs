@@ -101,8 +101,10 @@ namespace PoseKart.Stunts
         public bool IsStuntActive => state == StuntState.Airborne || state == StuntState.LandingAligning;
         public float TotalRewardEarned => totalRewardEarned;
         public LandingQuality LastLandingQuality => lastLandingQuality;
+        public Transform VisualPivot => visualPivot;
 
         // Internal State
+        private Quaternion neutralRotation = Quaternion.identity;
         private Quaternion baseRotation = Quaternion.identity;
         private Quaternion touchdownRotation = Quaternion.identity;
         private Vector3 previousPosition;
@@ -123,7 +125,8 @@ namespace PoseKart.Stunts
             ResolveReferences();
             if (visualPivot != null)
             {
-                baseRotation = visualPivot.localRotation;
+                neutralRotation = visualPivot.localRotation;
+                baseRotation = neutralRotation;
             }
             previousPosition = transform.position;
         }
@@ -174,7 +177,7 @@ namespace PoseKart.Stunts
             previousPosition = transform.position;
             if (visualPivot != null && state == StuntState.Grounded)
             {
-                baseRotation = visualPivot.localRotation;
+                baseRotation = neutralRotation;
             }
         }
 
@@ -364,7 +367,7 @@ namespace PoseKart.Stunts
 
             if (visualPivot != null)
             {
-                baseRotation = visualPivot.localRotation;
+                baseRotation = neutralRotation;
             }
 
             Vector3 planarVel = Vector3.ProjectOnPlane(body.linearVelocity, Vector3.up);
@@ -613,14 +616,14 @@ namespace PoseKart.Stunts
 
             if (visualPivot != null)
             {
-                visualPivot.localRotation = Quaternion.Slerp(touchdownRotation, baseRotation, smoothT);
+                visualPivot.localRotation = Quaternion.Slerp(touchdownRotation, neutralRotation, smoothT);
             }
 
             if (t >= 1f)
             {
                 if (visualPivot != null)
                 {
-                    visualPivot.localRotation = baseRotation;
+                    visualPivot.localRotation = neutralRotation;
                 }
                 state = StuntState.Grounded;
                 activeStunt = StuntType.None;
@@ -645,7 +648,7 @@ namespace PoseKart.Stunts
             SetWindTrailsActive(false);
             if (visualPivot != null)
             {
-                visualPivot.localRotation = baseRotation;
+                visualPivot.localRotation = neutralRotation;
             }
             state = StuntState.Grounded;
             activeStunt = StuntType.None;

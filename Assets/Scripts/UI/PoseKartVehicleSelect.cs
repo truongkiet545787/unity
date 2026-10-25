@@ -1,5 +1,6 @@
 
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
@@ -7,6 +8,7 @@ namespace PoseKart.UI
 {
     public sealed class PoseKartVehicleSelect : MonoBehaviour
     {
+
         private const string RaceScene = "PoseKart_ReferenceIsland";
 
         [Header("Preview")]
@@ -119,6 +121,16 @@ namespace PoseKart.UI
             }
 
             Refresh();
+
+            // Khi vào màn chọn xe bằng tay cầm,
+            // tự focus vào nút đổi xe bên phải.
+            if (EventSystem.current != null &&
+                EventSystem.current.currentSelectedGameObject == null)
+            {
+                EventSystem.current.SetSelectedGameObject(
+                    nextVehicle.gameObject
+                );
+            }
         }
 
         private void PreviousVehicle()

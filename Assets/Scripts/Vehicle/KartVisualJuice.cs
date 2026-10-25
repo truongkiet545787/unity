@@ -26,6 +26,7 @@ namespace PoseKart.Vehicle
         [Header("Vehicle References")]
         [SerializeField] private CarController car;
         [SerializeField] private Rigidbody body;
+        [SerializeField] private PoseKart.Stunts.PoseKartStuntController stuntController;
 
         [Header("Model Parts")]
         [Tooltip("Main visual chassis/model to tilt, hop and shake. Auto-resolved if null.")]
@@ -122,6 +123,7 @@ namespace PoseKart.Vehicle
             if (car == null) car = GetComponent<CarController>();
             if (body == null) body = GetComponent<Rigidbody>();
             if (body == null && car != null) body = car.TargetBody;
+            if (stuntController == null) stuntController = GetComponent<PoseKart.Stunts.PoseKartStuntController>();
 
             ResolveModelParts();
             CacheBaseRotations();
@@ -348,12 +350,18 @@ namespace PoseKart.Vehicle
             float steerInput = car.SteeringInput;
             float forwardSpeed = car.ForwardSpeed;
             bool isGrounded = car.IsGrounded;
+            bool stuntActive = stuntController != null && stuntController.IsStuntActive;
 
             // Robust drift detection: matches CarController drift state OR responsive player drift input
-            bool isDrifting = car.IsDrifting || (isGrounded && forwardSpeed > 2.5f && IsDriftInputHeld() && Mathf.Abs(steerInput) > 0.1f);
+            bool isDrifting = !stuntActive && (car.IsDrifting || (isGrounded && forwardSpeed > 2.5f && IsDriftInputHeld() && Mathf.Abs(steerInput) > 0.1f));
 
             // Handle Drift State Transitions
-            if (isDrifting && !wasDrifting && isGrounded)
+            if (stuntActive && wasDrifting)
+            {
+                // Airborne stunt started while drifting: cancel drift juice cleanly so it doesn't fight stunt rotation
+                ResetDriftJuiceImmediate();
+            }
+            else if (isDrifting && !wasDrifting && isGrounded)
             {
                 StartDriftHop(steerInput);
             }
@@ -370,7 +378,7 @@ namespace PoseKart.Vehicle
 
             // Model & Wheel Animations
             UpdateWheelAnimations(steerInput, forwardSpeed);
-            UpdateKartModelLean(isDrifting, steerInput);
+            UpdateKartModelLean(isDrifting, steerInput, stuntActive);
 
             wasDrifting = isDrifting;
         }
@@ -638,13 +646,43 @@ namespace PoseKart.Vehicle
             }
         }
 
-        private void UpdateKartModelLean(bool isDrifting, float steerInput)
+        private void ResetDriftJuiceImmediate()
+        {
+            if (kartModel != null)
+            {
+                kartModel.DOKill();
+                kartModel.localRotation = baseModelRotation;
+            }
+
+            for (int i = 0; i < primaryParticles.Count; i++)
+            {
+                ParticleSystem ps = primaryParticles[i];
+                if (ps == null) continue;
+                var emission = ps.emission;
+                emission.enabled = false;
+                ps.Stop(false, ParticleSystemStopBehavior.StopEmitting);
+            }
+
+            driftPower = 0f;
+            currentDriftTier = 0;
+            tier1Reached = false;
+            tier2Reached = false;
+            tier3Reached = false;
+        }
+
+        private void UpdateKartModelLean(bool isDrifting, float steerInput, bool stuntActive)
         {
             if (kartModel == null) return;
 
             Quaternion targetRotation;
 
-            if (!isDrifting)
+            if (stuntActive)
+            {
+                // When an airborne stunt (Flat Spin, Barrel Roll) is active, keep the inner chassis aligned
+                // strictly neutral to baseModelRotation so the parent StuntPivot handles 100% of the stunt rotation cleanly.
+                targetRotation = baseModelRotation;
+            }
+            else if (!isDrifting)
             {
                 // Normal driving: gentle lean into corners
                 float targetRoll = -steerInput * normalSteerLeanAngle;

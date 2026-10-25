@@ -101,8 +101,22 @@ namespace PoseKart.Vehicle
         [SerializeField] private AudioClip perfectNitroClip;
         [Tooltip("Played when Shockwave / Triple Nitro activates (Purple / Magenta)")]
         [SerializeField] private AudioClip shockwaveNitroClip;
-        [SerializeField, Range(0f, 1f)] private float nitroVolume = 0.8f;
-        [SerializeField, Range(0f, 1f)] private float nitroEngineBoost = 0.22f;
+        [Header("AI Nitro Mix")]
+        [Tooltip("AI Nitro nhỏ hơn Player để nhiều xe boost cùng lúc không quá ồn.")]
+        [SerializeField, Range(0f, 1f)]
+        private float nitroVolume = 0.8f;
+
+        [SerializeField, Range(0f, 1f)]
+        private float nitroEngineBoost = 0.22f;
+
+        [SerializeField, Range(0f, 1f)]
+        private float aiNitroVolumeMultiplier = 0.22f;
+
+        [SerializeField, Min(0.1f)]
+        private float aiNitroMinDistance = 2.5f;
+
+        [SerializeField, Min(1f)]
+        private float aiNitroMaxDistance = 28f;
 
         [Header("Tire / Drift Audio")]
         [InspectorName("Tire Skid Clip")]
@@ -228,8 +242,15 @@ namespace PoseKart.Vehicle
             {
                 if (controller.GetComponent<PoseKartVehicleAudio>() == null)
                 {
-                    PoseKartVehicleAudio audio = controller.gameObject.AddComponent<PoseKartVehicleAudio>();
-                    audio.isPlayer = IsPlayerName(controller.name);
+                    PoseKartVehicleAudio audio =
+    controller.gameObject.AddComponent<PoseKartVehicleAudio>();
+
+                    RaceParticipant participant =
+                        controller.GetComponent<RaceParticipant>();
+
+                    audio.isPlayer = participant != null
+                        ? participant.IsPlayer
+                        : IsPlayerName(controller.name);
                 }
             }
         }
@@ -238,18 +259,49 @@ namespace PoseKart.Vehicle
         {
             car = GetComponent<CarController>();
             body = GetComponent<Rigidbody>();
-            isPlayer |= car != null && IsPlayerName(car.name);
-            if (style == VehicleAudioStyle.Auto) style = isPlayer ? VehicleAudioStyle.PlayerRally : VehicleAudioStyle.AI;
-            inputProvider = car == null ? null : car.InputProviderSource as ICarInputProvider;
+
+            RaceParticipant participant = GetComponent<RaceParticipant>();
+
+            if (participant != null)
+            {
+                isPlayer = participant.IsPlayer;
+            }
+            else
+            {
+                isPlayer |= car != null && IsPlayerName(car.name);
+            }
+
+            if (style == VehicleAudioStyle.Auto)
+            {
+                style = isPlayer
+                    ? VehicleAudioStyle.PlayerRally
+                    : VehicleAudioStyle.AI;
+            }
+
+            inputProvider = car == null
+                ? null
+                : car.InputProviderSource as ICarInputProvider;
+
             wheels = GetComponentsInChildren<WheelCollider>(true);
+
             raceManager = FindFirstObjectByType<RaceManager>();
             raceManagerLookupAttempted = true;
+
             ConfigureSources();
-            if (speedSmoothingTime > 0.08f) speedSmoothingTime = 0.05f;
-            if (rpmRiseSmoothingTime > 0.16f) rpmRiseSmoothingTime = 0.12f;
-            if (rpmFallSmoothingTime > 0.25f) rpmFallSmoothingTime = 0.20f;
+
+            if (speedSmoothingTime > 0.08f)
+                speedSmoothingTime = 0.05f;
+
+            if (rpmRiseSmoothingTime > 0.16f)
+                rpmRiseSmoothingTime = 0.12f;
+
+            if (rpmFallSmoothingTime > 0.25f)
+                rpmFallSmoothingTime = 0.20f;
+
             wasBoosting = car != null && car.IsNitroBoosting;
+
             GetAudioRpmRange(out float minimumRpm, out _);
+
             currentRpm = minimumRpm;
             targetAudioRpm = minimumRpm;
         }
@@ -717,38 +769,73 @@ namespace PoseKart.Vehicle
 
         private void UpdateNitro(bool boost, float dt)
         {
-            if (nitroLoopSource == null) return;
+            if (nitroLoopSource == null)
+                return;
+
             bool shouldPlay = boost && nitroLoopClip != null;
+
+            float targetVolume = isPlayer
+                ? nitroVolume
+                : nitroVolume * aiNitroVolumeMultiplier;
+
             if (shouldPlay)
             {
                 nitroLoopSource.mute = false;
                 nitroLoopSource.enabled = true;
+
                 if (nitroLoopSource.clip != nitroLoopClip)
                 {
-                    // Nitro owns this source. Do not inherit a stale clip, and
-                    // never replace an audible loop without fading it first.
                     if (nitroLoopSource.isPlaying)
                     {
-                        nitroLoopSource.volume = Mathf.MoveTowards(nitroLoopSource.volume, 0f, dt * 8f);
-                        if (nitroLoopSource.volume > 0.001f) return;
+                        nitroLoopSource.volume =
+                            Mathf.MoveTowards(
+                                nitroLoopSource.volume,
+                                0f,
+                                dt * 8f
+                            );
+
+                        if (nitroLoopSource.volume > 0.001f)
+                            return;
+
                         nitroLoopSource.Stop();
                         nitroStopCalls++;
                     }
+
                     nitroLoopSource.clip = nitroLoopClip;
                     nitroLoopSource.volume = 0f;
                 }
+
                 if (!nitroLoopSource.isPlaying)
                 {
                     nitroLoopSource.Play();
                     nitroPlayCalls++;
                 }
-                nitroLoopSource.volume = Mathf.MoveTowards(nitroLoopSource.volume, nitroVolume, dt * 5f);
-                nitroLoopSource.pitch = Mathf.Lerp(0.92f, 1.12f, rpmNormalized);
+
+                nitroLoopSource.volume =
+                    Mathf.MoveTowards(
+                        nitroLoopSource.volume,
+                        targetVolume,
+                        dt * 5f
+                    );
+
+                nitroLoopSource.pitch =
+                    Mathf.Lerp(
+                        0.92f,
+                        1.12f,
+                        rpmNormalized
+                    );
             }
             else
             {
-                nitroLoopSource.volume = Mathf.MoveTowards(nitroLoopSource.volume, 0f, dt * 7f);
-                if (nitroLoopSource.volume <= 0.001f && nitroLoopSource.isPlaying)
+                nitroLoopSource.volume =
+                    Mathf.MoveTowards(
+                        nitroLoopSource.volume,
+                        0f,
+                        dt * 7f
+                    );
+
+                if (nitroLoopSource.volume <= 0.001f &&
+                    nitroLoopSource.isPlaying)
                 {
                     nitroLoopSource.Stop();
                     nitroStopCalls++;
@@ -885,19 +972,106 @@ namespace PoseKart.Vehicle
 
         private void ConfigureSources()
         {
-            float spatial = isPlayer ? playerSpatialBlend : aiSpatialBlend;
-            idleSource = GetOrCreateSource("Engine Idle", true, spatial, engineMinDistance, engineMaxDistance);
-            lowRpmSource = GetOrCreateSource("Engine Low RPM", true, spatial, engineMinDistance, engineMaxDistance);
-            highRpmSource = GetOrCreateSource("Engine High RPM", true, spatial, engineMinDistance, engineMaxDistance);
-            accelerationSource = GetOrCreateSource("Engine Acceleration", true, spatial, engineMinDistance, engineMaxDistance);
-            nitroLoopSource = GetOrCreateSource("Nitro Loop", true, spatial, engineMinDistance, engineMaxDistance);
+            float spatial = isPlayer
+                ? playerSpatialBlend
+                : aiSpatialBlend;
+
+            idleSource = GetOrCreateSource(
+                "Engine Idle",
+                true,
+                spatial,
+                engineMinDistance,
+                engineMaxDistance
+            );
+
+            lowRpmSource = GetOrCreateSource(
+                "Engine Low RPM",
+                true,
+                spatial,
+                engineMinDistance,
+                engineMaxDistance
+            );
+
+            highRpmSource = GetOrCreateSource(
+                "Engine High RPM",
+                true,
+                spatial,
+                engineMinDistance,
+                engineMaxDistance
+            );
+
+            accelerationSource = GetOrCreateSource(
+                "Engine Acceleration",
+                true,
+                spatial,
+                engineMinDistance,
+                engineMaxDistance
+            );
+
+            // Nitro Player giữ nguyên.
+            // Nitro AI nhỏ hơn + 3D + phạm vi nghe ngắn hơn.
+            float nitroSpatial = isPlayer
+                ? playerSpatialBlend
+                : 1f;
+
+            float nitroMinDistance = isPlayer
+                ? engineMinDistance
+                : aiNitroMinDistance;
+
+            float nitroMaxDistance = isPlayer
+                ? engineMaxDistance
+                : aiNitroMaxDistance;
+
+            nitroLoopSource = GetOrCreateSource(
+                "Nitro Loop",
+                true,
+                nitroSpatial,
+                nitroMinDistance,
+                nitroMaxDistance
+            );
+
             nitroLoopSource.mute = false;
             nitroLoopSource.volume = 0f;
-            effectsSource = GetOrCreateSource("Vehicle Effects", false, spatial, engineMinDistance, engineMaxDistance);
-            skidSource = GetOrCreateSource("Tire Skid", true, isPlayer ? 0.25f : 1f, engineMinDistance, engineMaxDistance);
-            brakeSkidSource = GetOrCreateSource("Brake Skid", true, isPlayer ? 0.25f : 1f, engineMinDistance, engineMaxDistance);
-            windSource = GetOrCreateSource("Wind Rush", true, isPlayer ? 0.35f : 1f, engineMinDistance, engineMaxDistance);
-            collisionSource = GetOrCreateSource("Collision Audio", false, spatial, engineMinDistance, collisionMaxDistance);
+
+            effectsSource = GetOrCreateSource(
+                "Vehicle Effects",
+                false,
+                nitroSpatial,
+                nitroMinDistance,
+                nitroMaxDistance
+            );
+
+            skidSource = GetOrCreateSource(
+                "Tire Skid",
+                true,
+                isPlayer ? 0.25f : 1f,
+                engineMinDistance,
+                engineMaxDistance
+            );
+
+            brakeSkidSource = GetOrCreateSource(
+                "Brake Skid",
+                true,
+                isPlayer ? 0.25f : 1f,
+                engineMinDistance,
+                engineMaxDistance
+            );
+
+            windSource = GetOrCreateSource(
+                "Wind Rush",
+                true,
+                isPlayer ? 0.35f : 1f,
+                engineMinDistance,
+                engineMaxDistance
+            );
+
+            collisionSource = GetOrCreateSource(
+                "Collision Audio",
+                false,
+                spatial,
+                engineMinDistance,
+                collisionMaxDistance
+            );
         }
 
         private AudioSource GetOrCreateSource(string sourceName, bool loop, float spatialBlend, float minDistance, float maxDistance)
@@ -926,11 +1100,31 @@ namespace PoseKart.Vehicle
             return source;
         }
 
-        private void PlayOneShot(AudioSource source, AudioClip clip, float volume, float minimumPitch, float maximumPitch)
+        private void PlayOneShot(
+    AudioSource source,
+    AudioClip clip,
+    float volume,
+    float minimumPitch,
+    float maximumPitch)
         {
-            if (source == null || clip == null) return;
-            source.pitch = Random.Range(minimumPitch, maximumPitch);
-            source.PlayOneShot(clip, Mathf.Clamp01(volume));
+            if (source == null || clip == null)
+                return;
+
+            source.pitch =
+                Random.Range(
+                    minimumPitch,
+                    maximumPitch
+                );
+
+            if (!isPlayer && source == effectsSource)
+            {
+                volume *= aiNitroVolumeMultiplier;
+            }
+
+            source.PlayOneShot(
+                clip,
+                Mathf.Clamp01(volume)
+            );
         }
 
         private AudioClip GetIdleClip() { return engineIdleClip != null ? engineIdleClip : engineLoop; }

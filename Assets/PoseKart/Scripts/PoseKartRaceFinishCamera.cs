@@ -25,7 +25,7 @@ public sealed class PoseKartRaceFinishCamera : MonoBehaviour
     [SerializeField] private Transform finishLine;
     [Tooltip("Optional: the existing RaceHUD Canvas GameObject. Auto-detected if None.")]
     [SerializeField] private GameObject raceHudRoot;
-    [SerializeField] private bool hideRaceHudDuringFinish = true;
+    [SerializeField] private bool hideRaceHudDuringFinish = false;
     [Tooltip("Optional extra HUD Canvas roots to hide (e.g. a separate arcade speedometer Canvas). Do not assign RaceManager or Main Camera.")]
     [SerializeField] private GameObject[] additionalHudRootsToHide;
 
@@ -68,7 +68,10 @@ public sealed class PoseKartRaceFinishCamera : MonoBehaviour
 
     public bool IsPlaying => cinematicPlaying;
     public bool ResultsVisible => resultsVisible;
-
+    public void SetPlayerCar(Rigidbody newPlayer)
+    {
+        playerCar = newPlayer;
+    }
     private void Awake()
     {
         sceneCamera = GetComponent<UnityEngine.Camera>();
@@ -174,85 +177,112 @@ public sealed class PoseKartRaceFinishCamera : MonoBehaviour
             yield break;
 
         ResolveReferences();
+
         cinematicPlaying = true;
-        completed = true; // Prevent a second finish trigger while the first coroutine runs.
+        completed = true;
         resultsVisible = false;
-        BuildOverlayIfNeeded();
-        PopulateResults();
-        finishGroup.alpha = 0f;
-        resultsGroup.alpha = 0f;
-        overlayRoot.SetActive(true);
 
-        if (hideRaceHudDuringFinish && raceHudRoot != null && raceHudRoot != overlayRoot)
-        {
-            hudWasActive = raceHudRoot.activeSelf;
-            hudWasHidden = hudWasActive;
-            if (hudWasHidden)
-                raceHudRoot.SetActive(false);
-        }
-        if (additionalHudRootsToHide != null)
-        {
-            additionalHudWasActive = new bool[additionalHudRootsToHide.Length];
-            for (int i = 0; i < additionalHudRootsToHide.Length; i++)
-            {
-                GameObject extra = additionalHudRootsToHide[i];
-                if (extra == null || extra == raceHudRoot || extra == overlayRoot)
-                    continue;
-                additionalHudWasActive[i] = extra.activeSelf;
-                if (additionalHudWasActive[i])
-                    extra.SetActive(false);
-            }
-        }
+        // KHÔNG tạo PoseKart Finish Overlay nữa.
+        // UI kết quả do PoseKartRaceFinishUI của mình quản lý.
 
-        if (sceneCamera == null || playerCar == null || chaseCamera == null)
+        if (sceneCamera == null ||
+            playerCar == null ||
+            chaseCamera == null)
         {
-            Debug.LogWarning("[PoseKartRaceFinishCamera] Missing Camera, Player Car, or Chase Camera. Showing results without cinematic.", this);
-            finishGroup.alpha = 0f;
-            resultsGroup.alpha = 1f;
-            resultsVisible = true;
+            Debug.LogWarning(
+                "[PoseKartRaceFinishCamera] Missing Camera, Player Car, or Chase Camera.",
+                this
+            );
+
             cinematicPlaying = false;
+            resultsVisible = true;
             yield break;
         }
 
-        // Preserve the exact chase-camera pose before disabling it. Its OnDisable
-        // restores its original FOV, so put the captured FOV back immediately.
-        ShotPose startingPose = new ShotPose(transform.position, transform.rotation, sceneCamera.fieldOfView);
+        // Lưu camera hiện tại trước khi takeover.
+        ShotPose startingPose = new ShotPose(
+            transform.position,
+            transform.rotation,
+            sceneCamera.fieldOfView
+        );
+
         chaseWasEnabled = chaseCamera.enabled;
         chaseWasTakenOver = true;
+
         chaseCamera.enabled = false;
+
         sceneCamera.fieldOfView = startingPose.fov;
 
-        crossingPosition = finishLine != null ? finishLine.position : playerCar.position;
-        crossingForward = Vector3.ProjectOnPlane(playerCar.transform.forward, Vector3.up);
+        // Vị trí xe cán finish.
+        crossingPosition = finishLine != null
+            ? finishLine.position
+            : playerCar.position;
+
+        crossingForward = Vector3.ProjectOnPlane(
+            playerCar.transform.forward,
+            Vector3.up
+        );
+
         if (crossingForward.sqrMagnitude < 0.0001f)
             crossingForward = Vector3.forward;
+
         crossingForward.Normalize();
 
-        // Shot 1: smoothly leave chase view for a low camera near the finish line.
-        yield return BlendFrom(startingPose, 0, entryBlendDuration, true);
-        yield return AnimateShot(0, finishLineShotDuration);
 
-        // Shot 2: track the car from its side as it rolls past the line.
-        yield return BlendFrom(lastPose, 1, 0.25f, false);
-        yield return AnimateShot(1, Mathf.Max(0.1f, sideTrackingDuration - 0.25f));
+        // Shot 1
+        // false = KHÔNG hiện cái FINISH! tự gen cũ.
+        yield return BlendFrom(
+            startingPose,
+            0,
+            entryBlendDuration,
+            false
+        );
 
-        // Shot 3: front three-quarter victory hero view.
-        yield return BlendFrom(lastPose, 2, 0.35f, false);
-        yield return AnimateShot(2, Mathf.Max(0.1f, heroShotDuration - 0.35f));
+        yield return AnimateShot(
+            0,
+            finishLineShotDuration
+        );
 
-        // Leave the Main Camera on the hero pose and show the saved race result.
-        finishGroup.alpha = 0f;
+
+        // Shot 2
+        yield return BlendFrom(
+            lastPose,
+            1,
+            0.25f,
+            false
+        );
+
+        yield return AnimateShot(
+            1,
+            Mathf.Max(
+                0.1f,
+                sideTrackingDuration - 0.25f
+            )
+        );
+
+
+        // Shot 3 - Hero shot
+        yield return BlendFrom(
+            lastPose,
+            2,
+            0.35f,
+            false
+        );
+
+        yield return AnimateShot(
+            2,
+            Mathf.Max(
+                0.1f,
+                heroShotDuration - 0.35f
+            )
+        );
+
+
+        // Giữ camera ở hero pose.
         resultsVisible = true;
-        float elapsed = 0f;
-        while (elapsed < resultsFadeDuration)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            resultsGroup.alpha = Smooth01(Mathf.Clamp01(elapsed / Mathf.Max(0.1f, resultsFadeDuration)));
-            yield return null;
-        }
-        resultsGroup.alpha = 1f;
         cinematicPlaying = false;
-        // Do NOT re-enable chaseCamera: the race is over and the results are on screen.
+
+        // PoseKartRaceFinishUI sẽ tự hiển thị ResultsPanel custom.
     }
 
     private IEnumerator BlendFrom(ShotPose start, int shot, float duration, bool revealFinish)

@@ -349,8 +349,8 @@ CanvasGroup:
   m_GameObject: {fileID: 2183643060564522316}
   m_Enabled: 1
   m_Alpha: 0
-  m_Interactable: 1
-  m_BlocksRaycasts: 1
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
   m_IgnoreParentGroups: 0
 --- !u!1 &2646480252776944218
 GameObject:
@@ -445,7 +445,7 @@ CanvasGroup:
   m_GameObject: {fileID: 2646480252776944218}
   m_Enabled: 1
   m_Alpha: 1
-  m_Interactable: 1
+  m_Interactable: 0
   m_BlocksRaycasts: 0
   m_IgnoreParentGroups: 0
 --- !u!1 &3323182011783840157
@@ -460,7 +460,6 @@ GameObject:
   - component: {fileID: 4323607538552489720}
   - component: {fileID: 6208743789504079485}
   - component: {fileID: 1479745357197760520}
-  - component: {fileID: 8260820766089372818}
   m_Layer: 0
   m_Name: PoseKart_RaceFinish_UI
   m_TagString: Untagged
@@ -525,61 +524,9 @@ MonoBehaviour:
   editorPreviewMode: 0
   raceManager: {fileID: 0}
   vehicleSelectScene: PoseKart_VehicleSelect
-  useCustomUI: 1
-  customFinishRoot: {fileID: 3323182011783840157}
-  customFinishGroup: {fileID: 8166540032531525655}
-  customFinishRect: {fileID: 4103671780528779402}
-  customFinishText: {fileID: 0}
-  customLegacyFinishText: {fileID: 738889647326277955}
-  customResultsGroup: {fileID: 3284714000133077968}
-  customResultsRect: {fileID: 8080295734787994933}
-  customResultHeading: {fileID: 0}
-  customLegacyResultHeading: {fileID: 9063812887356113683}
-  customPositionText: {fileID: 0}
-  customLegacyPositionText: {fileID: 791541056888400224}
-  customPositionCaption: {fileID: 0}
-  customLegacyPositionCaption: {fileID: 6571775759861830610}
-  customTimeText: {fileID: 0}
-  customLegacyTimeText: {fileID: 2634155567018326032}
-  customLapsText: {fileID: 0}
-  customLegacyLapsText: {fileID: 1842436208095028220}
-  customResultHint: {fileID: 0}
-  customLegacyResultHint: {fileID: 416807907695037544}
-  customPlayAgainButton: {fileID: 6332697992222855358}
-  customSelectVehicleButton: {fileID: 8957123140727168739}
   finishDuration: 1.15
   resultsRevealDuration: 0.5
   buttonUnlockDelay: 0.25
---- !u!114 &8260820766089372818
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3323182011783840157}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 0.005, g: 0.018, b: 0.05, a: 0.65}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &4282340705563203622
 GameObject:
   m_ObjectHideFlags: 0

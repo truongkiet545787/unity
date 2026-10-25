@@ -78,6 +78,15 @@ namespace PoseKart.Race
                 projectile.Configure(source, victim, shotSpeed, lifetime, duration, aiWobble, aiThrottle, hasCustomVisual: false);
             }
 
+            if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer)
+            {
+                var netObj = shot.GetComponent<Unity.Netcode.NetworkObject>();
+                if (netObj != null && !netObj.IsSpawned)
+                {
+                    netObj.Spawn(true);
+                }
+            }
+
             // Caster Feedback: Ink wave burst from muzzlePoint (or rear exhaust fallback) + juicy "SPLAT!" sound
             Vector3 burstPos = muzzlePoint != null ? muzzlePoint.position : origin;
             KartParticleEffect.Burst(burstPos, new Color(0.14f, 0.04f, 0.22f, 0.95f), 32);
@@ -87,7 +96,89 @@ namespace PoseKart.Race
             Debug.Log($"[Ink] LAUNCH ARC {source.name} -> {victim.name} from {(muzzlePoint != null ? muzzlePoint.name : "CenterOfMass")}", source);
             return true;
         }
+        private void Start()
+        {
+            ParticleSystem[] systems =
+                GetComponentsInChildren<ParticleSystem>(true);
 
+            for (int i = 0; i < systems.Length; i++)
+            {
+                ParticleSystem ps = systems[i];
+
+                if (ps == null ||
+                    !ps.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                if (!ps.isPlaying)
+                {
+                    ps.Play(true);
+                }
+            }
+
+            TrailRenderer[] trails =
+                GetComponentsInChildren<TrailRenderer>(true);
+
+            if (trails.Length == 0)
+            {
+                // Client clone không chạy Configure(),
+                // nên tự tạo fallback trail ở đây.
+                AddDarkTrail();
+            }
+            else
+            {
+                for (int i = 0; i < trails.Length; i++)
+                {
+                    if (trails[i] == null)
+                        continue;
+
+                    trails[i].Clear();
+                    trails[i].emitting = true;
+                }
+            }
+        }
+        private void Awake()
+        {
+            PlayPrefabVisualEffects();
+        }
+
+        private void PlayPrefabVisualEffects()
+        {
+            ParticleSystem[] particles =
+                GetComponentsInChildren<ParticleSystem>(true);
+
+            foreach (ParticleSystem ps in particles)
+            {
+                if (ps == null)
+                    continue;
+
+                if (!ps.gameObject.activeSelf)
+                    ps.gameObject.SetActive(true);
+
+                ps.Play(true);
+            }
+
+            TrailRenderer[] trails =
+                GetComponentsInChildren<TrailRenderer>(true);
+
+            if (trails.Length == 0)
+            {
+                // Client clone không chạy Configure(),
+                // nên tạo trail cosmetic ngay từ Awake.
+                AddDarkTrail();
+                return;
+            }
+
+            foreach (TrailRenderer trail in trails)
+            {
+                if (trail == null)
+                    continue;
+
+                trail.Clear();
+                trail.emitting = true;
+            }
+        }
         private void Configure(CarController source, CarController victim,
             float shotSpeed, float lifetime, float duration, float aiWobble, float aiThrottle,
             bool hasCustomVisual)
@@ -173,7 +264,18 @@ namespace PoseKart.Race
 
         private void AddDarkTrail()
         {
-            TrailRenderer trail = gameObject.AddComponent<TrailRenderer>();
+            TrailRenderer trail =
+                GetComponent<TrailRenderer>();
+
+            if (trail != null)
+            {
+                trail.Clear();
+                trail.emitting = true;
+                return;
+            }
+
+            trail =
+                gameObject.AddComponent<TrailRenderer>();
             trail.time = 0.55f;
             trail.minVertexDistance = 0.1f;
             trail.startWidth = 0.42f;
@@ -194,7 +296,34 @@ namespace PoseKart.Race
                 trail.sharedMaterial = trailMat;
             }
         }
+        private void OnEnable()
+        {
+            ParticleSystem[] particles =
+                GetComponentsInChildren<ParticleSystem>(true);
 
+            foreach (ParticleSystem ps in particles)
+            {
+                if (ps == null)
+                    continue;
+
+                if (!ps.gameObject.activeSelf)
+                    ps.gameObject.SetActive(true);
+
+                ps.Play(true);
+            }
+
+            TrailRenderer[] trails =
+                GetComponentsInChildren<TrailRenderer>(true);
+
+            foreach (TrailRenderer trail in trails)
+            {
+                if (trail == null)
+                    continue;
+
+                trail.Clear();
+                trail.emitting = true;
+            }
+        }
         private static Vector3 GetAimPoint(CarController car)
         {
             return car.TargetBody != null
@@ -205,13 +334,18 @@ namespace PoseKart.Race
         private void FixedUpdate()
         {
             if (!configured) return;
+
+            if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && !Unity.Netcode.NetworkManager.Singleton.IsServer)
+                return;
             if (Time.time >= expiresAt || owner == null)
             {
                 Destroy(gameObject);
                 return;
             }
 
-            if (target != null && target.isActiveAndEnabled && target.TargetBody != null)
+            bool isTargetValid = target != null && target.TargetBody != null &&
+                (PoseKartNetworkItemBridge.IsOnlineRace ? target.gameObject.activeInHierarchy : target.isActiveAndEnabled);
+            if (isTargetValid)
             {
                 RaceParticipant racer = target.GetComponent<RaceParticipant>();
                 if (racer == null || !racer.Finished)
@@ -250,6 +384,36 @@ namespace PoseKart.Race
             {
                 Vector3 impactPoint = lastKnownTargetPoint;
                 transform.position = impactPoint;
+
+                if (PoseKartNetworkItemBridge.IsOnlineRace)
+                {
+                    if (isTargetValid)
+                    {
+                        var bridge = target.GetComponent<PoseKartNetworkItemBridge>();
+                        if (bridge != null)
+                        {
+                            bridge.ServerApplyInkHit(
+                                impactPoint,
+                                blindDuration,
+                                aiSteeringWobble,
+                                aiThrottleMultiplier
+                            );
+                        }
+                    }
+
+                    if (Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer)
+                    {
+                        var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+                        if (netObj != null && netObj.IsSpawned)
+                        {
+                            netObj.Despawn(true);
+                            return;
+                        }
+                    }
+
+                    Destroy(gameObject);
+                    return;
+                }
 
                 bool applied = false;
                 if (target != null && target.isActiveAndEnabled)

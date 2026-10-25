@@ -10,9 +10,21 @@ using UnityEngine.UI;
 /// </summary>
 public class VehiclePreviewRotator : MonoBehaviour
 {
-    [Header("Mouse Drag Rotation")]
+    [Header("Rotation")]
     [SerializeField] private bool rotate = true;
 
+    [Header("Gamepad Rotation")]
+    [SerializeField] private bool gamepadRotate = true;
+
+    [Tooltip("Tốc độ xoay xe bằng Right Stick.")]
+    [SerializeField, Range(30f, 360f)]
+    private float gamepadRotationSpeed = 120f;
+
+    [Tooltip("Deadzone của Right Stick.")]
+    [SerializeField, Range(0f, 0.5f)]
+    private float gamepadDeadzone = 0.15f;
+
+    [SerializeField] private bool invertGamepad = false;
     [Tooltip("Drag sensitivity. 25 means roughly 0.5 degrees per mouse pixel.")]
     [SerializeField, Range(1f, 100f)]
     private float rotationSpeed = 25f;
@@ -67,6 +79,7 @@ public class VehiclePreviewRotator : MonoBehaviour
             return;
 
         HandleMouseDrag(dt);
+        HandleGamepadRotation(dt);
         HandleFloating();
     }
 
@@ -133,7 +146,33 @@ public class VehiclePreviewRotator : MonoBehaviour
                 Space.World);
         }
     }
+    private void HandleGamepadRotation(float dt)
+    {
+        if (!rotate || !gamepadRotate)
+            return;
 
+        Gamepad pad = Gamepad.current;
+
+        if (pad == null)
+            return;
+
+        float stickX = pad.rightStick.x.ReadValue();
+
+        // Deadzone để tránh stick bị drift nhẹ
+        if (Mathf.Abs(stickX) < gamepadDeadzone)
+            stickX = 0f;
+
+        if (Mathf.Abs(stickX) <= 0f)
+            return;
+
+        float direction = invertGamepad ? -1f : 1f;
+
+        transform.Rotate(
+            Vector3.up,
+            stickX * gamepadRotationSpeed * direction * dt,
+            Space.World
+        );
+    }
     private bool IsMouseOverVehicle(Vector2 mousePosition)
     {
         Camera cam = previewCamera != null ? previewCamera : Camera.main;

@@ -209,7 +209,10 @@ public sealed class PoseKartRaceIntroCamera : MonoBehaviour
         t = Mathf.Clamp01(t);
         return t * t * (3f - 2f * t);
     }
-
+    public void SetPlayerCar(Rigidbody newPlayer)
+    {
+        playerCar = newPlayer;
+    }
     private struct ShotPose
     {
         public readonly Vector3 position;

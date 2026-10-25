@@ -437,17 +437,49 @@ namespace PoseKart.Race
                     launchVel += carVel * vehicleVelocityInheritance;
                 }
 
-                Vector3 spawnPos = muzzlePoint != null ? muzzlePoint.position : (weaponMount != null ? weaponMount.position : transform.position);
+                Vector3 spawnPos =
+    muzzlePoint != null
+        ? muzzlePoint.position
+        : (weaponMount != null
+            ? weaponMount.position
+            : transform.position);
 
-                SpawnBananaProjectile(spawnPos, launchVel, settings);
+                // =====================================================
+                // GAMEPLAY PROJECTILE - SERVER
+                // =====================================================
+                SpawnBananaProjectile(
+                    spawnPos,
+                    launchVel,
+                    settings
+                );
 
-                // Muzzle Flash VFX
+                // =====================================================
+                // ONLINE VISUAL SYNC
+                // Cho Client thấy viên chuối bay khỏi nòng.
+                // Gameplay vẫn chỉ chạy trên Server.
+                // =====================================================
+                if (PoseKartNetworkItemBridge.IsOnlineRace &&
+                    Unity.Netcode.NetworkManager.Singleton != null &&
+                    Unity.Netcode.NetworkManager.Singleton.IsServer)
+                {
+                    PoseKartNetworkItemBridge bridge =
+                        GetComponent<PoseKartNetworkItemBridge>();
+
+                    if (bridge != null)
+                    {
+                        bridge.ServerSyncBananaShotVisual(
+                            spawnPos,
+                            launchVel
+                        );
+                    }
+                }
+
+                // Host/offline local visual
                 if (muzzleFlash != null)
                 {
                     muzzleFlash.Play();
                 }
 
-                // Audio
                 PlayFireSound(spawnPos);
 
                 // Visual Recoil
@@ -460,11 +492,157 @@ namespace PoseKart.Race
             }
 
             // Wait before retracting
+            // Wait before retracting
             yield return new WaitForSeconds(postFireRetractDelay);
 
+            // Online:
+            // báo cho các Client thu turret cosmetic của racer này.
+            if (PoseKartNetworkItemBridge.IsOnlineRace &&
+                Unity.Netcode.NetworkManager.Singleton != null &&
+                Unity.Netcode.NetworkManager.Singleton.IsServer)
+            {
+                PoseKartNetworkItemBridge bridge =
+                    GetComponent<PoseKartNetworkItemBridge>();
+
+                if (bridge != null)
+                {
+                    bridge.ServerSyncBananaLauncherRetract();
+                }
+            }
+
+            // Server / Offline tự thu turret như cũ.
             yield return RetractCoroutine();
         }
+        public void PlayNetworkShotVisual(
+    Vector3 serverSpawnPosition,
+    Vector3 velocity)
+        {
+            Vector3 visualSpawnPosition =
+                muzzlePoint != null
+                    ? muzzlePoint.position
+                    : serverSpawnPosition;
 
+            // Muzzle flash
+            if (muzzleFlash != null)
+            {
+                muzzleFlash.Play();
+            }
+
+            // Sound
+            PlayFireSound(visualSpawnPosition);
+
+            // =====================================================
+            // Chọn prefab visual.
+            // Projectile prefab có thì dùng.
+            // Không có thì dùng Banana Trap prefab làm hình quả chuối bay.
+            // =====================================================
+            GameObject visualPrefab = bananaProjectilePrefab;
+
+            if (visualPrefab == null)
+            {
+                visualPrefab = bananaTrapPrefab;
+            }
+
+            if (visualPrefab == null &&
+                inventory != null &&
+                inventory.BananaPrefab != null)
+            {
+                visualPrefab = inventory.BananaPrefab;
+            }
+
+            if (visualPrefab == null)
+            {
+                visualPrefab = KartItemInventory.SharedBananaPrefab;
+            }
+
+            if (visualPrefab == null)
+            {
+                Debug.LogWarning(
+                    "[BananaLauncher] No visual prefab available for network shot.",
+                    this
+                );
+
+                return;
+            }
+
+            Quaternion rotation =
+                velocity.sqrMagnitude > 0.001f
+                    ? Quaternion.LookRotation(velocity.normalized)
+                    : transform.rotation;
+
+            GameObject visual =
+                Instantiate(
+                    visualPrefab,
+                    visualSpawnPosition,
+                    rotation
+                );
+
+            visual.name = "BananaTriple_VisualOnly";
+
+            // =====================================================
+            // TẮT TOÀN BỘ GAMEPLAY.
+            // Đây chỉ là hình ảnh local.
+            // =====================================================
+
+            PoseKartBananaProjectile projectile =
+                visual.GetComponent<PoseKartBananaProjectile>();
+
+            if (projectile != null)
+            {
+                projectile.enabled = false;
+            }
+
+            KartBananaTrap trap =
+                visual.GetComponent<KartBananaTrap>();
+
+            if (trap != null)
+            {
+                trap.enabled = false;
+            }
+
+            Collider[] colliders =
+                visual.GetComponentsInChildren<Collider>(true);
+
+            foreach (Collider col in colliders)
+            {
+                if (col != null)
+                    col.enabled = false;
+            }
+
+            Unity.Netcode.NetworkBehaviour[] netBehaviours =
+                visual.GetComponentsInChildren<
+                    Unity.Netcode.NetworkBehaviour
+                >(true);
+
+            foreach (Unity.Netcode.NetworkBehaviour behaviour
+                     in netBehaviours)
+            {
+                if (behaviour != null)
+                    behaviour.enabled = false;
+            }
+
+            // Rigidbody cosmetic
+            Rigidbody body =
+                visual.GetComponent<Rigidbody>();
+
+            if (body == null)
+            {
+                body = visual.AddComponent<Rigidbody>();
+            }
+
+            body.isKinematic = false;
+            body.useGravity = true;
+
+            body.linearVelocity = velocity;
+
+            // Xoay quả chuối khi bay cho dễ nhìn
+            body.angularVelocity =
+                new Vector3(5f, 8f, 4f);
+
+            // Chỉ là projectile visual.
+            // Trap thật sẽ được Server spawn sau khi gameplay projectile đáp đất.
+            Destroy(visual, 2.5f);
+        }
         private void SpawnBananaProjectile(Vector3 spawnPosition, Vector3 velocity, KartItemInventory settings)
         {
             GameObject projObj;
@@ -491,7 +669,23 @@ namespace PoseKart.Race
             GameObject trapPrefabToUse = bananaTrapPrefab != null
                 ? bananaTrapPrefab
                 : (settings != null && settings.BananaPrefab != null ? settings.BananaPrefab : KartItemInventory.SharedBananaPrefab);
+            // Banana projectile phải là Rigidbody động để linearVelocity hoạt động.
+            // Nếu prefab đang để Kinematic thì Unity sẽ không cho nó bay.
+            Rigidbody projectileBody = projObj.GetComponent<Rigidbody>();
 
+            if (projectileBody == null)
+            {
+                projectileBody = projObj.AddComponent<Rigidbody>();
+            }
+
+            projectileBody.isKinematic = false;
+            projectileBody.useGravity = true;
+            projectileBody.collisionDetectionMode =
+                CollisionDetectionMode.ContinuousDynamic;
+
+            // Đảm bảo không mang velocity cũ từ prefab/pooling.
+            projectileBody.linearVelocity = Vector3.zero;
+            projectileBody.angularVelocity = Vector3.zero;
             projectile.Initialize(
                 car,
                 velocity,

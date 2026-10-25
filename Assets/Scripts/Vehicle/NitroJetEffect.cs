@@ -17,6 +17,20 @@ namespace PoseKart.Vehicle
         {
             car = GetComponent<CarController>();
 
+            Transform parentPivot = transform.Find("StuntPivot");
+            if (parentPivot == null)
+            {
+                var stunt = GetComponent<PoseKart.Stunts.PoseKartStuntController>();
+                if (stunt != null && stunt.VisualPivot != null)
+                {
+                    parentPivot = stunt.VisualPivot;
+                }
+                else
+                {
+                    parentPivot = transform.Find("Visual") ?? transform;
+                }
+            }
+
             Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
             if (shader == null) shader = Shader.Find("Sprites/Default");
             if (shader == null) shader = Shader.Find("Unlit/Color");
@@ -28,7 +42,7 @@ namespace PoseKart.Vehicle
             for (int i = 0; i < jets.Length; i++)
             {
                 GameObject go = new GameObject(i % 2 == 0 ? "Nitro plume" : "Nitro core");
-                go.transform.SetParent(transform, false);
+                go.transform.SetParent(parentPivot, false);
                 var line = go.AddComponent<LineRenderer>();
                 jets[i] = line;
                 line.sharedMaterial = i % 2 == 0 ? material : coreMaterial;
@@ -45,7 +59,7 @@ namespace PoseKart.Vehicle
             }
 
             GameObject lamp = new GameObject("Nitro glow");
-            lamp.transform.SetParent(transform, false);
+            lamp.transform.SetParent(parentPivot, false);
             lamp.transform.localPosition = new Vector3(0f, 0.5f, -1.5f);
             glow = lamp.AddComponent<Light>();
             glow.range = 5f;
@@ -192,6 +206,14 @@ namespace PoseKart.Vehicle
 
         private void OnDestroy()
         {
+            if (jets != null)
+            {
+                for (int i = 0; i < jets.Length; i++)
+                {
+                    if (jets[i] != null) Destroy(jets[i].gameObject);
+                }
+            }
+            if (glow != null) Destroy(glow.gameObject);
             if (material != null) Destroy(material);
             if (coreMaterial != null) Destroy(coreMaterial);
         }

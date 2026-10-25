@@ -71,7 +71,38 @@ namespace PoseKart.Race
         private float stunDuration;
         private float nextRacerRefreshAt;
         private Material fallbackMaterial;
+        private static GameObject cachedDizzyPrefab;
 
+        public static void PlayDizzyEffect(CarController car)
+        {
+            if (car == null) return;
+            GameObject dizzyPrefab = cachedDizzyPrefab;
+#if UNITY_EDITOR
+            if (dizzyPrefab == null)
+            {
+                dizzyPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(
+                    "Assets/PoseKart/Asset Them Tu Be Ngoai/DIzzyEffect/Dizzy Effect.prefab");
+            }
+#endif
+            if (dizzyPrefab != null)
+            {
+                PoseKartBananaDizzyVFX dizzy = car.GetComponent<PoseKartBananaDizzyVFX>();
+                if (dizzy == null)
+                    dizzy = car.gameObject.AddComponent<PoseKartBananaDizzyVFX>();
+                dizzy.Play(car, dizzyPrefab, new Vector3(0f, 1.55f, 0f), 1f);
+            }
+        }
+
+        private void Awake()
+        {
+            if (dizzyParticlePrefab != null)
+                cachedDizzyPrefab = dizzyParticlePrefab;
+
+            // Network-spawned banana trên Client không chạy Configure().
+            // Chuẩn hóa collider ngay khi prefab được Instantiate.
+            sensorCenterWorld = transform.position + transform.up * sensorHeight;
+            PrepareSensorAndPrefabColliders();
+        }
         // Compatibility with existing KartItemPickup implementations.
         public void Configure(CarController source, float trapLifetime, float slipTime, float ownerImmunity)
         {
@@ -103,7 +134,35 @@ namespace PoseKart.Race
             if (debugBanana)
                 Debug.Log($"[Banana] ARMED at {groundPoint} | sensor={sensorCenterWorld} | radius={detectionRadius:0.00}m | racers={trackedRacerCount} | owner={(owner != null ? owner.name : "None")}", this);
 
+            if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer)
+            {
+                var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+                if (netObj != null && !netObj.IsSpawned)
+                {
+                    netObj.Spawn(true);
+                }
+                StartCoroutine(DespawnAfterDelay(Mathf.Max(0.5f, trapLifetime)));
+                return;
+            }
+
             Destroy(gameObject, Mathf.Max(0.5f, trapLifetime));
+        }
+
+        private System.Collections.IEnumerator DespawnAfterDelay(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (this != null && gameObject != null)
+            {
+                var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+                if (netObj != null && netObj.IsSpawned)
+                {
+                    netObj.Despawn(true);
+                }
+                else
+                {
+                    Destroy(gameObject);
+                }
+            }
         }
 
         private void AlignVisualToSurface()
@@ -217,8 +276,19 @@ namespace PoseKart.Race
             nextRacerRefreshAt = Time.time + 1f;
         }
 
-        private void OnTriggerEnter(Collider other) => TryHit(FindCar(other), "TriggerEnter");
-        private void OnTriggerStay(Collider other) => TryHit(FindCar(other), "TriggerStay");
+        private void OnTriggerEnter(Collider other)
+        {
+            if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && !Unity.Netcode.NetworkManager.Singleton.IsServer)
+                return;
+            TryHit(FindCar(other), "TriggerEnter");
+        }
+
+        private void OnTriggerStay(Collider other)
+        {
+            if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && !Unity.Netcode.NetworkManager.Singleton.IsServer)
+                return;
+            TryHit(FindCar(other), "TriggerStay");
+        }
 
         private static CarController FindCar(Collider other)
         {
@@ -231,6 +301,9 @@ namespace PoseKart.Race
         private void FixedUpdate()
         {
             if (!armed || spent) return;
+
+            if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && !Unity.Netcode.NetworkManager.Singleton.IsServer)
+                return;
 
             // Scene racers are normally static; this fallback only handles a trap
             // configured before the cars have finished spawning.
@@ -246,8 +319,18 @@ namespace PoseKart.Race
                 Vector3 previous = track.lastCenter;
                 track.lastCenter = current;
 
-                if (!track.car.isActiveAndEnabled || !track.car.ControlEnabled ||
-                    (track.car == owner && Time.time < ownerSafeUntil))
+                if (PoseKartNetworkItemBridge.IsOnlineRace)
+                {
+                    if (!track.car.gameObject.activeInHierarchy)
+                        continue;
+                }
+                else
+                {
+                    if (!track.car.isActiveAndEnabled || !track.car.ControlEnabled)
+                        continue;
+                }
+
+                if (track.car == owner && Time.time < ownerSafeUntil)
                     continue;
 
                 if (TouchesCarCollider(track.colliders))
@@ -302,36 +385,72 @@ namespace PoseKart.Race
 
         private void TryHit(CarController car, string source)
         {
-            if (!armed || spent || car == null || !car.isActiveAndEnabled ||
-                car.TargetBody == null || !car.ControlEnabled)
+            if (!armed || spent || car == null || car.TargetBody == null)
                 return;
+
+            if (PoseKartNetworkItemBridge.IsOnlineRace)
+            {
+                if (!car.gameObject.activeInHierarchy)
+                    return;
+            }
+            else
+            {
+                if (!car.isActiveAndEnabled || !car.ControlEnabled)
+                    return;
+            }
+
             if (car == owner && Time.time < ownerSafeUntil)
                 return;
 
             spent = true; // One trap, one racer. A shield also consumes the trap.
             armed = false;
+
+            if (PoseKartNetworkItemBridge.IsOnlineRace)
+            {
+                var bridge = car.GetComponent<PoseKartNetworkItemBridge>();
+                if (bridge != null)
+                {
+                    bridge.ServerApplyBananaHit(groundPoint, groundNormal, stunDuration);
+                }
+                if (sensor != null) sensor.enabled = false;
+                if (Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer)
+                {
+                    var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+                    if (netObj != null && netObj.IsSpawned)
+                    {
+                        netObj.Despawn(true);
+                        return;
+                    }
+                }
+                Destroy(gameObject);
+                return;
+            }
+
             bool stunned = car.TryApplyBananaStun(stunDuration);
             if (stunned)
             {
                 Rigidbody body = car.TargetBody;
-                Vector3 velocity = body.linearVelocity;
-                body.linearVelocity = new Vector3(
-                    velocity.x * impactPlanarSpeedMultiplier,
-                    velocity.y,
-                    velocity.z * impactPlanarSpeedMultiplier);
-
-                if (extraSideImpulse > 0f)
+                if (body != null && !body.isKinematic)
                 {
-                    float lateral = Vector3.Dot(body.linearVelocity, car.transform.right);
-                    float direction = Mathf.Abs(lateral) > 0.05f
-                        ? Mathf.Sign(lateral)
-                        : (Random.value < 0.5f ? -1f : 1f);
-                    body.AddForce(car.transform.right * (direction * extraSideImpulse),
-                        ForceMode.VelocityChange);
-                }
+                    Vector3 velocity = body.linearVelocity;
+                    body.linearVelocity = new Vector3(
+                        velocity.x * impactPlanarSpeedMultiplier,
+                        velocity.y,
+                        velocity.z * impactPlanarSpeedMultiplier);
 
-                // Spin wobble torque: xe quay tít xoắn ốc khi dẫm phải chuối
-                car.TargetBody.AddTorque(car.transform.up * (Random.value < 0.5f ? 12.5f : -12.5f), ForceMode.Impulse);
+                    if (extraSideImpulse > 0f)
+                    {
+                        float lateral = Vector3.Dot(body.linearVelocity, car.transform.right);
+                        float direction = Mathf.Abs(lateral) > 0.05f
+                            ? Mathf.Sign(lateral)
+                            : (Random.value < 0.5f ? -1f : 1f);
+                        body.AddForce(car.transform.right * (direction * extraSideImpulse),
+                            ForceMode.VelocityChange);
+                    }
+
+                    // Spin wobble torque: xe quay tít xoắn ốc khi dẫm phải chuối
+                    car.TargetBody.AddTorque(car.transform.up * (Random.value < 0.5f ? 12.5f : -12.5f), ForceMode.Impulse);
+                }
 
                 PoseKart.Audio.AudioManager.PlayBananaSlip(transform.position);
 

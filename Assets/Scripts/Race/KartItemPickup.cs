@@ -19,6 +19,36 @@ namespace PoseKart.Race
         [SerializeField] private ItemType itemType;
         [SerializeField] private float respawnSeconds = 6f;
 
+        private static readonly System.Collections.Generic.List<KartItemPickup> allPickups = new System.Collections.Generic.List<KartItemPickup>();
+        public static System.Collections.Generic.IReadOnlyList<KartItemPickup> AllPickups => allPickups;
+
+        private int pickupIndex = -1;
+        public int PickupIndex => pickupIndex;
+        public float RespawnSeconds => respawnSeconds;
+        private bool isAvailable = true;
+        public bool IsAvailable => isAvailable && (trigger == null || trigger.enabled);
+
+        public static void InitializeAllPickups()
+        {
+            if (allPickups.Count > 0) return;
+            allPickups.AddRange(FindObjectsByType<KartItemPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None));
+            allPickups.Sort((a, b) =>
+            {
+                Vector3 pa = a.transform.position;
+                Vector3 pb = b.transform.position;
+                int cx = pa.x.CompareTo(pb.x);
+                if (cx != 0) return cx;
+                int cy = pa.y.CompareTo(pb.y);
+                if (cy != 0) return cy;
+                return pa.z.CompareTo(pb.z);
+            });
+            for (int i = 0; i < allPickups.Count; i++)
+            {
+                if (allPickups[i] != null)
+                    allPickups[i].pickupIndex = i;
+            }
+        }
+
         [Header("Ink Shot - Item Pool Injection")]
         [Tooltip("Chance to replace the existing item-pool roll with Ink Shot. Set on item boxes; 0 disables Ink.")]
         [SerializeField, Range(0f, 1f)] private float inkShotChance = 0.12f;
@@ -30,6 +60,7 @@ namespace PoseKart.Race
         {
             trigger = GetComponent<Collider>();
             visuals = GetComponentsInChildren<Renderer>(true);
+            InitializeAllPickups();
         }
 
         public void Configure(ItemType type)
@@ -37,9 +68,42 @@ namespace PoseKart.Race
             itemType = type;
         }
 
+        public ItemType RollAuthoritativeItem()
+        {
+            return inkShotChance > 0f && Random.value < inkShotChance
+                ? ItemType.InkShot
+                : RollNonBoostItem();
+        }
+
+        public void ServerSetCollected()
+        {
+            isAvailable = false;
+            CancelInvoke(nameof(Respawn));
+            Invoke(nameof(Respawn), respawnSeconds);
+        }
+
+        public void ClientSyncCollect(float duration)
+        {
+            isAvailable = false;
+            if (trigger != null)
+                trigger.enabled = false;
+
+            foreach (Renderer visual in visuals)
+            {
+                if (visual != null)
+                    visual.enabled = false;
+            }
+
+            PoseKart.Audio.AudioManager.PlayPickup(null, transform.position);
+            KartParticleEffect.Burst(transform.position, new Color(1f, .78f, .16f, 1f), 48);
+
+            CancelInvoke(nameof(Respawn));
+            Invoke(nameof(Respawn), duration);
+        }
+
         private void OnTriggerEnter(Collider other)
         {
-            if (trigger == null || !trigger.enabled)
+            if (!isAvailable || trigger == null || !trigger.enabled)
                 return;
 
             Rigidbody otherBody = other.attachedRigidbody;
@@ -49,21 +113,29 @@ namespace PoseKart.Race
             if (car == null)
                 return;
 
+            if (PoseKartNetworkItemBridge.IsOnlineRace)
+            {
+                var bridge = car.GetComponent<PoseKartNetworkItemBridge>();
+                if (bridge != null)
+                {
+                    bridge.HandlePickupTrigger(pickupIndex);
+                    return;
+                }
+            }
+
+            // OFFLINE MODE (original logic)
             KartItemInventory inventory = GetOrAddComponent<KartItemInventory>(car.gameObject);
             if (inventory == null)
                 return;
 
-            // Ink replaces a portion of the regular three-item roll. Boost is NEVER awarded,
-            // even if an older KartItemPoolConfig in the scene still has Boost Weight > 0.
-            ItemType rolledItem = inkShotChance > 0f && Random.value < inkShotChance
-                ? ItemType.InkShot
-                : RollNonBoostItem();
+            ItemType rolledItem = RollAuthoritativeItem();
             if (!inventory.TryCollect(rolledItem))
                 return;
 
             PoseKart.Audio.AudioManager.PlayPickup(car, transform.position);
             KartParticleEffect.Burst(transform.position, new Color(1f, .78f, .16f, 1f), 48);
 
+            isAvailable = false;
             trigger.enabled = false;
             foreach (Renderer visual in visuals)
             {
@@ -71,11 +143,13 @@ namespace PoseKart.Race
                     visual.enabled = false;
             }
 
+            CancelInvoke(nameof(Respawn));
             Invoke(nameof(Respawn), respawnSeconds);
         }
 
         private void Respawn()
         {
+            isAvailable = true;
             if (trigger != null)
                 trigger.enabled = true;
 
@@ -256,29 +330,54 @@ namespace PoseKart.Race
                 return false;
             }
 
+            // BẮT BUỘC missile phải chạy FixedUpdate trên Server.
+            homing.enabled = true;
+
             homing.Configure(
-                owner,
-                target,
-                settings != null ? settings.MissileSpeed : 62f,
-                settings != null ? settings.MissileTrackingStrength : 8f,
-                settings != null ? settings.MissileLifetime : 7f,
-                settings != null ? settings.MissileImpactExplosionPrefab : null,
-                settings != null ? settings.MissileImpactExplosionLifetime : 4f,
-                settings != null ? settings.MissileExplosionRadius : 6f,
-                settings != null ? settings.MissileMaximumHorizontalKnockback : 5f,
-                settings != null ? settings.MissileMaximumUpwardKnockback : 2.5f,
-                settings != null ? settings.MissileMinimumEffectiveDistance : .5f,
-                settings != null ? settings.MissileImpactTorque : 12f,
-                settings != null ? settings.MissileExplosionFalloff : null,
-                settings != null ? settings.MissileKnockbackRecoveryDuration : .7f,
-                settings == null || settings.MissileExplosionAffectsNearbyRacers,
-                settings == null || settings.MissileExplosionLineOfSightCheck,
-                settings != null ? settings.MissileTargetPrediction : .75f,
-                settings != null ? settings.MissileMaximumPredictionTime : 1.25f,
-                settings != null ? settings.MissileGroundFirePrefab : null,
-                settings != null ? settings.MissileGroundFireDuration : 5f,
-                settings != null ? settings.MissileGroundFireRadius : 3f,
-                settings == null || settings.MissileGroundFireAffectsRacers);
+    owner,
+    target,
+    settings != null ? settings.MissileSpeed : 62f,
+    settings != null ? settings.MissileTrackingStrength : 8f,
+    settings != null ? settings.MissileLifetime : 7f,
+    settings != null ? settings.MissileImpactExplosionPrefab : null,
+    settings != null ? settings.MissileImpactExplosionLifetime : 4f,
+    settings != null ? settings.MissileExplosionRadius : 6f,
+    settings != null ? settings.MissileMaximumHorizontalKnockback : 5f,
+    settings != null ? settings.MissileMaximumUpwardKnockback : 2.5f,
+
+    // Hai thằng này lúc trước bị đảo.
+    settings != null ? settings.MissileImpactTorque : 12f,
+    settings != null ? settings.MissileMinimumEffectiveDistance : .5f,
+
+    settings != null ? settings.MissileExplosionFalloff : null,
+    settings != null ? settings.MissileKnockbackRecoveryDuration : .7f,
+    settings == null || settings.MissileExplosionAffectsNearbyRacers,
+    settings == null || settings.MissileExplosionLineOfSightCheck,
+    settings != null ? settings.MissileTargetPrediction : .75f,
+    settings != null ? settings.MissileMaximumPredictionTime : 1.25f,
+    settings != null ? settings.MissileGroundFirePrefab : null,
+    settings != null ? settings.MissileGroundFireDuration : 5f,
+    settings != null ? settings.MissileGroundFireRadius : 3f,
+    settings == null || settings.MissileGroundFireAffectsRacers
+);
+            if (PoseKartNetworkItemBridge.IsOnlineRace)
+            {
+                var netObj = projectile.GetComponent<Unity.Netcode.NetworkObject>();
+
+                if (netObj == null)
+                {
+                    Debug.LogError(
+                        "[KartItemPickup] Online missile prefab is missing NetworkObject.",
+                        projectile
+                    );
+
+                    Destroy(projectile);
+                    return false;
+                }
+
+                if (!netObj.IsSpawned)
+                    netObj.Spawn(true);
+            }
 
             PoseKart.Audio.AudioManager.PlayMissileLaunch(projectile.transform.position);
             return true;
@@ -325,8 +424,19 @@ namespace PoseKart.Race
 
             foreach (CarController candidate in FindObjectsByType<CarController>(FindObjectsSortMode.None))
             {
-                if (candidate == null || candidate == owner || !candidate.isActiveAndEnabled || candidate.TargetBody == null)
+                if (candidate == null || candidate == owner || candidate.TargetBody == null)
                     continue;
+
+                if (PoseKartNetworkItemBridge.IsOnlineRace)
+                {
+                    if (!candidate.gameObject.activeInHierarchy)
+                        continue;
+                }
+                else
+                {
+                    if (!candidate.isActiveAndEnabled)
+                        continue;
+                }
 
                 RaceParticipant participant = candidate.GetComponent<RaceParticipant>();
                 if (participant != null && participant.Finished)
@@ -421,6 +531,15 @@ namespace PoseKart.Race
                     trap.enabled = true;
                     trap.Configure(owner, lifetime, slipDuration, immunity, ground.point, ground.normal);
                     spawnedCount++;
+
+                    if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer)
+                    {
+                        var netObj = banana.GetComponent<Unity.Netcode.NetworkObject>();
+                        if (netObj != null && !netObj.IsSpawned)
+                        {
+                            netObj.Spawn(true);
+                        }
+                    }
                 }
             }
 

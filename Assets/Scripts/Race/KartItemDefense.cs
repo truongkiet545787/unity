@@ -36,6 +36,10 @@ namespace PoseKart.Race
         private float shieldUntil;
         private float lastCollisionBlockTime = float.NegativeInfinity;
 
+        // Client online chỉ hiển thị visual.
+        // Thời gian/gameplay thật do Server quyết định.
+        private bool visualOnlyShieldMode;
+
         public event System.Action OnShieldActivated;
         public event System.Action<Vector3> OnShieldBlocked;
         public event System.Action<bool> OnShieldDeactivated;
@@ -74,12 +78,88 @@ namespace PoseKart.Race
             shieldColor = color;
         }
 
+        public void ActivateShieldVisualOnly()
+        {
+            RemoveShieldVisual();
+
+            // Client chỉ mirror visual từ NetworkVariable.
+            // KHÔNG được tự chạy timer hết hạn.
+            visualOnlyShieldMode = true;
+            shieldActive = true;
+            shieldTimeRemaining = 0f;
+
+            PoseKartShieldGeneratorVisual genVisual = GetComponent<PoseKartShieldGeneratorVisual>();
+            bool hasCustomShieldVisual = genVisual != null && genVisual.HasForceShieldPrefab;
+
+            if (!hasCustomShieldVisual)
+            {
+                shieldVisual = shieldVisualPrefab != null
+                    ? Instantiate(shieldVisualPrefab, transform)
+                    : CreateFallbackShieldVisual();
+                if (shieldVisual != null)
+                {
+                    if (shieldVisual.transform.parent != transform)
+                    {
+                        shieldVisual.transform.SetParent(transform, false);
+                    }
+                    shieldVisual.name = "Active Shield Bubble";
+                    shieldVisual.transform.localPosition = new Vector3(0f, 0.65f, 0f);
+                    shieldVisual.transform.localRotation = Quaternion.identity;
+
+                    PoseKartShieldVisualAnimator animator = shieldVisual.GetComponent<PoseKartShieldVisualAnimator>();
+                    if (animator == null)
+                        animator = shieldVisual.AddComponent<PoseKartShieldVisualAnimator>();
+                    animator.Configure(shieldColor);
+                    animator.BeginFadeIn();
+                }
+            }
+            else
+            {
+                genVisual.ActivateForceShield();
+            }
+
+            if (shieldParticlePrefab != null)
+            {
+                activeShieldParticle = Instantiate(shieldParticlePrefab, transform);
+                activeShieldParticle.name = "Active Shield Particle";
+                activeShieldParticle.transform.localPosition = new Vector3(0f, 0.5f, 0f);
+                activeShieldParticle.transform.localRotation = Quaternion.identity;
+            }
+
+            PoseKart.Audio.AudioManager.PlayShieldActivate(transform.position);
+        }
+
+        public void DeactivateShieldVisualOnly()
+        {
+            visualOnlyShieldMode = false;
+            shieldActive = false;
+            shieldTimeRemaining = 0f;
+
+            // Custom Shield Generator có thể đang nghe event này
+            // để thu Force Shield visual xuống.
+            OnShieldDeactivated?.Invoke(false);
+
+            RemoveShieldVisual();
+        }
+
         public void ActivateShield()
         {
             RemoveShieldVisual();
+
+            visualOnlyShieldMode = false;
             shieldActive = true;
             blockedHitsRemaining = Mathf.Max(1, maximumBlockedHits);
             shieldUntil = Time.time + Mathf.Max(0.1f, shieldDuration);
+            Debug.Log(
+    $"[SHIELD TRACE] ACTIVATE | {name} | " +
+    $"t={Time.time:F2} | until={shieldUntil:F2} | " +
+    $"duration={shieldDuration:F2} | hits={blockedHitsRemaining}",
+    this
+);
+            if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer)
+            {
+                GetComponent<PoseKartNetworkItemBridge>()?.ServerSetShieldActive(true);
+            }
 
             // Check if dedicated Force Shield Generator visual is managing the energy dome
             PoseKartShieldGeneratorVisual genVisual = GetComponent<PoseKartShieldGeneratorVisual>();
@@ -107,6 +187,10 @@ namespace PoseKart.Race
                     animator.Configure(shieldColor);
                     animator.BeginFadeIn();
                 }
+            }
+            else
+            {
+                genVisual.ActivateForceShield();
             }
 
             // 2. Optional Particle Prefab (Aura / Rings / Sparks)
@@ -163,6 +247,10 @@ namespace PoseKart.Race
 
         public void ResetForRace()
         {
+            Debug.LogWarning(
+    $"[SHIELD TRACE] RESET FOR RACE | {name} | t={Time.time:F2}",
+    this
+);
             lastCollisionBlockTime = float.NegativeInfinity;
             DeactivateShield(false, false);
         }
@@ -174,7 +262,12 @@ namespace PoseKart.Race
             if (car != null && car.IsShockwaveActive) return true;
             if (!protectionEnabled || !shieldActive || blockedHitsRemaining <= 0 || Time.time >= shieldUntil)
                 return false;
-
+            Debug.LogWarning(
+    $"[SHIELD TRACE] CONSUME | {name} | " +
+    $"t={Time.time:F2} | hitsBefore={blockedHitsRemaining} | " +
+    $"point={impactPoint}",
+    this
+);
             blockedHitsRemaining--;
 
             // 1. Procedural metallic "PING! / DEFLECT!" sound + centralized audio manager
@@ -256,6 +349,7 @@ namespace PoseKart.Race
         }
 
         private static AudioClip deflectPingClip;
+        public static void PlayDeflectPingSoundAt(Vector3 position) => PlayDeflectPingSound(position);
         private static void PlayDeflectPingSound(Vector3 position)
         {
             if (deflectPingClip == null)
@@ -287,11 +381,17 @@ namespace PoseKart.Race
         private void Update()
         {
             if (!shieldActive)
-            {
                 return;
-            }
 
-            shieldTimeRemaining = Mathf.Max(0f, shieldUntil - Time.time);
+            // Client online chỉ mirror visual.
+            // Server sẽ quyết định lúc nào Shield tắt
+            // thông qua networkShieldActive.
+            if (visualOnlyShieldMode)
+                return;
+
+            shieldTimeRemaining =
+                Mathf.Max(0f, shieldUntil - Time.time);
+
             if (Time.time >= shieldUntil)
             {
                 DeactivateShield(true);
@@ -300,6 +400,12 @@ namespace PoseKart.Race
 
         private void DeactivateShield(bool expired, bool animate = true)
         {
+            Debug.LogWarning(
+    $"[SHIELD TRACE] DEACTIVATE | {name} | " +
+    $"expired={expired} | t={Time.time:F2} | " +
+    $"until={shieldUntil:F2} | hits={blockedHitsRemaining}",
+    this
+);
             if (!shieldActive && shieldVisual == null && activeShieldParticle == null && shieldForceField == null)
             {
                 return;
@@ -308,6 +414,12 @@ namespace PoseKart.Race
             shieldActive = false;
             blockedHitsRemaining = 0;
             shieldTimeRemaining = 0f;
+
+            if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer)
+            {
+                GetComponent<PoseKartNetworkItemBridge>()?.ServerSetShieldActive(false);
+            }
+
             if (expired)
             {
                 PoseKart.Audio.AudioManager.PlayShieldExpire(transform.position);
@@ -491,21 +603,24 @@ namespace PoseKart.Race
 
                 if (!isContinuous)
                 {
-                    Vector3 contactPoint = other.ClosestPoint(transform.position);
-                    float relativeSpeed = 10f;
-                    if (ownerCar.TargetBody != null && otherCar.TargetBody != null)
-                        relativeSpeed = (ownerCar.TargetBody.linearVelocity - otherCar.TargetBody.linearVelocity).magnitude;
+                    Vector3 contactPoint =
+                        other.ClosestPoint(transform.position);
 
-                    if (defense != null)
+                    // Vehicle collision chỉ tạo phản hồi Shield.
+                    // KHÔNG consume Shield charge.
+                    PoseKart.Audio.AudioManager.PlayShieldBlock(
+                        contactPoint
+                    );
+
+                    KartParticleEffect.Burst(
+                        contactPoint,
+                        new Color(0.18f, 0.88f, 1f, 1f),
+                        20
+                    );
+
+                    if (animator != null)
                     {
-                        defense.TryBlockMajorCollision(contactPoint, true, relativeSpeed);
-                    }
-                    else
-                    {
-                        PoseKart.Audio.AudioManager.PlayShieldBlock(contactPoint);
-                        KartParticleEffect.Burst(contactPoint, new Color(0.18f, 0.88f, 1f, 1f), 20);
-                        if (animator != null)
-                            animator.FlashImpact();
+                        animator.FlashImpact();
                     }
                 }
                 return;

@@ -19,11 +19,11 @@ namespace PoseKart.Race
         public void Configure(CheckpointManager checkpoints, RaceParticipant[] participants)
         {
             checkpointManager = checkpoints;
-            racers = participants;
+            racers = participants ?? System.Array.Empty<RaceParticipant>();
+
             progressScores = new float[racers.Length];
             sortedIndices = new int[racers.Length];
         }
-
         private void LateUpdate()
         {
             if (!IsConfigured || checkpointManager.CheckpointCount < 2)
@@ -49,9 +49,17 @@ namespace PoseKart.Race
                 }
             }
 
+            int actualRank = 1;
+
             for (int rank = 0; rank < sortedIndices.Length; rank++)
             {
-                racers[sortedIndices[rank]].SetRacePosition(rank + 1);
+                RaceParticipant racer = racers[sortedIndices[rank]];
+
+                if (racer == null)
+                    continue;
+
+                racer.SetRacePosition(actualRank);
+                actualRank++;
             }
         }
 

@@ -1,5 +1,6 @@
 using Cinemachine;
 using PoseKart.Vehicle;
+using TMPro;
 using UnityEngine;
 
 namespace PoseKart.Race
@@ -11,6 +12,8 @@ namespace PoseKart.Race
     [RequireComponent(typeof(Rigidbody))]
     public sealed class HomingKartMissile : MonoBehaviour
     {
+        private float spawnGraceUntil;
+        private const float SpawnGracePeriod = 0.08f;
         private const float CollisionRadius = 0.4f;
         private const float ArrivalRadius = 1.15f;
 
@@ -56,6 +59,7 @@ namespace PoseKart.Race
         private void Awake()
         {
             body = GetComponent<Rigidbody>();
+            PlayPrefabVisualEffects();
         }
 
         private void OnEnable()
@@ -63,7 +67,97 @@ namespace PoseKart.Race
             if (!activeMissiles.Contains(this))
                 activeMissiles.Add(this);
         }
+        private void PlayPrefabVisualEffects()
+        {
+            ParticleSystem[] particles =
+                GetComponentsInChildren<ParticleSystem>(true);
 
+            foreach (ParticleSystem ps in particles)
+            {
+                if (ps == null)
+                    continue;
+
+                if (!ps.gameObject.activeSelf)
+                    ps.gameObject.SetActive(true);
+
+                ps.Play(true);
+            }
+
+            TrailRenderer[] trails =
+                GetComponentsInChildren<TrailRenderer>(true);
+
+            foreach (TrailRenderer trail in trails)
+            {
+                if (trail == null)
+                    continue;
+
+                trail.Clear();
+                trail.emitting = true;
+            }
+            Renderer[] renderers =
+    GetComponentsInChildren<Renderer>(true);
+
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer != null)
+                    renderer.enabled = true;
+            }
+        }
+        private void Start()
+        {
+            EnsureVisualEffectsPlaying();
+        }
+
+        private void EnsureVisualEffectsPlaying()
+        {
+            // Particle được gắn sẵn trong OFFICAL_ROCKET prefab.
+            ParticleSystem[] systems =
+                GetComponentsInChildren<ParticleSystem>(true);
+
+            for (int i = 0; i < systems.Length; i++)
+            {
+                ParticleSystem ps = systems[i];
+
+                if (ps == null ||
+                    !ps.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                if (!ps.isPlaying)
+                {
+                    ps.Play(true);
+                }
+            }
+
+            // Nếu prefab có TrailRenderer thì bật lại trên mọi peer.
+            TrailRenderer[] trails =
+                GetComponentsInChildren<TrailRenderer>(true);
+
+            for (int i = 0; i < trails.Length; i++)
+            {
+                TrailRenderer trail = trails[i];
+
+                if (trail == null)
+                    continue;
+
+                trail.Clear();
+                trail.emitting = true;
+            }
+
+            // Không có particle nào trong prefab
+            // -> tạo fallback flame cả trên Client.
+            if (systems.Length == 0 && exhaust == null)
+            {
+                exhaust = KartParticleEffect.Create(
+                    "Missile flame",
+                    transform,
+                    new Color(1f, 0.4f, 0.08f, 1f),
+                    0.35f,
+                    0.3f
+                );
+            }
+        }
         private void OnDisable()
         {
             activeMissiles.Remove(this);
@@ -98,6 +192,7 @@ namespace PoseKart.Race
             float fireRadius = 3f,
             bool damageRacersOnFire = true)
         {
+            spawnGraceUntil = Time.time + SpawnGracePeriod;
             owner = source;
             target = destination;
             born = Time.time;
@@ -133,19 +228,16 @@ namespace PoseKart.Race
             body.isKinematic = true;
             body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             body.interpolation = RigidbodyInterpolation.Interpolate;
-
-            if (exhaust == null)
-            {
-                exhaust = KartParticleEffect.Create(
-                    "Missile flame", transform,
-                    new Color(1f, 0.4f, 0.08f, 1f), 0.35f, 0.3f);
-            }
         }
 
         private void FixedUpdate()
         {
+            bool spawnGraceActive = Time.time < spawnGraceUntil;
             // Bỏ qua nếu chưa được cấu hình hoặc đã nổ
             if (!configured || spent)
+                return;
+
+            if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && !Unity.Netcode.NetworkManager.Singleton.IsServer)
                 return;
 
             // Chỉ huỷ nếu không có người bắn (chấp nhận target bị null)
@@ -169,7 +261,9 @@ namespace PoseKart.Race
             Vector3 desiredDirection = currentDirection;
 
             // NẾU CÓ MỤC TIÊU: Kích hoạt chế độ bám đuổi (Homing)
-            if (target != null && target.TargetBody != null && target.isActiveAndEnabled)
+            bool isTargetValid = target != null && target.TargetBody != null &&
+                (PoseKartNetworkItemBridge.IsOnlineRace ? target.gameObject.activeInHierarchy : target.isActiveAndEnabled);
+            if (isTargetValid)
             {
                 RaceParticipant participant = target.GetComponent<RaceParticipant>();
                 if (participant != null && participant.Finished)
@@ -180,7 +274,12 @@ namespace PoseKart.Race
                 {
                     Vector3 targetPosition = target.TargetBody.worldCenterOfMass;
                     Vector3 delta = targetPosition - from;
-
+                    if (!spawnGraceActive &&
+    delta.sqrMagnitude <= ArrivalRadius * ArrivalRadius)
+                    {
+                        Explode(targetPosition, target);
+                        return;
+                    }
                     if (delta.sqrMagnitude <= ArrivalRadius * ArrivalRadius)
                     {
                         Explode(targetPosition, target);
@@ -266,7 +365,7 @@ namespace PoseKart.Race
 
             if (exhaust != null)
                 exhaust.Emit(4);
-
+            
             // Quét nổ backup khi ở gần mục tiêu (chỉ quét nếu có target)
             if (target != null)
             {
@@ -333,6 +432,9 @@ namespace PoseKart.Race
         private void OnTriggerEnter(Collider other)
         {
             if (!configured || spent || other == null || other.transform.IsChildOf(transform))
+                return;
+
+            if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && !Unity.Netcode.NetworkManager.Singleton.IsServer)
                 return;
 
             CarController hitCar = ResolveCar(other);
@@ -402,6 +504,16 @@ namespace PoseKart.Race
             {
                 if (collider != null)
                     collider.enabled = false;
+            }
+
+            if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer)
+            {
+                var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+                if (netObj != null && netObj.IsSpawned)
+                {
+                    netObj.Despawn(true);
+                    return;
+                }
             }
 
             Destroy(gameObject);
@@ -478,10 +590,6 @@ namespace PoseKart.Race
             if (factor <= .001f)
                 return;
 
-            KartItemDefense defense = car.GetComponent<KartItemDefense>();
-            if (defense != null && defense.TryBlockMissileExplosion(point))
-                return;
-
             Vector3 horizontal = Vector3.ProjectOnPlane(bodyPoint - point, Vector3.up);
             if (horizontal.sqrMagnitude < .0001f)
                 horizontal = Vector3.ProjectOnPlane(car.transform.forward, Vector3.up);
@@ -491,6 +599,29 @@ namespace PoseKart.Race
 
             Vector3 deltaVelocity = horizontal * (maximumHorizontalKnockback * factor)
                                   + Vector3.up * (maximumUpwardKnockback * factor);
+
+            if (PoseKartNetworkItemBridge.IsOnlineRace)
+            {
+                var bridge = car.GetComponent<PoseKartNetworkItemBridge>();
+                if (bridge != null)
+                {
+                    bridge.ServerApplyMissileHit(point, deltaVelocity, impactTorqueStrength);
+                    return;
+                }
+            }
+
+            KartItemDefense defense = car.GetComponent<KartItemDefense>();
+            if (defense != null && defense.TryBlockMissileExplosion(point))
+                return;
+            if (horizontal.sqrMagnitude < .0001f)
+                horizontal = Vector3.ProjectOnPlane(car.transform.forward, Vector3.up);
+            if (horizontal.sqrMagnitude < .0001f)
+                horizontal = Vector3.right;
+            horizontal.Normalize();
+
+            deltaVelocity =
+    horizontal * (maximumHorizontalKnockback * factor)
+    + Vector3.up * (maximumUpwardKnockback * factor);
             car.ApplyMissileExplosionImpact(
                 deltaVelocity,
                 knockbackRecoveryDuration,
@@ -528,7 +659,9 @@ namespace PoseKart.Race
 
         private bool IsEligibleRacer(CarController car)
         {
-            if (car == null || car == owner || !car.isActiveAndEnabled || car.TargetBody == null)
+            bool isCarValid = car != null && car != owner && car.TargetBody != null &&
+                (PoseKartNetworkItemBridge.IsOnlineRace ? car.gameObject.activeInHierarchy : car.isActiveAndEnabled);
+            if (!isCarValid)
                 return false;
 
             RaceParticipant participant = car.GetComponent<RaceParticipant>();
@@ -548,6 +681,11 @@ namespace PoseKart.Race
 
         private void SpawnImpactExplosion(Vector3 point)
         {
+            Debug.Log(
+    $"[MISSILE VFX] Explosion prefab = " +
+    $"{(impactExplosionPrefab != null ? impactExplosionPrefab.name : "NULL")}",
+    this
+);
             if (impactExplosionPrefab == null)
             {
                 KartParticleEffect.Burst(point, new Color(1f, 0.35f, 0.05f, 1f), 52);

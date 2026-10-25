@@ -121,6 +121,10 @@ namespace PoseKart.Vehicle
         [SerializeField] private Vector3 centerOfMassOffset = new Vector3(0f, -0.45f, 0f);
         [SerializeField] private bool lockPitchAndRoll = true;
 
+        [Header("Low Step Assist")]
+        [Tooltip("AI thường không cần cơ chế tự nâng thân xe qua bậc thấp; tắt để tránh nhấp nhô khi cạ curb/mép đường.")]
+        [SerializeField] private bool enableLowStepAssistForAI = false;
+
         [Header("Arcade Air Control")]
         [Tooltip("Allows gentle player/input steering while the vehicle is airborne.")]
         [SerializeField] private bool enableAirControl = true;
@@ -890,7 +894,11 @@ namespace PoseKart.Vehicle
 
             if (!bananaStunned)
             {
-                AssistLowStep(support, throttle, brake);
+                bool aiControlled = inputProviderSource is PoseKart.AI.AIInputProvider;
+                if (!aiControlled || enableLowStepAssistForAI)
+                {
+                    AssistLowStep(support, throttle, brake);
+                }
                 ApplyDrive(throttle, brake, ForwardSpeed, controlEnabled);
             }
             else
@@ -900,8 +908,9 @@ namespace PoseKart.Vehicle
             }
 
             bool driftHeld =
-                (inputProviderSource is IKartGestureInput gestures && gestures.Drift)
-                || (inputProviderSource is PoseKart.AI.AIInputProvider ai && ai.Drift);
+    (inputProviderSource is IKartGestureInput gestures && gestures.Drift)
+    || (inputProviderSource is PoseKart.AI.AIInputProvider ai && ai.Drift)
+    || (inputProviderSource is PoseKart.Input.GamepadInputProvider gp && gp.Drift);
             bool nextDrift = controlEnabled && !bananaStunned && grounded && ForwardSpeed > 6f
                 && driftHeld && Mathf.Abs(smoothedSteering) > .15f && brake <= 0f;
             IsDrifting = nextDrift;
@@ -1442,7 +1451,9 @@ namespace PoseKart.Vehicle
                     currentName.StartsWith("Sand", StringComparison.OrdinalIgnoreCase) ||
                     currentName.StartsWith("Ramp", StringComparison.OrdinalIgnoreCase) ||
                     currentName.StartsWith("SmallJumpRamp", StringComparison.OrdinalIgnoreCase) ||
-                    currentName.StartsWith("BoostPad", StringComparison.OrdinalIgnoreCase))
+                    currentName.StartsWith("BoostPad", StringComparison.OrdinalIgnoreCase) ||
+                    currentName.IndexOf("Checker", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    currentName.IndexOf("Finish", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     return true;
                 }

@@ -487,7 +487,23 @@ namespace PoseKart
             bool fired = false;
 
             Transform vehicleTransform = car != null ? car.transform : transform;
+            bool onlineRace = PoseKartNetworkItemBridge.IsOnlineRace;
 
+            PoseKartNetworkItemBridge networkBridge = null;
+            Unity.Netcode.NetworkObject networkObject = null;
+            bool isLocalHumanOwner = false;
+
+            if (onlineRace && car != null)
+            {
+                networkBridge = car.GetComponent<PoseKartNetworkItemBridge>();
+                networkObject = car.GetComponent<Unity.Netcode.NetworkObject>();
+
+                isLocalHumanOwner =
+                    networkBridge != null &&
+                    networkObject != null &&
+                    networkObject.IsPlayerObject &&
+                    networkObject.IsOwner;
+            }
             while (!fired && waitTimer < autoFireTimeout)
             {
                 waitTimer += Time.deltaTime;
@@ -507,12 +523,47 @@ namespace PoseKart
                         Vector3 flatDir = Vector3.ProjectOnPlane(toTarget, vehicleTransform.up);
                         if (flatDir.sqrMagnitude > 0.01f)
                         {
-                            Quaternion targetWorldRot = Quaternion.LookRotation(flatDir.normalized, vehicleTransform.up);
-                            activeModel.transform.rotation = Quaternion.Slerp(
-                                activeModel.transform.rotation,
-                                targetWorldRot,
-                                Time.deltaTime * 12f
-                            );
+                            Transform activeMuzzle = GetActiveMuzzlePoint();
+
+                            Vector3 barrelDir;
+
+                            if (activeMuzzle != null)
+                            {
+                                // Hướng thực tế từ tâm turret tới đầu nòng.
+                                barrelDir =
+                                    activeMuzzle.position -
+                                    activeModel.transform.position;
+
+                                barrelDir =
+                                    Vector3.ProjectOnPlane(
+                                        barrelDir,
+                                        vehicleTransform.up
+                                    );
+                            }
+                            else
+                            {
+                                barrelDir = activeModel.transform.forward;
+                            }
+
+                            if (barrelDir.sqrMagnitude > 0.001f)
+                            {
+                                Quaternion correction =
+                                    Quaternion.FromToRotation(
+                                        barrelDir.normalized,
+                                        flatDir.normalized
+                                    );
+
+                                Quaternion targetWorldRot =
+                                    correction *
+                                    activeModel.transform.rotation;
+
+                                activeModel.transform.rotation =
+                                    Quaternion.Slerp(
+                                        activeModel.transform.rotation,
+                                        targetWorldRot,
+                                        Time.deltaTime * 12f
+                                    );
+                            }
                         }
                     }
                     else
@@ -528,12 +579,29 @@ namespace PoseKart
                 }
 
                 bool spacePressed = false;
-                if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
-                    spacePressed = true;
+
+                // Offline: giữ nguyên input cũ.
+                // Online: chỉ local HUMAN owner mới được đọc Space.
+                // Remote player và AI tuyệt đối không phản ứng với bàn phím máy này.
+                if (!onlineRace || isLocalHumanOwner)
+                {
+                    if (Keyboard.current != null &&
+                        Keyboard.current.spaceKey.wasPressedThisFrame)
+                    {
+                        spacePressed = true;
+                    }
+
 #if ENABLE_LEGACY_INPUT_MANAGER
-                if (!spacePressed && Input.GetKeyDown(KeyCode.Space))
-                    spacePressed = true;
+                    if (!spacePressed && Input.GetKeyDown(KeyCode.Space))
+                        spacePressed = true;
 #endif
+
+                    if (!spacePressed && UnityEngine.InputSystem.Gamepad.current != null &&
+                        UnityEngine.InputSystem.Gamepad.current.buttonWest.wasPressedThisFrame)
+                    {
+                        spacePressed = true;
+                    }
+                }
                 if (spacePressed)
                 {
                     fired = true;
@@ -544,15 +612,32 @@ namespace PoseKart
             }
 
             // ----------------------------------------------------
-            // 4. BẮN TÊN LỬA / INK RA KHỎI ĐẦU NÒNG MOZZLEPOINT
+            // 4. BẮN TÊN LỬA / INK
             // ----------------------------------------------------
-            FireProjectile();
-            PoseKart.Audio.AudioManager.PlayLauncherFire(transform.position);
-
-            // Dọn sạch slot item trên xe (hết skill)
-            if (inventory != null)
+            if (onlineRace)
             {
-                inventory.ClearHeldItem();
+                // Online:
+                // launcher chỉ là animation/visual.
+                // Local human owner gửi request, Server mới spawn projectile thật.
+                if (isLocalHumanOwner && networkBridge != null)
+                {
+                    networkBridge.RequestUseItem();
+                    PoseKart.Audio.AudioManager.PlayLauncherFire(transform.position);
+                }
+
+                // TUYỆT ĐỐI KHÔNG:
+                // FireProjectile();
+                // inventory.ClearHeldItem();
+            }
+            else
+            {
+                FireProjectile();
+                PoseKart.Audio.AudioManager.PlayLauncherFire(transform.position);
+
+                if (inventory != null)
+                {
+                    inventory.ClearHeldItem();
+                }
             }
 
             yield return new WaitForSeconds(0.15f);
@@ -589,6 +674,9 @@ namespace PoseKart
 
         private void FireProjectile()
         {
+            if (PoseKartNetworkItemBridge.IsOnlineRace)
+                return;
+
             // Nếu là Ink Shot thì phóng mực / cannon ball từ nòng MozzlePoint
             if (activeItemType == KartItemPickup.ItemType.InkShot)
             {
@@ -677,54 +765,111 @@ namespace PoseKart
                 inventory != null ? inventory.MissileTargetPrediction : 0.75f,
                 inventory != null ? inventory.MissileMaximumPredictionTime : 1.25f
             );
-
-            AudioManager.PlayMissileLaunch(spawnPos);
+            if (PoseKartNetworkItemBridge.IsOnlineRace)
+            {
+                Debug.LogWarning(
+                    "[KartLauncherSkill] Blocked legacy local projectile spawn during Online Race.",
+                    this
+                );
+                return;
+            }
+                AudioManager.PlayMissileLaunch(spawnPos);
         }
 
         private CarController FindClosestOpponentAhead()
         {
-            CarController[] allCars = FindObjectsByType<CarController>(FindObjectsSortMode.None);
+            CarController[] allCars =
+                FindObjectsByType<CarController>(
+                    FindObjectsSortMode.None
+                );
+
             CarController bestTarget = null;
-            float minDistance = float.MaxValue;
-            Transform vehicleTransform = car != null ? car.transform : transform;
+            float bestScore = float.PositiveInfinity;
+
+            if (car == null)
+                return null;
+
+            bool onlineRace =
+                PoseKartNetworkItemBridge.IsOnlineRace;
+
+            float range =
+                activeItemType == KartItemPickup.ItemType.InkShot
+                    ? (inventory != null ? inventory.InkTargetRange : 95f)
+                    : (inventory != null ? inventory.MissileTargetRange : 130f);
+
+            float angle =
+                activeItemType == KartItemPickup.ItemType.InkShot
+                    ? (inventory != null ? inventory.InkTargetAngle : 85f)
+                    : (inventory != null ? inventory.MissileTargetAngle : 110f);
+
+            float rangeSqr = range * range;
 
             for (int i = 0; i < allCars.Length; i++)
             {
                 CarController candidate = allCars[i];
-                if (candidate == null || candidate == car || !candidate.isActiveAndEnabled)
+
+                if (candidate == null ||
+                    candidate == car ||
+                    candidate.TargetBody == null)
+                {
+                    continue;
+                }
+
+                // Online remote replicas có thể disable CarController,
+                // nhưng GameObject vẫn là target hợp lệ.
+                if (onlineRace)
+                {
+                    if (!candidate.gameObject.activeInHierarchy)
+                        continue;
+                }
+                else
+                {
+                    if (!candidate.isActiveAndEnabled)
+                        continue;
+                }
+
+                RaceParticipant participant =
+                    candidate.GetComponent<RaceParticipant>();
+
+                if (participant != null && participant.Finished)
                     continue;
 
-                Vector3 dir = candidate.transform.position - vehicleTransform.position;
-                float forwardDot = Vector3.Dot(vehicleTransform.forward, dir.normalized);
+                Vector3 delta =
+                    candidate.TargetBody.worldCenterOfMass -
+                    car.TargetBody.worldCenterOfMass;
 
-                if (forwardDot > 0.15f)
+                delta.y = 0f;
+
+                float distanceSqr = delta.sqrMagnitude;
+
+                if (distanceSqr < 0.01f ||
+                    distanceSqr > rangeSqr)
                 {
-                    float dist = dir.sqrMagnitude;
-                    if (dist < minDistance)
-                    {
-                        minDistance = dist;
-                        bestTarget = candidate;
-                    }
+                    continue;
+                }
+
+                float candidateAngle =
+                    Vector3.Angle(
+                        car.transform.forward,
+                        delta
+                    );
+
+                if (candidateAngle > angle)
+                    continue;
+
+                float score =
+                    distanceSqr *
+                    (1f + candidateAngle / Mathf.Max(1f, angle));
+
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    bestTarget = candidate;
                 }
             }
 
-            if (bestTarget == null)
-            {
-                for (int i = 0; i < allCars.Length; i++)
-                {
-                    CarController candidate = allCars[i];
-                    if (candidate == null || candidate == car || !candidate.isActiveAndEnabled)
-                        continue;
-
-                    float dist = (candidate.transform.position - vehicleTransform.position).sqrMagnitude;
-                    if (dist < minDistance)
-                    {
-                        minDistance = dist;
-                        bestTarget = candidate;
-                    }
-                }
-            }
-
+            // QUAN TRỌNG:
+            // Không còn fallback chọn xe gần nhất phía sau.
             return bestTarget;
         }
     }

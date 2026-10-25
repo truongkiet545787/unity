@@ -137,17 +137,53 @@ namespace PoseKart.Race
 
         private void Awake()
         {
-            car = GetComponent<CarController>();
-            inventory = GetComponent<KartItemInventory>();
-            defense = GetComponent<KartItemDefense>();
-
             SetupHierarchy();
-            SubscribeEvents();
+            EnsureReferences();
+        }
+
+        private void OnEnable()
+        {
+            EnsureReferences();
         }
 
         private void OnDestroy()
         {
             UnsubscribeEvents();
+        }
+
+        public void EnsureReferences()
+        {
+            if (car == null) car = GetComponent<CarController>();
+
+            if (inventory == null)
+            {
+                inventory = GetComponent<KartItemInventory>();
+                if (inventory != null)
+                {
+                    inventory.ItemCollected -= OnItemCollected;
+                    inventory.ItemUsed -= OnItemUsed;
+                    inventory.ItemExpired -= OnItemExpired;
+
+                    inventory.ItemCollected += OnItemCollected;
+                    inventory.ItemUsed += OnItemUsed;
+                    inventory.ItemExpired += OnItemExpired;
+                }
+            }
+
+            if (defense == null)
+            {
+                defense = GetComponent<KartItemDefense>();
+                if (defense != null)
+                {
+                    defense.OnShieldActivated -= OnShieldActivated;
+                    defense.OnShieldBlocked -= OnShieldBlocked;
+                    defense.OnShieldDeactivated -= OnShieldDeactivated;
+
+                    defense.OnShieldActivated += OnShieldActivated;
+                    defense.OnShieldBlocked += OnShieldBlocked;
+                    defense.OnShieldDeactivated += OnShieldDeactivated;
+                }
+            }
         }
 
         private void Start()
@@ -170,6 +206,10 @@ namespace PoseKart.Race
         {
             if (inventory != null)
             {
+                inventory.ItemCollected -= OnItemCollected;
+                inventory.ItemUsed -= OnItemUsed;
+                inventory.ItemExpired -= OnItemExpired;
+
                 inventory.ItemCollected += OnItemCollected;
                 inventory.ItemUsed += OnItemUsed;
                 inventory.ItemExpired += OnItemExpired;
@@ -177,6 +217,10 @@ namespace PoseKart.Race
 
             if (defense != null)
             {
+                defense.OnShieldActivated -= OnShieldActivated;
+                defense.OnShieldBlocked -= OnShieldBlocked;
+                defense.OnShieldDeactivated -= OnShieldDeactivated;
+
                 defense.OnShieldActivated += OnShieldActivated;
                 defense.OnShieldBlocked += OnShieldBlocked;
                 defense.OnShieldDeactivated += OnShieldDeactivated;
@@ -342,24 +386,28 @@ namespace PoseKart.Race
 
         private void Update()
         {
-            // Reset / Control disabled safety cleanup
-            if (car != null && !car.ControlEnabled && currentState != ShieldVisualState.Hidden)
-            {
-                ResetVisualsImmediate();
-                return;
-            }
-
-            // Expiration warning pulse (Nhịp nháy cảnh báo sắp hết khiên)
-            if (currentState == ShieldVisualState.ShieldActive && isShieldActive && defense != null)
+            // Expiration warning pulse
+            if (currentState == ShieldVisualState.ShieldActive &&
+                isShieldActive &&
+                defense != null)
             {
                 float remaining = defense.ShieldTimeRemaining;
-                if (remaining <= expirationWarningTime && remaining > 0f)
+
+                if (remaining <= expirationWarningTime &&
+                    remaining > 0f)
                 {
                     float pulseSpeed = 16f;
-                    float pulse = 0.88f + Mathf.PingPong(Time.time * pulseSpeed, 0.12f);
+                    float pulse =
+                        0.88f +
+                        Mathf.PingPong(
+                            Time.time * pulseSpeed,
+                            0.12f
+                        );
+
                     if (forceShieldInstance != null)
                     {
-                        forceShieldInstance.transform.localScale = forceShieldTargetScale * pulse;
+                        forceShieldInstance.transform.localScale =
+                            forceShieldTargetScale * pulse;
                     }
                 }
             }
@@ -410,6 +458,11 @@ namespace PoseKart.Race
 
         private void OnShieldDeactivated(bool expired)
         {
+            Debug.LogWarning(
+    $"[SHIELD TRACE] VISUAL OnShieldDeactivated | " +
+    $"expired={expired} | state={currentState} | t={Time.time:F2}",
+    this
+);
             DeactivateForceShield(expired);
         }
 
@@ -419,6 +472,8 @@ namespace PoseKart.Race
 
         public void DeployGenerator()
         {
+            EnsureReferences();
+
             if (generatorInstance == null)
             {
                 SetupHierarchy();
@@ -544,6 +599,25 @@ namespace PoseKart.Race
 
         public void ActivateForceShield()
         {
+            EnsureReferences();
+
+            // =====================================================
+            // Chống double activation.
+            //
+            // KartItemDefense hiện có thể:
+            // 1. gọi ActivateForceShield() trực tiếp
+            // 2. sau đó phát OnShieldActivated
+            //    -> gọi ActivateForceShield() lần nữa.
+            //
+            // Không được restart animation lần hai.
+            // =====================================================
+            if (currentState == ShieldVisualState.Activating ||
+                currentState == ShieldVisualState.ShieldActive ||
+                isShieldActive)
+            {
+                return;
+            }
+
             if (forceShieldInstance == null)
             {
                 SetupHierarchy();
@@ -551,20 +625,54 @@ namespace PoseKart.Race
 
             if (forceShieldInstance == null)
             {
-                Debug.LogWarning($"[PoseKart Shield] Force Shield Prefab is unassigned on {name}. Gameplay will function normally using fallback protection.", this);
+                Debug.LogWarning(
+                    $"[PoseKart Shield] Force Shield Prefab is unassigned on {name}. " +
+                    "Gameplay will function normally using fallback protection.",
+                    this
+                );
+
                 return;
             }
 
-            if (activeShieldAnim != null)
-                StopCoroutine(activeShieldAnim);
+            // =====================================================
+            // Nếu người chơi bấm Shield khi generator vẫn đang mọc,
+            // stop deploy coroutine và snap generator về vị trí Equipped.
+            //
+            // Không cho DeployCoroutine và ShieldCoroutine cùng tranh
+            // currentState.
+            // =====================================================
+            if (activeGeneratorAnim != null)
+            {
+                StopCoroutine(activeGeneratorAnim);
+                activeGeneratorAnim = null;
+            }
 
-            activeShieldAnim = StartCoroutine(ActivateForceShieldCoroutine());
+            if (generatorInstance != null)
+            {
+                generatorInstance.SetActive(true);
+                generatorInstance.transform.localPosition =
+                    generatorRestingLocalPos;
+
+                generatorInstance.transform.localScale =
+                    generatorTargetScale;
+
+                isGeneratorEquipped = true;
+            }
+
+            if (activeShieldAnim != null)
+            {
+                StopCoroutine(activeShieldAnim);
+                activeShieldAnim = null;
+            }
+
+            activeShieldAnim =
+                StartCoroutine(ActivateForceShieldCoroutine());
         }
 
         private IEnumerator ActivateForceShieldCoroutine()
         {
             currentState = ShieldVisualState.Activating;
-
+            isShieldActive = true;
             // Generator Activation animation / pulse
             if (generatorAnimator != null && !string.IsNullOrEmpty(animatorActivateTrigger))
             {
@@ -598,13 +706,17 @@ namespace PoseKart.Race
 
             // Expand Force Shield
             RecalculateShieldScale();
-            forceShieldInstance.SetActive(true);
-            forceShieldInstance.transform.localScale = Vector3.zero;
-
             PoseKartShieldVisualAnimator anim = forceShieldInstance.GetComponent<PoseKartShieldVisualAnimator>();
             if (anim != null)
             {
                 anim.SetBaseScale(forceShieldTargetScale);
+            }
+
+            forceShieldInstance.SetActive(true);
+            forceShieldInstance.transform.localScale = Vector3.zero;
+
+            if (anim != null)
+            {
                 anim.BeginFadeIn();
             }
 
@@ -740,6 +852,10 @@ namespace PoseKart.Race
 
             // Retract Generator
             yield return RetractGeneratorCoroutine();
+
+            currentState = ShieldVisualState.Hidden;
+            isShieldActive = false;
+            activeShieldAnim = null;
         }
 
         public void ResetVisualsImmediate()
@@ -747,7 +863,9 @@ namespace PoseKart.Race
             if (activeGeneratorAnim != null) StopCoroutine(activeGeneratorAnim);
             if (activeShieldAnim != null) StopCoroutine(activeShieldAnim);
             if (activeImpactAnim != null) StopCoroutine(activeImpactAnim);
-
+            activeGeneratorAnim = null;
+            activeShieldAnim = null;
+            activeImpactAnim = null;
             if (shieldAudioSource != null && shieldAudioSource.isPlaying)
             {
                 shieldAudioSource.Stop();

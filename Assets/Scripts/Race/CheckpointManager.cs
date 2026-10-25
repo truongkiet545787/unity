@@ -88,6 +88,15 @@ namespace PoseKart.Race
             if (racer != null)
             {
                 CheckpointProgressResult racerResult = racer.LapTracker.RegisterCheckpoint(index);
+                Debug.Log(
+    $"[Checkpoint] " +
+    $"{racer.RacerName} | " +
+    $"CP={index} | " +
+    $"Result={racerResult} | " +
+    $"Lap={racer.LapTracker.CurrentLap}/{racer.LapTracker.TotalLaps} | " +
+    $"Next={racer.LapTracker.ExpectedCheckpoint}",
+    racer
+);
                 if (racerResult == CheckpointProgressResult.RaceCompleted)
                 {
                     raceManager.NotifyParticipantFinished(racer);
@@ -117,19 +126,22 @@ namespace PoseKart.Race
         private bool HasConfiguredRacers()
         {
             if (racers == null || racers.Length == 0)
-            {
                 return false;
-            }
+
+            bool foundRacer = false;
 
             foreach (RaceParticipant racer in racers)
             {
-                if (racer == null || !racer.IsConfigured)
-                {
+                if (racer == null)
+                    continue;
+
+                if (!racer.IsConfigured)
                     return false;
-                }
+
+                foundRacer = true;
             }
 
-            return true;
+            return foundRacer;
         }
 
         private RaceParticipant FindPlayer()
