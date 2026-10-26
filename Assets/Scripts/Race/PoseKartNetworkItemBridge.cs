@@ -25,6 +25,19 @@ namespace PoseKart.Race
         private KartItemInventory inventory;
         private KartItemDefense defense;
         private RaceParticipant participant;
+        private bool useRequestPending;
+        private float useRequestPendingSince;
+        private uint nextUseRequestId;
+        private uint pendingUseRequestId;
+        private bool pickupRequestPending;
+        private int pickupRequestPendingIndex = -1;
+        private float pickupRequestPendingSince;
+
+        private const float RequestRetryDelay = 1.5f;
+
+        public bool UseRequestPending =>
+            useRequestPending &&
+            Time.unscaledTime - useRequestPendingSince < RequestRetryDelay;
 
         // ============================================================
         // SHIELD NETWORK STATE
@@ -165,6 +178,9 @@ namespace PoseKart.Race
             if (!IsOnlineRace)
                 return;
 
+            if (participant != null && participant.Finished)
+                return;
+
             // Remote clone không được tự request pickup.
             if (!IsOwner && !IsServer)
                 return;
@@ -175,6 +191,16 @@ namespace PoseKart.Race
             }
             else
             {
+                if (pickupRequestPending &&
+                    pickupRequestPendingIndex == pickupIndex &&
+                    Time.unscaledTime - pickupRequestPendingSince < RequestRetryDelay)
+                {
+                    return;
+                }
+
+                pickupRequestPending = true;
+                pickupRequestPendingIndex = pickupIndex;
+                pickupRequestPendingSince = Time.unscaledTime;
                 RequestPickupServerRpc(pickupIndex);
             }
         }
@@ -222,6 +248,12 @@ namespace PoseKart.Race
             if (inventory == null)
                 inventory = GetComponent<KartItemInventory>();
 
+            if (participant == null)
+                participant = GetComponent<RaceParticipant>();
+
+            if (participant != null && participant.Finished)
+                return;
+
             // Không nhặt item mới khi đang giữ item.
             if (inventory != null && inventory.HasItem)
                 return;
@@ -244,19 +276,20 @@ namespace PoseKart.Race
                 return;
             }
 
-            float respawnTime = pickup.RespawnSeconds;
-
-            // Server quyết định box đã bị ăn.
-            pickup.ServerSetCollected();
-
             // Server roll item duy nhất.
             KartItemPickup.ItemType rolledItem =
                 pickup.RollAuthoritativeItem();
 
-            if (inventory != null)
+            if (inventory == null ||
+                !inventory.TryCollect(rolledItem))
             {
-                inventory.TryCollect(rolledItem);
+                return;
             }
+
+            float respawnTime = pickup.RespawnSeconds;
+
+            // Chỉ consume gift sau khi inventory đã nhận item thành công.
+            pickup.ServerSetCollected();
 
             // Remote HUMAN Client cần nhận inventory/HUD.
             // AI không cần ClientRpc này.
@@ -295,6 +328,9 @@ namespace PoseKart.Race
             int pickupIndex,
             float respawnDuration)
         {
+            pickupRequestPending = false;
+            pickupRequestPendingIndex = -1;
+
             IReadOnlyList<KartItemPickup> pickups =
                 KartItemPickup.AllPickups;
 
@@ -325,27 +361,81 @@ namespace PoseKart.Race
         /// Client:
         /// gửi RPC lên Host.
         /// </summary>
-        public void RequestUseItem()
+        public bool RequestUseItem()
         {
             if (!IsOnlineRace)
-                return;
+                return false;
 
             // Chỉ owner của human player được request.
             if (!IsOwner)
-                return;
+                return false;
+
+            if (participant == null)
+                participant = GetComponent<RaceParticipant>();
+
+            if (participant != null && participant.Finished)
+                return false;
+
+            if (car == null)
+                car = GetComponent<CarController>();
+
+            // Quyền lái được giữ ở owner. Kiểm tra control trên chính owner
+            // trước khi gửi RPC để không cho dùng item trước GO / sau Finish.
+            if (car == null || !car.ControlEnabled)
+                return false;
+
+            if (inventory == null)
+                inventory = GetComponent<KartItemInventory>();
+
+            if (inventory == null || !inventory.HasItem)
+                return false;
+
+            if (useRequestPending &&
+                Time.unscaledTime - useRequestPendingSince < RequestRetryDelay)
+            {
+                return false;
+            }
+
+            useRequestPending = true;
+            useRequestPendingSince = Time.unscaledTime;
+            pendingUseRequestId = ++nextUseRequestId;
+            if (pendingUseRequestId == 0)
+                pendingUseRequestId = ++nextUseRequestId;
+
+            PoseKart.KartLauncherSkill launcher =
+                GetComponent<PoseKart.KartLauncherSkill>() ??
+                GetComponentInChildren<PoseKart.KartLauncherSkill>(true);
+            Vector3 itemSpawnPosition = default;
+            Quaternion itemSpawnRotation = Quaternion.identity;
+            bool hasItemSpawnPose = launcher != null &&
+                launcher.TryGetActiveNetworkShotPose(
+                    out itemSpawnPosition,
+                    out itemSpawnRotation);
 
             if (IsServer)
             {
-                ServerExecuteUseItem();
+                ServerExecuteUseItem(
+                    requestId: pendingUseRequestId
+                );
             }
             else
             {
-                RequestUseItemServerRpc();
+                RequestUseItemServerRpc(
+                    itemSpawnPosition,
+                    itemSpawnRotation,
+                    hasItemSpawnPose,
+                    pendingUseRequestId);
             }
+
+            return true;
         }
 
         [Rpc(SendTo.Server)]
         private void RequestUseItemServerRpc(
+            Vector3 itemSpawnPosition,
+            Quaternion itemSpawnRotation,
+            bool hasItemSpawnPose,
+            uint requestId,
             RpcParams rpcParams = default)
         {
             if (rpcParams.Receive.SenderClientId != OwnerClientId)
@@ -360,13 +450,40 @@ namespace PoseKart.Race
                 return;
             }
 
-            ServerExecuteUseItem();
+            ServerExecuteUseItem(
+                itemSpawnPosition,
+                itemSpawnRotation,
+                hasItemSpawnPose,
+                requestId);
+        }
+
+        private void SendItemActivationFailed(
+            KartItemPickup.ItemType item,
+            uint requestId)
+        {
+            if (IsRemoteHumanPlayer())
+            {
+                NotifyItemActivationFailedClientRpc(
+                    (int)item,
+                    requestId
+                );
+            }
+            else if (IsOwner && inventory != null)
+            {
+                inventory.NotifyActivationFailedDirect(item);
+                useRequestPending = false;
+                pendingUseRequestId = 0;
+            }
         }
 
         /// <summary>
         /// SERVER là nơi duy nhất Activate item của human online.
         /// </summary>
-        private void ServerExecuteUseItem()
+        private void ServerExecuteUseItem(
+            Vector3 itemSpawnPosition = default,
+            Quaternion itemSpawnRotation = default,
+            bool hasItemSpawnPose = false,
+            uint requestId = 0)
         {
             if (!IsServer)
                 return;
@@ -377,11 +494,29 @@ namespace PoseKart.Race
             if (car == null)
                 car = GetComponent<CarController>();
 
+            if (participant == null)
+                participant = GetComponent<RaceParticipant>();
+
+            // Remote human dùng owner-authoritative control/physics, vì vậy
+            // CarController trên Server proxy luôn có thể bị ControlEnabled=false.
+            // Sender của RPC đã được xác thực bằng OwnerClientId ở trên.
+            bool remoteHumanServerProxy =
+                IsRemoteHumanPlayer();
+
             if (inventory == null ||
                 !inventory.HasItem ||
                 car == null ||
-                !car.ControlEnabled)
+                (participant != null && participant.Finished) ||
+                (!car.ControlEnabled && !remoteHumanServerProxy))
             {
+                if (inventory != null && inventory.HasItem)
+                {
+                    SendItemActivationFailed(
+                        inventory.CurrentItem,
+                        requestId
+                    );
+                }
+
                 return;
             }
 
@@ -392,7 +527,10 @@ namespace PoseKart.Race
                 KartItemPickup.Activate(
                     car,
                     heldItem,
-                    inventory
+                    inventory,
+                    itemSpawnPosition,
+                    itemSpawnRotation,
+                    hasItemSpawnPose
                 );
             if (heldItem == KartItemPickup.ItemType.HomingMissile ||
     heldItem == KartItemPickup.ItemType.InkShot)
@@ -411,19 +549,10 @@ namespace PoseKart.Race
             // Missile / Ink có thể fail nếu Server không tìm thấy target.
             if (!activated)
             {
-                if (IsRemoteHumanPlayer())
-                {
-                    NotifyItemActivationFailedClientRpc(
-                        (int)heldItem
-                    );
-                }
-                else if (IsOwner)
-                {
-                    // Host local player.
-                    inventory.NotifyActivationFailedDirect(
-                        heldItem
-                    );
-                }
+                SendItemActivationFailed(
+                    heldItem,
+                    requestId
+                );
 
                 return;
             }
@@ -431,13 +560,17 @@ namespace PoseKart.Race
             // Server inventory là authoritative.
             inventory.ConsumeHeldCharge();
 
+            if (IsOwner)
+                useRequestPending = false;
+
             // Đồng bộ HUD/inventory về remote owner.
             if (IsRemoteHumanPlayer())
             {
                 ConfirmUseItemClientRpc(
                     inventory.ItemCharges,
                     inventory.HasItem,
-                    (int)heldItem
+                    (int)heldItem,
+                    requestId
                 );
             }
         }
@@ -446,10 +579,17 @@ namespace PoseKart.Race
         private void ConfirmUseItemClientRpc(
             int remainingCharges,
             bool stillHasItem,
-            int itemTypeInt)
+            int itemTypeInt,
+            uint requestId)
         {
             if (IsServer)
                 return;
+
+            if (!useRequestPending ||
+                pendingUseRequestId != requestId)
+            {
+                return;
+            }
 
             if (inventory == null)
                 inventory = GetComponent<KartItemInventory>();
@@ -462,14 +602,24 @@ namespace PoseKart.Race
                     (KartItemPickup.ItemType)itemTypeInt
                 );
             }
+
+            useRequestPending = false;
+            pendingUseRequestId = 0;
         }
 
         [Rpc(SendTo.Owner)]
         private void NotifyItemActivationFailedClientRpc(
-            int itemTypeInt)
+            int itemTypeInt,
+            uint requestId)
         {
             if (IsServer)
                 return;
+
+            if (!useRequestPending ||
+                pendingUseRequestId != requestId)
+            {
+                return;
+            }
 
             if (inventory == null)
                 inventory = GetComponent<KartItemInventory>();
@@ -480,6 +630,9 @@ namespace PoseKart.Race
                     (KartItemPickup.ItemType)itemTypeInt
                 );
             }
+
+            useRequestPending = false;
+            pendingUseRequestId = 0;
         }
 
         // ============================================================
@@ -574,6 +727,24 @@ namespace PoseKart.Race
         // ============================================================
 
         /// <summary>
+        /// Sends exactly one presentation event for one authoritative Missile
+        /// explosion. This is intentionally owned by a persistent kart bridge,
+        /// not by the projectile that is about to be despawned.
+        /// </summary>
+        public void ServerBroadcastMissileExplosionVfx(
+            Vector3 point,
+            float lifetime)
+        {
+            if (!IsServer || !IsSpawned)
+                return;
+
+            SyncMissileExplosionVfxRpc(
+                point,
+                Mathf.Max(0.25f, lifetime)
+            );
+        }
+
+        /// <summary>
         /// Server gọi khi missile trúng racer.
         ///
         /// Remote Human:
@@ -589,7 +760,22 @@ namespace PoseKart.Race
         {
             if (!IsServer)
                 return;
+            if (car == null)
+                car = GetComponent<CarController>();
 
+            Rigidbody hitBody = car != null ? car.TargetBody : null;
+
+            Debug.LogWarning(
+                $"[MISSILE HIT CHECK] " +
+                $"victim={name} | " +
+                $"isOwner={IsOwner} | " +
+                $"isHuman={NetworkObject.IsPlayerObject} | " +
+                $"shield={IsNetworkShieldActive} | " +
+                $"hasBody={hitBody != null} | " +
+                $"kinematic={(hitBody != null && hitBody.isKinematic)} | " +
+                $"shockwave={(car != null && car.IsShockwaveActive)}",
+                this
+            );
             if (ServerTryBlockItem(point))
                 return;
 
@@ -611,7 +797,6 @@ namespace PoseKart.Race
                 );
             }
 
-            SyncMissileExplosionVfxRpc(point);
         }
 
         private void ExecuteLocalMissileImpact(
@@ -678,13 +863,9 @@ namespace PoseKart.Race
 
         [Rpc(SendTo.ClientsAndHost)]
         private void SyncMissileExplosionVfxRpc(
-    Vector3 point)
+            Vector3 point,
+            float lifetime)
         {
-            // Server đã tự tạo Explosion prefab trong
-            // HomingKartMissile.Explode(), tránh nổ hai lần.
-            if (IsServer)
-                return;
-
             if (inventory == null)
                 inventory = GetComponent<KartItemInventory>();
 
@@ -704,13 +885,23 @@ namespace PoseKart.Race
 
                 if (effect != null)
                 {
+                    if (!effect.activeSelf)
+                        effect.SetActive(true);
+
+                    foreach (Renderer renderer in
+                             effect.GetComponentsInChildren<Renderer>(true))
+                    {
+                        if (renderer != null)
+                            renderer.enabled = true;
+                    }
+
                     ParticleSystem[] systems =
                         effect.GetComponentsInChildren<ParticleSystem>(true);
 
-                    float cleanup =
-                        inventory != null
-                            ? inventory.MissileImpactExplosionLifetime
-                            : 4f;
+                    float cleanup = Mathf.Max(
+                        0.25f,
+                        lifetime
+                    );
 
                     foreach (ParticleSystem ps in systems)
                     {
@@ -756,9 +947,15 @@ namespace PoseKart.Race
                 );
             }
 
-            PoseKart.Audio.AudioManager.PlayMissileImpact(
-                point
-            );
+            // HomingKartMissile already plays the authoritative Host sound.
+            // Remote peers play their local copy here, avoiding a Host double
+            // playback while keeping the event audible on every Client.
+            if (!IsServer)
+            {
+                PoseKart.Audio.AudioManager.PlayMissileImpact(
+                    point
+                );
+            }
 
             if (IsOwner && IsHumanNetworkPlayer())
             {

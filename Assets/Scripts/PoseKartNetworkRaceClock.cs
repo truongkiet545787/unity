@@ -21,12 +21,23 @@ namespace PoseKart.Multiplayer
                     NetworkVariableWritePermission.Server
                 );
 
+        private readonly NetworkVariable<bool>
+            raceStartAborted =
+                new NetworkVariable<bool>(
+                    false,
+                    NetworkVariableReadPermission.Everyone,
+                    NetworkVariableWritePermission.Server
+                );
+
 
         public bool HasGoTime =>
             goServerTime.Value > 0d;
 
         public double GoServerTime =>
             goServerTime.Value;
+
+        public bool RaceStartAborted =>
+            raceStartAborted.Value;
 
 
         public double ServerNow
@@ -74,7 +85,8 @@ namespace PoseKart.Multiplayer
             if (!IsServer)
                 return;
 
-            if (goServerTime.Value > 0d)
+            if (goServerTime.Value > 0d ||
+                raceStartAborted.Value)
                 return;
 
             secondsUntilGo =
@@ -90,6 +102,23 @@ namespace PoseKart.Multiplayer
             Debug.Log(
                 $"[RaceClock] GO scheduled | " +
                 $"ServerTime={goServerTime.Value:0.000}",
+                this
+            );
+        }
+
+        public void AbortRaceStart(string reason)
+        {
+            if (!IsServer ||
+                goServerTime.Value > 0d ||
+                raceStartAborted.Value)
+            {
+                return;
+            }
+
+            raceStartAborted.Value = true;
+
+            Debug.LogError(
+                $"[RaceClock] RACE START ABORTED | {reason}",
                 this
             );
         }

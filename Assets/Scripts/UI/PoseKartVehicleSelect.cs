@@ -9,11 +9,15 @@ namespace PoseKart.UI
     public sealed class PoseKartVehicleSelect : MonoBehaviour
     {
 
-        private const string RaceScene = "PoseKart_ReferenceIsland";
+        private const string DefaultTargetScene = "PoseKart_OnlineLobby";
+
+        [Header("Scene Transition")]
+        [SerializeField] private string targetScene = DefaultTargetScene;
 
         [Header("Preview")]
         [SerializeField] private PoseKartVehiclePaint preview;
-
+        [Header("Default Panels")]
+        [SerializeField] private GameObject controlGuidePanel;
         [Header("Labels")]
         [SerializeField] private Text vehicleName;
         [SerializeField] private Text colorName;
@@ -63,11 +67,10 @@ namespace PoseKart.UI
         {
             started = true;
 
-            selectedVehicle = PlayerPrefs.GetInt(
-                PoseKartVehiclePaint.VehiclePreferenceKey, 0);
-
-            selectedColor = PlayerPrefs.GetInt(
-                PoseKartVehiclePaint.ColorPreferenceKey, 0);
+            // The current game instance owns its own selection. PlayerPrefs is
+            // used only if the player has not chosen a vehicle this run.
+            PoseKartLocalVehicleSelection.Get(
+                out selectedVehicle, out selectedColor);
 
             TryInitialize();
         }
@@ -121,7 +124,12 @@ namespace PoseKart.UI
             }
 
             Refresh();
+            // Khi vừa vào scene, hiển thị preview xe và ẩn bảng hướng dẫn.
+            if (preview != null)
+                preview.gameObject.SetActive(true);
 
+            if (controlGuidePanel != null)
+                controlGuidePanel.SetActive(false);
             // Khi vào màn chọn xe bằng tay cầm,
             // tự focus vào nút đổi xe bên phải.
             if (EventSystem.current != null &&
@@ -200,17 +208,25 @@ namespace PoseKart.UI
             if (raceLoading)
                 return;
 
-            if (!Application.CanStreamedLevelBeLoaded(RaceScene))
+            string sceneToLoad = string.IsNullOrEmpty(targetScene) ? DefaultTargetScene : targetScene;
+
+            if (!Application.CanStreamedLevelBeLoaded(sceneToLoad))
             {
                 if (vehicleName != null)
                     vehicleName.text =
-                        "Reference Island is not in Build Settings";
+                        sceneToLoad + " is not in Build Settings";
 
                 return;
             }
 
             raceLoading = true;
 
+            // Commit BEFORE scene load. A shared PlayerPrefs store in multiple
+            // editor players must not overwrite this running player's choice.
+            PoseKartLocalVehicleSelection.Choose(selectedVehicle, selectedColor);
+            Debug.Log($"[VehicleSelect] LOCAL CHOICE committed: vehicle={selectedVehicle}, color={selectedColor}", this);
+
+            // Remember for next game launch (not the live online sync source).
             PlayerPrefs.SetInt(
                 PoseKartVehiclePaint.VehiclePreferenceKey,
                 selectedVehicle);
@@ -221,7 +237,18 @@ namespace PoseKart.UI
 
             PlayerPrefs.Save();
 
-            SceneManager.LoadScene(RaceScene);
+            if (Unity.Netcode.NetworkManager.Singleton != null &&
+                Unity.Netcode.NetworkManager.Singleton.IsListening &&
+                Unity.Netcode.NetworkManager.Singleton.IsServer)
+            {
+                Unity.Netcode.NetworkManager.Singleton.SceneManager.LoadScene(
+                    sceneToLoad,
+                    LoadSceneMode.Single);
+            }
+            else
+            {
+                SceneManager.LoadScene(sceneToLoad);
+            }
         }
 
         private void UnbindButtons()

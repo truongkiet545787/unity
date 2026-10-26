@@ -124259,8 +124259,8 @@ MonoBehaviour:
   shockwaveHighlight: {r: 1, g: 0.82, b: 1, a: 1}
   idleStart: {r: 0.95, g: 0.65, b: 0.05, a: 1}
   idleEnd: {r: 1, g: 0.85, b: 0.12, a: 1}
-  redSectionStart: {r: 0.92, g: 0.12, b: 0.08, a: 1}
-  redSectionEnd: {r: 1, g: 0.28, b: 0.14, a: 1}
+  redSectionStart: {r: 0.08, g: 0.82, b: 1, a: 1}
+  redSectionEnd: {r: 0.35, g: 1, b: 1, a: 1}
 --- !u!222 &300181853
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -168641,28 +168641,28 @@ MonoBehaviour:
   zoomSmoothing: 4.5
   positionSmoothing: 14
   rotationSmoothing: 12
-  showDarkBackground: 0
-  backgroundColor: {r: 1, g: 1, b: 1, a: 0.15294118}
-  borderColor: {r: 0.16167314, g: 0.6742519, b: 0.98490566, a: 0.14117648}
+  showDarkBackground: 1
+  backgroundColor: {r: 1, g: 0.84339625, b: 0.84339625, a: 0.16078432}
+  borderColor: {r: 0.3942684, g: 0.44256976, b: 0.4716981, a: 0.5411765}
   borderOuterGlowColor: {r: 0.05, g: 0.4, b: 0.65, a: 0.45}
-  circularBorderWidth: 4
+  circularBorderWidth: 4.73
   showCompassCardinals: 1
-  cardinalMarkColor: {r: 0.85, g: 0.95, b: 1, a: 0.8}
-  roadOutlineColor: {r: 0, g: 0, b: 0, a: 0.11372549}
-  mainRoadColor: {r: 1, g: 1, b: 1, a: 0.11372549}
-  sideRoadColor: {r: 0.7348607, g: 0.7735849, b: 0.3546813, a: 0.15294118}
+  cardinalMarkColor: {r: 1, g: 1, b: 1, a: 0.7764706}
+  roadOutlineColor: {r: 0, g: 0, b: 0, a: 0.6117647}
+  mainRoadColor: {r: 1, g: 1, b: 1, a: 0.58431375}
+  sideRoadColor: {r: 0.7348607, g: 0.7735849, b: 0.3546813, a: 0.48235294}
   playerColor: {r: 0, g: 1, b: 0.9529412, a: 0.64705884}
-  markerOutlineColor: {r: 0.015, g: 0.035, b: 0.07, a: 0.16862746}
+  markerOutlineColor: {r: 0.015, g: 0.035, b: 0.07, a: 0.44313726}
   aiColors:
   - {r: 0, g: 1, b: 0.12989902, a: 1}
   - {r: 1, g: 0.3, b: 0.35, a: 1}
   - {r: 1, g: 0.9043241, b: 0, a: 1}
-  padding: 11.7
-  mainRoadWidth: 10
-  sideRoadWidth: 6.74
-  aiMarkerRadius: 7
-  playerMarkerSize: 13
-  mapZoom: 0.985
+  padding: 8.3
+  mainRoadWidth: 13
+  sideRoadWidth: 8
+  aiMarkerRadius: 8.5
+  playerMarkerSize: 15
+  mapZoom: 0.6
   showFinishLine: 1
   showSecondaryRoads: 1
   cullingDistanceMultiplier: 1.75
@@ -188065,6 +188065,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &414637473
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -188097,7 +188098,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55
@@ -188111,7 +188112,7 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
   perfectTimingStartSeconds: 0.35
   perfectTimingEndSeconds: 0.58
@@ -188124,12 +188125,12 @@ MonoBehaviour:
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 414637477}
   inputProviderSource: {fileID: 414637475}
@@ -188138,7 +188139,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -225257,6 +225258,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &502858977
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -225289,7 +225291,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55
@@ -225303,7 +225305,7 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
   perfectTimingStartSeconds: 0.35
   perfectTimingEndSeconds: 0.58
@@ -225316,12 +225318,12 @@ MonoBehaviour:
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 502858980}
   inputProviderSource: {fileID: 502858979}
@@ -225330,7 +225332,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -250844,7 +250846,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Multiplayer.PoseKartOnlineRaceRestart
   ShowTopMostFoldoutHeaderGroup: 1
   raceManager: {fileID: 600730432}
-  raceSceneName: PoseKart_ReferenceIsland
+  lobbySceneName: PoseKart_OnlineLobby
 --- !u!1 &532648635
 GameObject:
   m_ObjectHideFlags: 0
@@ -311835,8 +311837,8 @@ MonoBehaviour:
   shockwaveHighlight: {r: 1, g: 0.82, b: 1, a: 1}
   idleStart: {r: 0.95, g: 0.65, b: 0.05, a: 1}
   idleEnd: {r: 1, g: 0.85, b: 0.12, a: 1}
-  redSectionStart: {r: 0.92, g: 0.12, b: 0.08, a: 1}
-  redSectionEnd: {r: 1, g: 0.28, b: 0.14, a: 1}
+  redSectionStart: {r: 0.08, g: 0.82, b: 1, a: 1}
+  redSectionEnd: {r: 0.35, g: 1, b: 1, a: 1}
 --- !u!1 &684419548
 GameObject:
   m_ObjectHideFlags: 0
@@ -409453,6 +409455,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &871218560
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -409485,7 +409488,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55
@@ -409499,7 +409502,7 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
   perfectTimingStartSeconds: 0.35
   perfectTimingEndSeconds: 0.58
@@ -409512,12 +409515,12 @@ MonoBehaviour:
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 871218564}
   inputProviderSource: {fileID: 871218562}
@@ -409526,7 +409529,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -454413,7 +454416,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.UI.NitroMeterBinder
   raceManager: {fileID: 600730432}
-  playerCar: {fileID: 871218561}
+  playerCar: {fileID: 0}
   anchoredPosition: {x: 0, y: -42}
   size: {x: 640, y: 56}
   showPercentage: 0
@@ -528358,6 +528361,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &1209756282
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -528390,7 +528394,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55
@@ -528404,7 +528408,7 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
   perfectTimingStartSeconds: 0.35
   perfectTimingEndSeconds: 0.58
@@ -528417,12 +528421,12 @@ MonoBehaviour:
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 1209756286}
   inputProviderSource: {fileID: 1209756284}
@@ -528431,7 +528435,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -566741,7 +566745,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55
@@ -566755,7 +566759,7 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
   perfectTimingStartSeconds: 0.35
   perfectTimingEndSeconds: 0.58
@@ -566768,12 +566772,12 @@ MonoBehaviour:
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 1294341834}
   inputProviderSource: {fileID: 2100000019}
@@ -566782,7 +566786,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -566938,6 +566942,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &1294341837
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -603806,6 +603811,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &1379539786
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -603838,7 +603844,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55
@@ -603852,7 +603858,7 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
   perfectTimingStartSeconds: 0.35
   perfectTimingEndSeconds: 0.58
@@ -603865,12 +603871,12 @@ MonoBehaviour:
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 1379539790}
   inputProviderSource: {fileID: 1379539788}
@@ -603879,7 +603885,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -699543,7 +699549,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55
@@ -699557,7 +699563,7 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
   perfectTimingStartSeconds: 0.35
   perfectTimingEndSeconds: 0.58
@@ -699570,12 +699576,12 @@ MonoBehaviour:
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 1626331770}
   inputProviderSource: {fileID: 1626331769}
@@ -699584,7 +699590,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -699740,6 +699746,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &1626331773
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -779679,7 +779686,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1806204477}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0cd44c1031e13a943bb63640046fad76, type: 3}
   m_Name: 
@@ -779712,7 +779719,7 @@ Canvas:
   m_OverrideSorting: 0
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
-  m_VertexColorAlwaysGammaSpace: 0
+  m_VertexColorAlwaysGammaSpace: 1
   m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -839409,7 +839416,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55
@@ -839423,7 +839430,7 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
   perfectTimingStartSeconds: 0.35
   perfectTimingEndSeconds: 0.58
@@ -839436,12 +839443,12 @@ MonoBehaviour:
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 1889706914}
   inputProviderSource: {fileID: 1889706913}
@@ -839450,7 +839457,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -839606,6 +839613,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &1889706917
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -952591,10 +952599,12 @@ MonoBehaviour:
   labelFont: {fileID: 11400000, guid: 9ccf6dd94d8df4d20bc623da3d4643f0, type: 2}
   raceManager: {fileID: 600730432}
   targetCamera: {fileID: 1633993465}
-  labelHeight: 3
-  labelScale: 3
-  visibilityDistance: 75
-  fadeDistance: 50
+  labelHeight: 2
+  labelScale: 6
+  labelScaleMultiplier: 0.55
+  labelFontSize: 8
+  visibilityDistance: 80
+  fadeDistance: 65
   firstPlaceColor: {r: 1, g: 0.8445153, b: 0, a: 1}
   secondPlaceColor: {r: 0.6377357, g: 0.6377357, b: 0.6377357, a: 1}
   thirdPlaceColor: {r: 0.735849, g: 0.47475633, b: 0.08746881, a: 1}

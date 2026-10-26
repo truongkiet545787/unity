@@ -133,10 +133,8 @@ namespace PoseKart.UI
             nextReferenceRetryAt = Time.unscaledTime + 1f;
             if (raceManager == null)
                 raceManager = FindFirstObjectByType<RaceManager>();
-            if (playerCar == null && raceManager != null)
-                playerCar = raceManager.PlayerController;
-            if (playerCar == null)
-                playerCar = GetComponentInParent<CarController>();
+            if (!PoseKartLocalPlayerResolver.IsLocalHuman(playerCar))
+                playerCar = PoseKartLocalPlayerResolver.FindLocalCar(raceManager);
         }
 
         private float ReadForwardVisualSpeedKmh()

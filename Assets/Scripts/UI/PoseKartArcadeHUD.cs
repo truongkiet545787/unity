@@ -249,16 +249,27 @@ namespace PoseKart.UI
         private void EnsureReferences()
         {
             if (raceManager == null) raceManager = FindFirstObjectByType<RaceManager>();
-            if (playerCar == null && raceManager != null) playerCar = raceManager.PlayerController;
-            if (playerInventory == null && playerCar != null)
+            CarController resolvedCar = PoseKartLocalPlayerResolver.FindLocalCar(raceManager);
+            if (playerCar != resolvedCar)
+            {
+                UnsubscribeInventory();
+                playerCar = resolvedCar;
+                playerInventory = playerCar != null
+                    ? playerCar.GetComponent<KartItemInventory>()
+                    : null;
+                poseTracker = playerCar != null
+                    ? playerCar.GetComponent<PoseKart.Input.LocalPoseTracker>()
+                    : null;
+            }
+            else if (playerInventory == null && playerCar != null)
+            {
                 playerInventory = playerCar.GetComponent<KartItemInventory>();
+            }
             // Re-subscribe after OnDisable/OnEnable, even if the inventory reference survived.
             if (playerInventory != null && !inventorySubscribed)
                 SubscribeInventory();
             if (raceManager != null && !raceManagerSubscribed)
                 SubscribeRaceManager();
-            if (poseTracker == null && playerCar != null)
-                poseTracker = playerCar.GetComponent<PoseKart.Input.LocalPoseTracker>();
             EnsurePauseButton();
         }
 
@@ -273,8 +284,9 @@ namespace PoseKart.UI
 
         private void UnsubscribeRaceManager()
         {
-            if (!raceManagerSubscribed || raceManager == null) return;
-            raceManager.CountdownTickEvent -= HandleCountdownTick;
+            if (!raceManagerSubscribed) return;
+            if (raceManager != null)
+                raceManager.CountdownTickEvent -= HandleCountdownTick;
             raceManagerSubscribed = false;
         }
 
@@ -302,11 +314,14 @@ namespace PoseKart.UI
 
         private void UnsubscribeInventory()
         {
-            if (!inventorySubscribed || playerInventory == null) return;
-            playerInventory.ItemCollected -= HandleItemCollected;
-            playerInventory.ItemUsed -= HandleItemUsed;
-            playerInventory.ItemActivationFailed -= HandleItemActivationFailed;
-            playerInventory.ItemExpired -= HandleItemExpired;
+            if (!inventorySubscribed) return;
+            if (playerInventory != null)
+            {
+                playerInventory.ItemCollected -= HandleItemCollected;
+                playerInventory.ItemUsed -= HandleItemUsed;
+                playerInventory.ItemActivationFailed -= HandleItemActivationFailed;
+                playerInventory.ItemExpired -= HandleItemExpired;
+            }
             inventorySubscribed = false;
         }
 
@@ -359,7 +374,23 @@ namespace PoseKart.UI
                 SetActiveIfFound("Lap", false);
                 SetActiveIfFound("Time", false);
                 SetActiveIfFound("RaceStatus", false);
-                SetActiveIfFound("NitroMeterUI", false);
+                // Keep the dedicated meter visible when it exists. Only hide
+                // the legacy meter when the arcade HUD is actually responsible
+                // for drawing the Nitro bar, otherwise an enabled ArcadeHUD
+                // would blank the single valid Nitro HUD.
+                Transform dedicatedNitroMeter = transform.Find("NitroMeterUI");
+                if (UseDedicatedNitroMeter())
+                {
+                    // A previous HUD pass could have persisted this object as
+                    // inactive. Re-enable the existing dedicated meter; do
+                    // not create another one or replace its layout.
+                    if (dedicatedNitroMeter != null)
+                        dedicatedNitroMeter.gameObject.SetActive(true);
+                }
+                else
+                {
+                    SetActiveIfFound("NitroMeterUI", false);
+                }
                 if (hideLegacySpeedometer) SetActiveIfFound("SpeedometerUI", false);
 
                 RectTransform root = GetOrCreateArcadeRoot();
@@ -791,8 +822,9 @@ namespace PoseKart.UI
             }
 
             // Reveal the actual reward only when roulette ends.
-            heldItemName.text = item == KartItemPickup.ItemType.HomingMissile
-                ? $"{ItemDisplayName(item)} x{playerInventory.ItemCharges}"
+            int charges = playerInventory.ItemCharges;
+            heldItemName.text = charges > 1
+                ? $"{ItemDisplayName(item)} x{charges}"
                 : ItemDisplayName(item);
             heldItemIcon.sprite = ItemIcon(item);
 

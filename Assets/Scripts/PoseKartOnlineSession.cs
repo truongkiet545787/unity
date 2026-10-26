@@ -7,7 +7,7 @@ using Unity.Services.Core;
 using Unity.Services.Multiplayer;
 using UnityEngine;
 using System.Threading.Tasks;
-
+using UnityEngine.SceneManagement;
 namespace PoseKart.Multiplayer
 {
     [DisallowMultipleComponent]
@@ -53,8 +53,14 @@ namespace PoseKart.Multiplayer
 
         private ISession currentSession;
 
+        private bool localLeaveInProgress;
+        private bool localCloseInProgress;
+        private bool remoteCloseHandled;
+        private bool networkDisconnectSubscribed;
+
         public event Action SessionChanged;
         public event Action<string> StatusChanged;
+        public event Action SessionClosed;
 
         public bool Initialized => initialized;
         public bool InSession => inSession;
@@ -119,8 +125,38 @@ namespace PoseKart.Multiplayer
             Instance = this;
 
             DontDestroyOnLoad(gameObject);
+            SceneManager.activeSceneChanged += HandleReadyResetSceneChange;
         }
+        private async void HandleReadyResetSceneChange(
+    Scene previousScene,
+    Scene nextScene)
+        {
+            // Chỉ reset khi từ Race quay lại Lobby.
+            if (previousScene.name != "PoseKart_ReferenceIsland" ||
+                nextScene.name != "PoseKart_OnlineLobby")
+            {
+                return;
+            }
 
+            // Chỉ Session singleton thật được xử lý.
+            if (Instance != this ||
+                !inSession ||
+                currentSession == null)
+            {
+                return;
+            }
+
+            Debug.Log(
+                "[PoseKartOnline] Returning to Lobby -> Reset local Ready"
+            );
+
+            // Mỗi Host/Client tự reset Ready của chính mình.
+            await SetReadyAsync(false);
+
+            Debug.Log(
+                "[PoseKartOnline] Local Ready reset completed."
+            );
+        }
 
         private async void Start()
         {
@@ -826,6 +862,9 @@ namespace PoseKart.Multiplayer
             if (currentSession == null)
                 return;
 
+            remoteCloseHandled = false;
+            BindNetworkDisconnectCallback();
+
 
             currentSession.PlayerJoined -=
                 HandlePlayerJoined;
@@ -867,6 +906,12 @@ namespace PoseKart.Multiplayer
 
             currentSession.RemovedFromSession +=
                 HandleRemovedFromSession;
+
+            currentSession.Deleted -=
+                HandleSessionDeleted;
+
+            currentSession.Deleted +=
+                HandleSessionDeleted;
         }
 
 
@@ -892,6 +937,102 @@ namespace PoseKart.Multiplayer
 
             currentSession.RemovedFromSession -=
                 HandleRemovedFromSession;
+
+            currentSession.Deleted -=
+                HandleSessionDeleted;
+        }
+
+        private void BindNetworkDisconnectCallback()
+        {
+            NetworkManager network =
+                NetworkManager.Singleton;
+
+            if (network == null ||
+                networkDisconnectSubscribed)
+            {
+                return;
+            }
+
+            network.OnClientDisconnectCallback -=
+                HandleNetworkClientDisconnect;
+
+            network.OnClientDisconnectCallback +=
+                HandleNetworkClientDisconnect;
+
+            networkDisconnectSubscribed = true;
+        }
+
+        private void UnbindNetworkDisconnectCallback()
+        {
+            if (!networkDisconnectSubscribed)
+                return;
+
+            NetworkManager network =
+                NetworkManager.Singleton;
+
+            if (network != null)
+            {
+                network.OnClientDisconnectCallback -=
+                    HandleNetworkClientDisconnect;
+            }
+
+            networkDisconnectSubscribed = false;
+        }
+
+        private void HandleSessionDeleted()
+        {
+            if (localLeaveInProgress ||
+                localCloseInProgress ||
+                remoteCloseHandled)
+            {
+                return;
+            }
+
+            remoteCloseHandled = true;
+            _ = CleanupRemoteSessionClosureAsync(
+                "HOST CLOSED ROOM"
+            );
+        }
+
+        private void HandleNetworkClientDisconnect(
+            ulong clientId)
+        {
+            NetworkManager network =
+                NetworkManager.Singleton;
+
+            if (network == null ||
+                network.IsServer ||
+                clientId != network.LocalClientId ||
+                currentSession == null ||
+                localLeaveInProgress ||
+                localCloseInProgress ||
+                remoteCloseHandled)
+            {
+                return;
+            }
+
+            remoteCloseHandled = true;
+            _ = CleanupRemoteSessionClosureAsync(
+                "NETWORK DISCONNECTED"
+            );
+        }
+
+        private async Task CleanupRemoteSessionClosureAsync(
+            string reason)
+        {
+            if (currentSession == null)
+                return;
+
+            UnbindSessionEvents();
+            currentSession = null;
+
+            await ShutdownNetworkManagerAsync();
+
+            UnbindNetworkDisconnectCallback();
+            ResetSessionState();
+
+            StatusChanged?.Invoke(reason);
+            SessionClosed?.Invoke();
         }
 
 
@@ -948,13 +1089,15 @@ namespace PoseKart.Multiplayer
 
         private void HandleRemovedFromSession()
         {
-            Debug.LogWarning(
-                "[PoseKartOnline] Removed from session."
-            );
+            if (localLeaveInProgress ||
+                localCloseInProgress ||
+                remoteCloseHandled)
+            {
+                return;
+            }
 
-            ResetSessionState();
-
-            StatusChanged?.Invoke(
+            remoteCloseHandled = true;
+            _ = CleanupRemoteSessionClosureAsync(
                 "REMOVED FROM ROOM"
             );
         }
@@ -979,17 +1122,29 @@ namespace PoseKart.Multiplayer
             SessionChanged?.Invoke();
         }
 
+        public void RefreshAfterSceneLoad()
+        {
+            RefreshRuntimeState();
+        }
+
 
         // =====================================================
         // LEAVE
         // =====================================================
 
-        public async Task LeaveRoomAsync()
+        public async Task<bool> LeaveRoomAsync()
         {
+            localLeaveInProgress = true;
+
             if (currentSession == null)
             {
+                bool networkStopped =
+                    await ShutdownClientNetworkAsync();
+
+                UnbindNetworkDisconnectCallback();
                 ResetSessionState();
-                return;
+                localLeaveInProgress = false;
+                return networkStopped;
             }
 
             ISession leavingSession =
@@ -999,20 +1154,149 @@ namespace PoseKart.Multiplayer
 
             currentSession = null;
 
+            bool sessionLeft = true;
+
             try
             {
                 await leavingSession.LeaveAsync();
             }
             catch (Exception exception)
             {
+                sessionLeft = false;
                 Debug.LogException(exception);
             }
 
+            bool networkStoppedAfterLeave =
+                await ShutdownClientNetworkAsync();
+
+            UnbindNetworkDisconnectCallback();
             ResetSessionState();
 
             StatusChanged?.Invoke(
                 "LEFT ROOM"
             );
+
+            localLeaveInProgress = false;
+            return sessionLeft && networkStoppedAfterLeave;
+        }
+
+        public async Task<bool> CloseRoomAsync()
+        {
+            if (localCloseInProgress)
+                return false;
+
+            localCloseInProgress = true;
+
+            if (currentSession == null)
+            {
+                bool networkStopped =
+                    await ShutdownNetworkManagerAsync();
+
+                UnbindNetworkDisconnectCallback();
+                ResetSessionState();
+                localCloseInProgress = false;
+                return networkStopped;
+            }
+
+            if (!currentSession.IsHost)
+            {
+                localCloseInProgress = false;
+                return false;
+            }
+
+            ISession closingSession =
+                currentSession;
+
+            UnbindSessionEvents();
+            currentSession = null;
+
+            bool sessionDeleted = true;
+
+            try
+            {
+                await closingSession
+                    .AsHost()
+                    .DeleteAsync();
+            }
+            catch (Exception exception)
+            {
+                sessionDeleted = false;
+                Debug.LogException(exception);
+            }
+
+            bool networkStoppedAfterDelete =
+                await ShutdownNetworkManagerAsync();
+
+            UnbindNetworkDisconnectCallback();
+            ResetSessionState();
+
+            StatusChanged?.Invoke(
+                sessionDeleted
+                    ? "ROOM CLOSED"
+                    : "ROOM CLOSE FAILED"
+            );
+
+            SessionClosed?.Invoke();
+            localCloseInProgress = false;
+
+            return sessionDeleted &&
+                   networkStoppedAfterDelete;
+        }
+
+        private async Task<bool> ShutdownNetworkManagerAsync()
+        {
+            NetworkManager network =
+                NetworkManager.Singleton;
+
+            if (network == null)
+            {
+                return true;
+            }
+
+            if (network.IsListening ||
+                network.ShutdownInProgress)
+            {
+                network.Shutdown();
+            }
+
+            float deadline =
+                Time.realtimeSinceStartup + 5f;
+
+            while ((network.IsListening ||
+                    network.ShutdownInProgress) &&
+                   Time.realtimeSinceStartup < deadline)
+            {
+                await Task.Yield();
+            }
+
+            bool stopped =
+                !network.IsListening &&
+                !network.ShutdownInProgress;
+
+            if (!stopped)
+            {
+                Debug.LogError(
+                    "[PoseKartOnline] NGO shutdown timed out.",
+                    this
+                );
+            }
+
+            return stopped;
+        }
+
+        private async Task<bool> ShutdownClientNetworkAsync()
+        {
+            NetworkManager network =
+                NetworkManager.Singleton;
+
+            if (network == null ||
+                !network.IsClient ||
+                network.IsServer)
+            {
+                return true;
+            }
+
+            return await ShutdownNetworkManagerAsync();
         }
 
 
@@ -1035,8 +1319,13 @@ namespace PoseKart.Multiplayer
 
         private async void OnDestroy()
         {
-            if (Instance == this)
-                Instance = null;
+            SceneManager.activeSceneChanged -= HandleReadyResetSceneChange;
+            UnbindNetworkDisconnectCallback();
+
+            if (Instance != this)
+                return;
+
+            Instance = null;
 
             if (currentSession != null)
                 await LeaveRoomAsync();

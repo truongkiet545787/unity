@@ -15,8 +15,8 @@ namespace PoseKart.Multiplayer
         private RaceManager raceManager;
 
         [SerializeField]
-        private string raceSceneName =
-            "PoseKart_ReferenceIsland";
+        private string lobbySceneName =
+            "PoseKart_OnlineLobby";
 
 
         private bool restartRequested;
@@ -50,29 +50,31 @@ namespace PoseKart.Multiplayer
                 !nm.IsListening)
             {
                 SceneManager.LoadScene(
-                    raceSceneName
+                    SceneManager.GetActiveScene().name
                 );
 
                 return;
             }
 
 
-            // Host tự request.
-            if (IsServer)
+            // Only the Host may return the whole room to the Lobby.
+            if (!IsServer)
             {
-                restartRequested = true;
-
-                Debug.Log(
-                    "[OnlineRestart] HOST requested replay.",
+                Debug.LogWarning(
+                    "[OnlineRestart] Client cannot activate Play Again. " +
+                    "Only the Host may return the room to Lobby.",
                     this
                 );
 
                 return;
             }
 
+            restartRequested = true;
 
-            // Client gửi request lên Host.
-            RequestRestartRpc();
+            Debug.Log(
+                "[OnlineRestart] HOST requested return to Lobby.",
+                this
+            );
         }
 
 
@@ -87,11 +89,9 @@ namespace PoseKart.Multiplayer
         private void RequestRestartRpc(
             RpcParams rpcParams = default)
         {
-            restartRequested = true;
-
             Debug.Log(
-                $"[OnlineRestart] Replay requested " +
-                $"by Client " +
+                $"[OnlineRestart] Ignored client Play Again request " +
+                $"from Client " +
                 $"{rpcParams.Receive.SenderClientId}",
                 this
             );
@@ -110,12 +110,6 @@ namespace PoseKart.Multiplayer
             {
                 return;
             }
-
-
-            // Không restart khi những xe khác
-            // vẫn chưa finish.
-            if (!AllRacersFinished())
-                return;
 
 
             StartNetworkReplay();
@@ -181,7 +175,7 @@ namespace PoseKart.Multiplayer
 
             SceneEventProgressStatus result =
                 nm.SceneManager.LoadScene(
-                    raceSceneName,
+                    lobbySceneName,
                     LoadSceneMode.Single
                 );
 
@@ -191,7 +185,7 @@ namespace PoseKart.Multiplayer
             {
                 Debug.LogError(
                     $"[OnlineRestart] " +
-                    $"Replay scene load failed: {result}",
+                    $"Lobby scene load failed: {result}",
                     this
                 );
 
@@ -204,7 +198,7 @@ namespace PoseKart.Multiplayer
 
             Debug.Log(
                 "[OnlineRestart] " +
-                "Reloading race for ALL players.",
+                "Returning ALL players to the existing Lobby session.",
                 this
             );
         }

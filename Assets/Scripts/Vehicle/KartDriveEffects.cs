@@ -36,7 +36,7 @@ namespace PoseKart.Vehicle
                     }
                 }
             }
-            if (car.IsNitroBoosting && Time.time >= nextFlame)
+            if (car.IsVisualNitroBoosting && Time.time >= nextFlame)
             {
                 nextFlame = Time.time + .018f;
                 var emission = new ParticleSystem.EmitParams { position = transform.position - transform.forward * 1.25f + transform.up * .35f, velocity = -transform.forward * 14f + car.TargetBody.linearVelocity * .15f };

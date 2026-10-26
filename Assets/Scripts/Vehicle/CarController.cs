@@ -1,7 +1,9 @@
 using System;
 using PoseKart.Input;
 using PoseKart.Race;
+using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace PoseKart.Vehicle
 {
@@ -11,7 +13,7 @@ namespace PoseKart.Vehicle
     {
         [Header("Nitro Charging")]
         [SerializeField, Min(0.1f)] private float maxNitroCharge = 2.5f;
-        [SerializeField, Min(0f)] private float minimumNitroToStart = 0.7f;
+        [SerializeField, Min(0f)] private float minimumNitroToStart = 0.08f;
         [SerializeField, Min(0f)] private float driftNitroPerSecond = 0.4f;
         [SerializeField, Min(0f)] private float airNitroPerSecond = 0.25f;
         [Tooltip("A short road bump must not count as Air Time.")]
@@ -38,7 +40,8 @@ namespace PoseKart.Vehicle
         [Header("Nitro Modes / Fuel Drain (charge per second)")]
         [SerializeField, Min(0f)] private float singleNitroDrain = 0.28f;
         [SerializeField, Min(0f)] private float doubleNitroDrain = 0.42f;
-        [SerializeField, Min(0f)] private float tripleNitroDrain = 0.60f;
+        [FormerlySerializedAs("tripleNitroDrain")]
+        [SerializeField, Min(0f)] private float shockwaveNitroDrain = 0.60f;
         [SerializeField, Min(0f)] private float perfectNitroDrain = 0.32f;
 
         [Header("Nitro Perfect Timing (seconds after first press)")]
@@ -57,12 +60,14 @@ namespace PoseKart.Vehicle
         [Header("Nitro Acceleration")]
         [SerializeField, Min(1f)] private float singleNitroAccelerationMultiplier = 1.35f;
         [SerializeField, Min(1f)] private float doubleNitroAccelerationMultiplier = 1.55f;
-        [SerializeField, Min(1f)] private float tripleNitroAccelerationMultiplier = 1.9f;
+        [FormerlySerializedAs("tripleNitroAccelerationMultiplier")]
+        [SerializeField, Min(1f)] private float shockwaveNitroAccelerationMultiplier = 1.9f;
         [SerializeField, Min(1f)] private float perfectNitroAccelerationMultiplier = 1.7f;
         [SerializeField, Min(0f)] private float nitroAirAcceleration = 3f;
         [SerializeField, Min(0f)] private float singleNitroImpulse = 3f;
         [SerializeField, Min(0f)] private float doubleNitroImpulse = 4f;
-        [SerializeField, Min(0f)] private float tripleNitroImpulse = 6f;
+        [FormerlySerializedAs("tripleNitroImpulse")]
+        [SerializeField, Min(0f)] private float shockwaveNitroImpulse = 6f;
         [SerializeField, Min(0f)] private float perfectNitroImpulse = 4.5f;
 
         private bool nitroWasGrounded;
@@ -83,7 +88,8 @@ namespace PoseKart.Vehicle
         [SerializeField, Min(1f)] private float itemBoostMaxSpeedKmh = 130f;
         [SerializeField, Min(1f)] private float singleNitroMaxSpeedKmh = 105f;
         [SerializeField, Min(1f)] private float doubleNitroMaxSpeedKmh = 115f;
-        [SerializeField, Min(1f)] private float tripleNitroMaxSpeedKmh = 130f;
+        [FormerlySerializedAs("tripleNitroMaxSpeedKmh")]
+        [SerializeField, Min(1f)] private float shockwaveNitroMaxSpeedKmh = 130f;
         [SerializeField, Min(1f)] private float perfectNitroMaxSpeedKmh = 125f;
         [Tooltip("How quickly the allowed speed falls after a boost ends, in m/s per second.")]
         [SerializeField, Min(0.1f)] private float boostSpeedLimitRelease = 11f;
@@ -245,6 +251,9 @@ namespace PoseKart.Vehicle
         private float airLateralOffset;
         private float driftCharge;
         private float storedNitro;
+        private bool remoteNitroPresentationActive;
+        private float remoteNitroFill01;
+        private NitroMode remoteNitroMode;
 
         public enum NitroMode
         {
@@ -263,6 +272,12 @@ namespace PoseKart.Vehicle
         public float NitroFill01 => Mathf.Clamp01(storedNitro / MaxNitroChargeAmount);
         public bool NitroReady => storedNitro >= minimumNitroToStart && storedNitro > 0f;
         public bool IsNitroBoosting => CurrentNitroMode != NitroMode.None;
+        public NitroMode VisualNitroMode =>
+            remoteNitroPresentationActive ? remoteNitroMode : CurrentNitroMode;
+        public bool IsVisualNitroBoosting =>
+            remoteNitroPresentationActive || IsNitroBoosting;
+        public float VisualNitroFill01 =>
+            remoteNitroPresentationActive ? remoteNitroFill01 : NitroFill01;
         public bool IsBananaStunned => Time.time < bananaStunUntil;
         public bool IsLandingRecovering => Time.time < landingRecoveryUntil;
         public bool IsPadBoosting => Time.time < padBoostUntil;
@@ -317,7 +332,7 @@ namespace PoseKart.Vehicle
                 {
                     case NitroMode.Single: return singleNitroMaxSpeedKmh / 3.6f;
                     case NitroMode.Double: return doubleNitroMaxSpeedKmh / 3.6f;
-                    case NitroMode.Shockwave: return tripleNitroMaxSpeedKmh / 3.6f;
+                    case NitroMode.Shockwave: return shockwaveNitroMaxSpeedKmh / 3.6f;
                     case NitroMode.Perfect: return perfectNitroMaxSpeedKmh / 3.6f;
                     default: return maxForwardSpeed;
                 }
@@ -371,7 +386,7 @@ namespace PoseKart.Vehicle
                 {
                     case NitroMode.Single: return Mathf.Max(multiplier, singleNitroAccelerationMultiplier);
                     case NitroMode.Double: return Mathf.Max(multiplier, doubleNitroAccelerationMultiplier);
-                    case NitroMode.Shockwave: return Mathf.Max(multiplier, tripleNitroAccelerationMultiplier);
+                    case NitroMode.Shockwave: return Mathf.Max(multiplier, shockwaveNitroAccelerationMultiplier);
                     case NitroMode.Perfect: return Mathf.Max(multiplier, perfectNitroAccelerationMultiplier);
                     default: return multiplier;
                 }
@@ -391,6 +406,14 @@ namespace PoseKart.Vehicle
             if (NitroBrakeHeld && IsNitroBoosting) StopNitro();
             // Chỉ xe của Player mới được nhận input phím E từ bàn phím!
             if (inputProviderSource is PoseKart.AI.AIInputProvider) return;
+
+            NetworkObject networkObject = GetComponent<NetworkObject>();
+            if (networkObject != null && networkObject.IsSpawned)
+            {
+                if (!networkObject.IsPlayerObject || !networkObject.IsOwner)
+                    return;
+            }
+
             var racer = GetComponent<PoseKart.Race.RaceParticipant>();
             if (racer != null && !racer.IsPlayer) return;
 
@@ -443,7 +466,7 @@ namespace PoseKart.Vehicle
                 if (IsShockwaveTimingNow)
                 {
                     CurrentNitroMode = NitroMode.Shockwave;
-                    ApplyNitroImpulse(tripleNitroImpulse);
+                    ApplyNitroImpulse(shockwaveNitroImpulse);
                 }
                 else if (IsPerfectTimingNow)
                 {
@@ -497,7 +520,7 @@ namespace PoseKart.Vehicle
             {
                 case NitroMode.Single: drain = singleNitroDrain; break;
                 case NitroMode.Double: drain = doubleNitroDrain; break;
-                case NitroMode.Shockwave: drain = tripleNitroDrain; break;
+                case NitroMode.Shockwave: drain = shockwaveNitroDrain; break;
                 case NitroMode.Perfect: drain = perfectNitroDrain; break;
             }
             storedNitro = Mathf.Max(0f, storedNitro - drain * Time.fixedDeltaTime);
@@ -524,6 +547,25 @@ namespace PoseKart.Vehicle
             CurrentNitroMode = NitroMode.None;
             nitroStartedAt = float.NegativeInfinity;
             nextNitroPressTime = float.NegativeInfinity;
+        }
+
+        /// <summary>
+        /// Applies Nitro state received for a non-owner network clone.
+        /// This is presentation-only: it never changes the clone's fuel,
+        /// control authority, Rigidbody, or gameplay Nitro mode.
+        /// </summary>
+        public void ApplyRemoteNitroPresentation(float fill01, NitroMode mode)
+        {
+            remoteNitroFill01 = Mathf.Clamp01(fill01);
+            remoteNitroMode = mode;
+            remoteNitroPresentationActive = mode != NitroMode.None;
+        }
+
+        public void ClearRemoteNitroPresentation()
+        {
+            remoteNitroPresentationActive = false;
+            remoteNitroFill01 = 0f;
+            remoteNitroMode = NitroMode.None;
         }
 
         // Kept for existing item scripts. This is NOT Nitro fuel or Nitro mode.

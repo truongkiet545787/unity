@@ -343,7 +343,7 @@ namespace PoseKart.Vehicle
             throttle = inputProvider == null ? 0f : Mathf.Clamp01(inputProvider.Throttle);
             float brake = inputProvider == null ? 0f : Mathf.Clamp01(inputProvider.Brake);
             bool grounded = car == null || car.IsGrounded;
-            bool boost = car != null && car.IsNitroBoosting;
+            bool boost = car != null && car.IsVisualNitroBoosting;
             gameplayNitroActive = boost;
             nitroActive = gameplayNitroActive;
 
@@ -372,7 +372,7 @@ namespace PoseKart.Vehicle
             nitroLoopVolume = nitroLoopSource == null ? 0f : nitroLoopSource.volume;
             audioNitroActive = gameplayNitroActive && nitroLoopIsPlaying && nitroLoopVolume > 0.001f;
             UpdateTireSkid(grounded, brake, smoothedDeceleration, dt);
-            CarController.NitroMode currentNitroMode = car != null ? car.CurrentNitroMode : CarController.NitroMode.None;
+            CarController.NitroMode currentNitroMode = car != null ? car.VisualNitroMode : CarController.NitroMode.None;
             if (boost)
             {
                 if (currentNitroMode != lastPlayedNitroMode)

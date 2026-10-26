@@ -35314,6 +35314,7 @@ GameObject:
   - component: {fileID: 2769073425143304838}
   - component: {fileID: 821026477101575600}
   - component: {fileID: 6958926586864205336}
+  - component: {fileID: 118690327116383047}
   m_Layer: 0
   m_Name: PoseKart_NetworkPlayer
   m_TagString: Untagged
@@ -35459,7 +35460,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55
@@ -35612,6 +35613,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &1044110919678935902
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -35835,9 +35837,9 @@ MonoBehaviour:
   missilePrefab: {fileID: 6891914729606440152, guid: 7fd6b00a993ab564089ff487807c5969, type: 3}
   boostDuration: 1.3
   boostImpulse: 8
-  missileTargetRange: 80
-  missileTargetAngle: 70
-  missileSpeed: 67
+  missileTargetRange: 150
+  missileTargetAngle: 100
+  missileSpeed: 65
   missileTrackingStrength: 13
   missileTargetPrediction: 0.85
   missileMaximumPredictionTime: 1.25
@@ -35882,10 +35884,10 @@ MonoBehaviour:
   missileGroundFireRadius: 4
   missileGroundFireAffectsRacers: 1
   inkProjectilePrefab: {fileID: 963016054784489402, guid: 432462a12b17de641879b506cc77bdcb, type: 3}
-  inkTargetRange: 95
-  inkTargetAngle: 85
-  inkProjectileSpeed: 68
-  inkProjectileLifetime: 3.5
+  inkTargetRange: 120
+  inkTargetAngle: 95
+  inkProjectileSpeed: 65
+  inkProjectileLifetime: 4
   inkBlindDuration: 3
   inkAISteeringWobble: 0.28
   inkAIThrottleMultiplier: 0.86
@@ -36761,6 +36763,19 @@ MonoBehaviour:
   UseRigidBodyForMotion: 0
   AutoUpdateKinematicState: 1
   AutoSetKinematicOnDespawn: 1
+--- !u!114 &118690327116383047
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3790319936265005916}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fad3508fbf7eed14f9816a56e5a9802b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Multiplayer.PoseKartNetworkVehicleSelection
+  ShowTopMostFoldoutHeaderGroup: 1
 --- !u!1 &3833289558088156123
 GameObject:
   m_ObjectHideFlags: 0

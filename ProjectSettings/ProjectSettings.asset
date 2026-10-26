@@ -950,11 +950,11 @@ PlayerSettings:
   captureStartupLogs: {}
   activeInputHandler: 1
   windowsGamepadBackendHint: 0
-  cloudProjectId: 3e401da6-0b22-4d45-a10a-613fd33ebb6d
+  cloudProjectId: 069c0169-2654-49cb-bc88-3a4613c2e61c
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
-  projectName: car tracking
-  organizationId: truongkiet545787
+  projectName: Another project
+  organizationId: johncena123579
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}

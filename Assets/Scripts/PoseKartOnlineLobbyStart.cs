@@ -33,11 +33,65 @@ namespace PoseKart.Multiplayer
 
 
         private bool startingRace;
+        private PoseKartOnlineSession subscribedOnline;
 
 
         private void Start()
         {
             ResolveReferences();
+            BindRuntimeReferences();
+            online?.RefreshAfterSceneLoad();
+            Refresh();
+        }
+
+        private void OnEnable()
+        {
+            ResolveReferences();
+            BindRuntimeReferences();
+            online?.RefreshAfterSceneLoad();
+            Refresh();
+        }
+
+
+        private void OnDestroy()
+        {
+            if (subscribedOnline != null)
+            {
+                subscribedOnline.SessionChanged -= Refresh;
+                subscribedOnline.StatusChanged -= SetStatus;
+            }
+
+            if (startRaceButton != null)
+            {
+                startRaceButton.onClick.RemoveListener(StartRace);
+            }
+        }
+
+
+        private void ResolveReferences()
+        {
+            PoseKartOnlineSession singleton =
+                PoseKartOnlineSession.Instance;
+
+            if (singleton != null)
+            {
+                online = singleton;
+            }
+            else if (online == null)
+            {
+                online =
+                    FindFirstObjectByType<PoseKartOnlineSession>();
+            }
+        }
+
+        private void BindRuntimeReferences()
+        {
+            if (subscribedOnline != null &&
+                subscribedOnline != online)
+            {
+                subscribedOnline.SessionChanged -= Refresh;
+                subscribedOnline.StatusChanged -= SetStatus;
+            }
 
             if (startRaceButton != null)
             {
@@ -54,37 +108,7 @@ namespace PoseKart.Multiplayer
                 online.StatusChanged += SetStatus;
             }
 
-            Refresh();
-        }
-
-
-        private void OnDestroy()
-        {
-            if (online != null)
-            {
-                online.SessionChanged -= Refresh;
-                online.StatusChanged -= SetStatus;
-            }
-
-            if (startRaceButton != null)
-            {
-                startRaceButton.onClick.RemoveListener(StartRace);
-            }
-        }
-
-
-        private void ResolveReferences()
-        {
-            if (online == null)
-            {
-                online = PoseKartOnlineSession.Instance;
-            }
-
-            if (online == null)
-            {
-                online =
-                    FindFirstObjectByType<PoseKartOnlineSession>();
-            }
+            subscribedOnline = online;
         }
 
 
@@ -95,7 +119,13 @@ namespace PoseKart.Multiplayer
         private void Refresh()
         {
             if (startRaceButton == null)
+            {
+                Debug.LogError(
+                    "[PoseKartOnlineLobbyStart] Start Race button reference is missing.",
+                    this
+                );
                 return;
+            }
 
 
             // Chưa vào room

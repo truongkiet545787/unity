@@ -62,6 +62,10 @@ namespace PoseKart
         private CarController currentTargetCar;
         private KartItemPickup.ItemType activeItemType = KartItemPickup.ItemType.HomingMissile;
         private Coroutine skillCoroutine;
+        private bool onlineUseAwaitingResponse;
+        private bool onlineUseSucceeded;
+        private bool onlineUseFailed;
+        private KartItemPickup.ItemType onlineUseItem;
 
         // Lưu góc quay ban đầu của Missile & Ink Launcher
         private Quaternion initialLocalRotation = Quaternion.identity;
@@ -335,6 +339,44 @@ namespace PoseKart
             return muzzlePoint;
         }
 
+        /// <summary>
+        /// Returns the local owner's visible missile muzzle pose for the
+        /// authoritative Server spawn request. The Server must not discover
+        /// this pose from a remote turret which may be hidden or scaled to 0.
+        /// </summary>
+        public bool TryGetMissileNetworkShotPose(
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            return TryGetActiveNetworkShotPose(out position, out rotation);
+        }
+
+        /// <summary>
+        /// Returns the visible muzzle pose for the currently active launcher
+        /// (Missile or Ink). This is sampled by the local owner before the
+        /// Server creates the authoritative projectile.
+        /// </summary>
+        public bool TryGetActiveNetworkShotPose(
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            position = default;
+            rotation = Quaternion.identity;
+
+            Transform muzzle = GetActiveMuzzlePoint();
+
+            if (muzzle == null ||
+                !muzzle.gameObject.activeInHierarchy ||
+                muzzle.lossyScale.sqrMagnitude <= 0.001f)
+            {
+                return false;
+            }
+
+            position = muzzle.position;
+            rotation = muzzle.rotation;
+            return true;
+        }
+
         public Vector3 GetActiveTargetScale()
         {
             if (activeItemType == KartItemPickup.ItemType.InkShot && inkLauncherModel != null)
@@ -385,6 +427,10 @@ namespace PoseKart
             {
                 inventory.ItemCollected -= HandleItemCollected;
                 inventory.ItemCollected += HandleItemCollected;
+                inventory.ItemUsed -= HandleItemUsed;
+                inventory.ItemUsed += HandleItemUsed;
+                inventory.ItemActivationFailed -= HandleItemActivationFailed;
+                inventory.ItemActivationFailed += HandleItemActivationFailed;
             }
         }
 
@@ -393,6 +439,8 @@ namespace PoseKart
             if (inventory != null)
             {
                 inventory.ItemCollected -= HandleItemCollected;
+                inventory.ItemUsed -= HandleItemUsed;
+                inventory.ItemActivationFailed -= HandleItemActivationFailed;
             }
         }
 
@@ -406,6 +454,9 @@ namespace PoseKart
 
             currentState = SkillState.Ready;
             currentTargetCar = null;
+            onlineUseAwaitingResponse = false;
+            onlineUseSucceeded = false;
+            onlineUseFailed = false;
 
             if (launcherModel != null)
             {
@@ -431,6 +482,31 @@ namespace PoseKart
                 Debug.Log($"[KartLauncherSkill] Đã nhặt {item}! Bệ phóng {(item == KartItemPickup.ItemType.InkShot ? "Ink Trap" : "Missile")} chuẩn bị vươn lên...");
                 ActivateSkill();
             }
+        }
+
+        private void HandleItemUsed(KartItemPickup.ItemType item)
+        {
+            if (!onlineUseAwaitingResponse ||
+                item != onlineUseItem)
+            {
+                return;
+            }
+
+            onlineUseAwaitingResponse = false;
+            onlineUseSucceeded = true;
+        }
+
+        private void HandleItemActivationFailed(
+            KartItemPickup.ItemType item)
+        {
+            if (!onlineUseAwaitingResponse ||
+                item != onlineUseItem)
+            {
+                return;
+            }
+
+            onlineUseAwaitingResponse = false;
+            onlineUseFailed = true;
         }
 
         public void ActivateSkill(CarController target = null)
@@ -485,6 +561,7 @@ namespace PoseKart
             currentState = SkillState.WaitingForFire;
             float waitTimer = 0f;
             bool fired = false;
+            bool requestSubmitted = false;
 
             Transform vehicleTransform = car != null ? car.transform : transform;
             bool onlineRace = PoseKartNetworkItemBridge.IsOnlineRace;
@@ -509,10 +586,9 @@ namespace PoseKart
                 waitTimer += Time.deltaTime;
 
                 // Nếu target bị mất/destroy giữa chừng thì tìm target mới
-                if (currentTargetCar == null || !currentTargetCar.gameObject.activeInHierarchy)
-                {
-                    currentTargetCar = FindClosestOpponentAhead();
-                }
+                // Target có thể rời khỏi range/angle trong lúc xe di chuyển.
+                // Không giữ target cũ nếu nó đã không còn hợp lệ.
+                currentTargetCar = FindClosestOpponentAhead();
 
                 // Xoay tháp súng theo hướng xe địch
                 if (activeModel != null)
@@ -604,8 +680,51 @@ namespace PoseKart
                 }
                 if (spacePressed)
                 {
-                    fired = true;
-                    break;
+                    if (onlineRace)
+                    {
+                        if (isLocalHumanOwner &&
+                            networkBridge != null &&
+                            !requestSubmitted)
+                        {
+                            onlineUseItem = activeItemType;
+                            onlineUseSucceeded = false;
+                            onlineUseFailed = false;
+                            onlineUseAwaitingResponse = true;
+
+                            bool accepted =
+                                networkBridge.RequestUseItem();
+
+                            requestSubmitted = accepted ||
+                                networkBridge.UseRequestPending;
+
+                            if (!requestSubmitted)
+                            {
+                                onlineUseAwaitingResponse = false;
+                                onlineUseFailed = true;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        fired = true;
+                        break;
+                    }
+                }
+
+                if (onlineRace && requestSubmitted)
+                {
+                    if (onlineUseSucceeded)
+                    {
+                        fired = true;
+                        break;
+                    }
+
+                    if (onlineUseFailed)
+                    {
+                        requestSubmitted = false;
+                        onlineUseSucceeded = false;
+                        onlineUseFailed = false;
+                    }
                 }
 
                 yield return null;
@@ -616,18 +735,10 @@ namespace PoseKart
             // ----------------------------------------------------
             if (onlineRace)
             {
-                // Online:
-                // launcher chỉ là animation/visual.
-                // Local human owner gửi request, Server mới spawn projectile thật.
-                if (isLocalHumanOwner && networkBridge != null)
-                {
-                    networkBridge.RequestUseItem();
-                    PoseKart.Audio.AudioManager.PlayLauncherFire(transform.position);
-                }
-
-                // TUYỆT ĐỐI KHÔNG:
-                // FireProjectile();
-                // inventory.ClearHeldItem();
+                // Online request đã được gửi trong vòng chờ và chỉ đi tới đây
+                // sau khi Server xác nhận thành công hoặc hết timeout.
+                // Không tự gửi request lần hai khi timeout.
+                onlineUseAwaitingResponse = false;
             }
             else
             {
@@ -675,7 +786,13 @@ namespace PoseKart
         private void FireProjectile()
         {
             if (PoseKartNetworkItemBridge.IsOnlineRace)
+            {
+                Debug.LogWarning(
+                    "[KartLauncherSkill] Legacy local projectile path is disabled during Online Race.",
+                    this
+                );
                 return;
+            }
 
             // Nếu là Ink Shot thì phóng mực / cannon ball từ nòng MozzlePoint
             if (activeItemType == KartItemPickup.ItemType.InkShot)
@@ -765,112 +882,60 @@ namespace PoseKart
                 inventory != null ? inventory.MissileTargetPrediction : 0.75f,
                 inventory != null ? inventory.MissileMaximumPredictionTime : 1.25f
             );
+            AudioManager.PlayMissileLaunch(spawnPos);
+        }
+        private void OnGUI()
+        {
+            if (inventory == null ||
+                !inventory.NoTargetFeedbackActive)
+                return;
+
+            if (car == null)
+                return;
+
             if (PoseKartNetworkItemBridge.IsOnlineRace)
             {
-                Debug.LogWarning(
-                    "[KartLauncherSkill] Blocked legacy local projectile spawn during Online Race.",
-                    this
-                );
-                return;
+                var netObj =
+                    car.GetComponent<Unity.Netcode.NetworkObject>();
+
+                if (netObj == null ||
+                    !netObj.IsPlayerObject ||
+                    !netObj.IsOwner)
+                    return;
             }
-                AudioManager.PlayMissileLaunch(spawnPos);
+            else
+            {
+                var racer = car.GetComponent<RaceParticipant>();
+
+                if (racer == null || !racer.IsPlayer)
+                    return;
+            }
+
+            GUIStyle style = new GUIStyle(GUI.skin.box);
+            style.fontSize = 22;
+            style.fontStyle = FontStyle.Bold;
+            style.alignment = TextAnchor.MiddleCenter;
+            style.normal.textColor = Color.red;
+
+            GUI.Label(
+                new Rect(
+                    Screen.width / 2f - 120f,
+                    Screen.height * 0.28f,
+                    240f,
+                    45f
+                ),
+                "NO TARGET",
+                style
+            );
         }
 
         private CarController FindClosestOpponentAhead()
         {
-            CarController[] allCars =
-                FindObjectsByType<CarController>(
-                    FindObjectsSortMode.None
-                );
-
-            CarController bestTarget = null;
-            float bestScore = float.PositiveInfinity;
-
-            if (car == null)
-                return null;
-
-            bool onlineRace =
-                PoseKartNetworkItemBridge.IsOnlineRace;
-
-            float range =
-                activeItemType == KartItemPickup.ItemType.InkShot
-                    ? (inventory != null ? inventory.InkTargetRange : 95f)
-                    : (inventory != null ? inventory.MissileTargetRange : 130f);
-
-            float angle =
-                activeItemType == KartItemPickup.ItemType.InkShot
-                    ? (inventory != null ? inventory.InkTargetAngle : 85f)
-                    : (inventory != null ? inventory.MissileTargetAngle : 110f);
-
-            float rangeSqr = range * range;
-
-            for (int i = 0; i < allCars.Length; i++)
-            {
-                CarController candidate = allCars[i];
-
-                if (candidate == null ||
-                    candidate == car ||
-                    candidate.TargetBody == null)
-                {
-                    continue;
-                }
-
-                // Online remote replicas có thể disable CarController,
-                // nhưng GameObject vẫn là target hợp lệ.
-                if (onlineRace)
-                {
-                    if (!candidate.gameObject.activeInHierarchy)
-                        continue;
-                }
-                else
-                {
-                    if (!candidate.isActiveAndEnabled)
-                        continue;
-                }
-
-                RaceParticipant participant =
-                    candidate.GetComponent<RaceParticipant>();
-
-                if (participant != null && participant.Finished)
-                    continue;
-
-                Vector3 delta =
-                    candidate.TargetBody.worldCenterOfMass -
-                    car.TargetBody.worldCenterOfMass;
-
-                delta.y = 0f;
-
-                float distanceSqr = delta.sqrMagnitude;
-
-                if (distanceSqr < 0.01f ||
-                    distanceSqr > rangeSqr)
-                {
-                    continue;
-                }
-
-                float candidateAngle =
-                    Vector3.Angle(
-                        car.transform.forward,
-                        delta
-                    );
-
-                if (candidateAngle > angle)
-                    continue;
-
-                float score =
-                    distanceSqr *
-                    (1f + candidateAngle / Mathf.Max(1f, angle));
-
-                if (score < bestScore)
-                {
-                    bestScore = score;
-                    bestTarget = candidate;
-                }
-            }
-
-            // QUAN TRỌNG:
-            // Không còn fallback chọn xe gần nhất phía sau.
-            return bestTarget;
+            return KartItemPickup.FindTargetForLauncher(
+                car,
+                activeItemType,
+                inventory
+            );
         }
     }
 }

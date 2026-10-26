@@ -11233,8 +11233,8 @@ MonoBehaviour:
   shockwaveHighlight: {r: 1, g: 0.82, b: 1, a: 1}
   idleStart: {r: 0.95, g: 0.65, b: 0.05, a: 1}
   idleEnd: {r: 1, g: 0.85, b: 0.12, a: 1}
-  redSectionStart: {r: 0.92, g: 0.12, b: 0.08, a: 1}
-  redSectionEnd: {r: 1, g: 0.28, b: 0.14, a: 1}
+  redSectionStart: {r: 0.08, g: 0.82, b: 1, a: 1}
+  redSectionEnd: {r: 0.35, g: 1, b: 1, a: 1}
 --- !u!222 &300181853
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -25908,7 +25908,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55
@@ -40709,8 +40709,8 @@ MonoBehaviour:
   shockwaveHighlight: {r: 1, g: 0.82, b: 1, a: 1}
   idleStart: {r: 0.95, g: 0.65, b: 0.05, a: 1}
   idleEnd: {r: 1, g: 0.85, b: 0.12, a: 1}
-  redSectionStart: {r: 0.92, g: 0.12, b: 0.08, a: 1}
-  redSectionEnd: {r: 1, g: 0.28, b: 0.14, a: 1}
+  redSectionStart: {r: 0.08, g: 0.82, b: 1, a: 1}
+  redSectionEnd: {r: 0.35, g: 1, b: 1, a: 1}
 --- !u!1 &687235676
 GameObject:
   m_ObjectHideFlags: 0
@@ -68109,7 +68109,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55
@@ -76457,7 +76457,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55
@@ -107119,7 +107119,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55

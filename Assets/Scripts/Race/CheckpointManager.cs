@@ -1,4 +1,5 @@
 using PoseKart.Vehicle;
+using Unity.Netcode;
 using UnityEngine;
 
 namespace PoseKart.Race
@@ -73,6 +74,12 @@ namespace PoseKart.Race
 
         public void TryPassCheckpoint(Checkpoint checkpoint, Collider other)
         {
+            NetworkManager network = NetworkManager.Singleton;
+            if (network != null && network.IsListening && !network.IsServer)
+            {
+                return;
+            }
+
             if (!acceptingCheckpoints || checkpoint == null || other.attachedRigidbody == null)
             {
                 return;
@@ -102,6 +109,8 @@ namespace PoseKart.Race
                     raceManager.NotifyParticipantFinished(racer);
                 }
 
+                raceManager.PublishNetworkRaceProgress();
+
                 return;
             }
 
@@ -116,6 +125,8 @@ namespace PoseKart.Race
                 acceptingCheckpoints = false;
                 raceManager.CompleteRace();
             }
+
+            raceManager.PublishNetworkRaceProgress();
         }
 
         public Checkpoint GetCheckpoint(int index)

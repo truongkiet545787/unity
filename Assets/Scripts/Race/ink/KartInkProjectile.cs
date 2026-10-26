@@ -30,11 +30,33 @@ namespace PoseKart.Race
 
         public static bool Launch(CarController source, CarController victim,
             float shotSpeed, float lifetime, float duration, float aiWobble, float aiThrottle,
-            GameObject customPrefab = null, Transform muzzlePoint = null)
+            GameObject customPrefab = null, Transform muzzlePoint = null,
+            Vector3 requestedSpawnPosition = default,
+            Quaternion requestedSpawnRotation = default,
+            bool hasRequestedSpawnPose = false)
         {
             if (source == null || source.TargetBody == null ||
                 victim == null || victim.TargetBody == null)
                 return false;
+
+            bool onlineRace = PoseKartNetworkItemBridge.IsOnlineRace;
+            if (onlineRace)
+            {
+                Unity.Netcode.NetworkManager networkManager =
+                    Unity.Netcode.NetworkManager.Singleton;
+
+                if (networkManager == null ||
+                    !networkManager.IsListening ||
+                    !networkManager.IsServer)
+                {
+                    Debug.LogError(
+                        "[KartInkProjectile] Online Ink activation rejected: " +
+                        "the Server network is not listening.",
+                        source
+                    );
+                    return false;
+                }
+            }
 
             if (customPrefab == null)
             {
@@ -44,7 +66,20 @@ namespace PoseKart.Race
             Vector3 origin;
             Quaternion initialRotation;
 
-            if (muzzlePoint != null)
+            bool acceptedRequestedPose = onlineRace &&
+                hasRequestedSpawnPose &&
+                IsFinite(requestedSpawnPosition) &&
+                IsFinite(requestedSpawnRotation) &&
+                Vector3.Distance(
+                    requestedSpawnPosition,
+                    source.transform.position) <= 8f;
+
+            if (acceptedRequestedPose)
+            {
+                origin = requestedSpawnPosition;
+                initialRotation = requestedSpawnRotation;
+            }
+            else if (muzzlePoint != null)
             {
                 origin = muzzlePoint.position;
                 Vector3 toVictim = (victim.TargetBody.worldCenterOfMass - origin).normalized;
@@ -65,12 +100,32 @@ namespace PoseKart.Race
                 shot = Instantiate(customPrefab, origin, initialRotation);
                 shot.name = "Ink_CannonBall";
                 projectile = shot.GetComponent<KartInkProjectile>();
+                if (projectile == null && onlineRace)
+                {
+                    Debug.LogError(
+                        "[KartInkProjectile] Online Ink prefab is missing " +
+                        "KartInkProjectile.",
+                        shot
+                    );
+                    Destroy(shot);
+                    return false;
+                }
+
                 if (projectile == null)
                     projectile = shot.AddComponent<KartInkProjectile>();
                 projectile.Configure(source, victim, shotSpeed, lifetime, duration, aiWobble, aiThrottle, hasCustomVisual: true);
             }
             else
             {
+                if (onlineRace)
+                {
+                    Debug.LogError(
+                        "[KartInkProjectile] Online Ink prefab is missing.",
+                        source
+                    );
+                    return false;
+                }
+
                 shot = new GameObject("Ink_CannonBall");
                 shot.transform.position = origin;
                 shot.transform.rotation = initialRotation;
@@ -78,17 +133,58 @@ namespace PoseKart.Race
                 projectile.Configure(source, victim, shotSpeed, lifetime, duration, aiWobble, aiThrottle, hasCustomVisual: false);
             }
 
-            if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer)
+            // Preserve the visible owner's muzzle direction for the first
+            // rendered frame. The arc logic takes over on the next physics
+            // tick, so this does not change the Host's existing trajectory.
+            if (acceptedRequestedPose)
+                shot.transform.rotation = initialRotation;
+
+            if (onlineRace)
             {
                 var netObj = shot.GetComponent<Unity.Netcode.NetworkObject>();
-                if (netObj != null && !netObj.IsSpawned)
+                var netTransform =
+                    shot.GetComponent<Unity.Netcode.Components.NetworkTransform>();
+
+                if (netObj == null || netTransform == null ||
+                    !netObj.enabled || !netTransform.enabled)
                 {
-                    netObj.Spawn(true);
+                    Debug.LogError(
+                        "[KartInkProjectile] Online Ink prefab must have enabled " +
+                        "NetworkObject and NetworkTransform.",
+                        shot
+                    );
+                    Destroy(shot);
+                    return false;
+                }
+
+                try
+                {
+                    if (!netObj.IsSpawned)
+                        netObj.Spawn(true);
+
+                    if (!netObj.IsSpawned)
+                    {
+                        Debug.LogError(
+                            "[KartInkProjectile] Online Ink NetworkObject.Spawn " +
+                            "did not produce a spawned object.",
+                            shot
+                        );
+                        Destroy(shot);
+                        return false;
+                    }
+                }
+                catch (System.Exception exception)
+                {
+                    Debug.LogException(exception, shot);
+                    Destroy(shot);
+                    return false;
                 }
             }
 
             // Caster Feedback: Ink wave burst from muzzlePoint (or rear exhaust fallback) + juicy "SPLAT!" sound
-            Vector3 burstPos = muzzlePoint != null ? muzzlePoint.position : origin;
+            Vector3 burstPos = acceptedRequestedPose
+                ? origin
+                : (muzzlePoint != null ? muzzlePoint.position : origin);
             KartParticleEffect.Burst(burstPos, new Color(0.14f, 0.04f, 0.22f, 0.95f), 32);
             KartParticleEffect.Burst(burstPos + Vector3.up * 0.2f, new Color(0.03f, 0.02f, 0.05f, 0.95f), 24);
             PlaySplatSound(burstPos);
@@ -98,6 +194,11 @@ namespace PoseKart.Race
         }
         private void Start()
         {
+            // Re-apply the prefab visual state after the network clone has
+            // completed its first frame. This only plays existing prefab VFX;
+            // it does not create a duplicate particle effect.
+            PlayPrefabVisualEffects();
+
             ParticleSystem[] systems =
                 GetComponentsInChildren<ParticleSystem>(true);
 
@@ -157,6 +258,12 @@ namespace PoseKart.Race
                     ps.gameObject.SetActive(true);
 
                 ps.Play(true);
+            }
+
+            foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer != null)
+                    renderer.enabled = true;
             }
 
             TrailRenderer[] trails =
@@ -329,6 +436,19 @@ namespace PoseKart.Race
             return car.TargetBody != null
                 ? car.TargetBody.worldCenterOfMass + Vector3.up * 0.25f
                 : car.transform.position + Vector3.up;
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+                   !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&
+                   !float.IsNaN(value.z) && !float.IsInfinity(value.z);
+        }
+
+        private static bool IsFinite(Quaternion value)
+        {
+            return IsFinite(new Vector3(value.x, value.y, value.z)) &&
+                   !float.IsNaN(value.w) && !float.IsInfinity(value.w);
         }
 
         private void FixedUpdate()

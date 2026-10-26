@@ -1,6 +1,8 @@
 using TMPro;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 namespace PoseKart.Multiplayer
 {
@@ -53,6 +55,10 @@ namespace PoseKart.Multiplayer
         [SerializeField]
         private TMP_Text readyButtonText;
 
+        private bool leavingRoom;
+        private const string VehicleSelectScene =
+            "PoseKart_VehicleSelect";
+
 
         private void Awake()
         {
@@ -65,6 +71,16 @@ namespace PoseKart.Multiplayer
             ResolveOnlineSystem();
             Subscribe();
 
+            online?.RefreshAfterSceneLoad();
+            Refresh();
+        }
+
+        private void OnEnable()
+        {
+            ResolveOnlineSystem();
+            Subscribe();
+
+            online?.RefreshAfterSceneLoad();
             Refresh();
         }
 
@@ -77,13 +93,14 @@ namespace PoseKart.Multiplayer
 
         private void ResolveOnlineSystem()
         {
-            if (online == null)
-            {
-                online =
-                    PoseKartOnlineSession.Instance;
-            }
+            PoseKartOnlineSession singleton =
+                PoseKartOnlineSession.Instance;
 
-            if (online == null)
+            if (singleton != null)
+            {
+                online = singleton;
+            }
+            else if (online == null)
             {
                 online =
                     FindFirstObjectByType<
@@ -169,6 +186,12 @@ namespace PoseKart.Multiplayer
 
             online.StatusChanged +=
                 SetStatus;
+
+            online.SessionClosed -=
+                HandleSessionClosed;
+
+            online.SessionClosed +=
+                HandleSessionClosed;
         }
 
 
@@ -182,6 +205,9 @@ namespace PoseKart.Multiplayer
 
             online.StatusChanged -=
                 SetStatus;
+
+            online.SessionClosed -=
+                HandleSessionClosed;
         }
 
 
@@ -293,17 +319,67 @@ namespace PoseKart.Multiplayer
 
         private async void LeaveRoom()
         {
-            if (online == null)
+            if (leavingRoom || online == null)
                 return;
 
+            NetworkManager network =
+                NetworkManager.Singleton;
+
+            bool isClientLeaving =
+                network != null &&
+                network.IsClient &&
+                !network.IsServer;
+
+            bool isHostClosing =
+                online.IsHost;
+
+            leavingRoom = true;
 
             SetButtonsBusy(true);
 
-            await online.LeaveRoomAsync();
+            bool leaveSucceeded = false;
+
+            try
+            {
+                leaveSucceeded = isHostClosing
+                    ? await online.CloseRoomAsync()
+                    : await online.LeaveRoomAsync();
+            }
+            finally
+            {
+                leavingRoom = false;
+            }
+
+            if ((isClientLeaving || isHostClosing) &&
+                leaveSucceeded &&
+                !online.InSession)
+            {
+                SceneManager.LoadScene(
+                    VehicleSelectScene
+                );
+
+                return;
+            }
 
             SetButtonsBusy(false);
 
             Refresh();
+        }
+
+        private void HandleSessionClosed()
+        {
+            if (leavingRoom)
+                return;
+
+            if (SceneManager.GetActiveScene().name ==
+                VehicleSelectScene)
+            {
+                return;
+            }
+
+            SceneManager.LoadScene(
+                VehicleSelectScene
+            );
         }
 
 
@@ -419,7 +495,7 @@ namespace PoseKart.Multiplayer
                 online.AllPlayersReady)
             {
                 SetStatus(
-                    $"ALL READY • " +
+                    $"ALL READY ï¿½ " +
                     $"{online.PlayerCount} HUMAN + " +
                     $"{online.AICount} AI"
                 );

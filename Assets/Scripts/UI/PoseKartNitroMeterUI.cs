@@ -84,7 +84,7 @@ namespace PoseKart.UI
 
         private void ResolvePlayerCar()
         {
-            if (playerCar != null && playerCar.isActiveAndEnabled)
+            if (PoseKartLocalPlayerResolver.IsLocalHuman(playerCar))
             {
                 return;
             }
@@ -95,25 +95,7 @@ namespace PoseKart.UI
             }
 
             nextResolveTime = Time.unscaledTime + 0.5f;
-            playerCar = raceManager != null ? raceManager.PlayerController : null;
-            if (playerCar != null && playerCar.isActiveAndEnabled)
-            {
-                return;
-            }
-
-            // Fallback for a scene without a configured RaceManager. This is
-            // retried infrequently so it also supports a dynamically spawned car.
-            CarController[] cars = FindObjectsByType<CarController>(FindObjectsSortMode.None);
-            for (int i = 0; i < cars.Length; i++)
-            {
-                CarController candidate = cars[i];
-                if (candidate != null && candidate.isActiveAndEnabled
-                    && candidate.name.IndexOf("Player", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    playerCar = candidate;
-                    break;
-                }
-            }
+            playerCar = PoseKartLocalPlayerResolver.FindLocalCar(raceManager);
         }
 
         private void BuildInterface()
@@ -132,6 +114,16 @@ namespace PoseKart.UI
 
             GameObject rootObject = GetOrCreateChild(transform, "NitroMeterUI", out _);
             meterRoot = rootObject.GetComponent<RectTransform>();
+
+            // Older scene versions keep a valid Bar directly under this
+            // object. Do not disable it here: some existing scenes use that
+            // serialized NitroBarGraphic as their only visible meter. The
+            // generated child remains compatible, and visibility is managed
+            // by the scene/HUD hierarchy instead of hiding a serialized bar.
+            Transform legacyBar = transform.Find("Bar");
+            if (legacyBar != null && legacyBar != rootObject.transform)
+                legacyBar.gameObject.SetActive(true);
+
             // Asphalt-style top-center layout. Apply it to the existing scene
             // instance as well as newly created UI so the old bottom-right
             // parchment layout cannot silently win after a domain reload.
@@ -284,6 +276,8 @@ namespace PoseKart.UI
                 meterRoot.gameObject.SetActive(true);
                 fillImage.fillAmount = displayedFill;
                 fillImage.color = emptyFillColor;
+                barGraphic.TargetCar = null;
+                barGraphic.AutoSyncWithCar = false;
                 barGraphic.SetVisuals(displayedFill, Track, Color.clear, Color.clear);
                 return;
             }
@@ -300,6 +294,11 @@ namespace PoseKart.UI
             else
                 displayedFill = Mathf.MoveTowards(displayedFill, actualFill, fillSmoothingSpeed * deltaTime);
             fillImage.fillAmount = displayedFill;
+            // This component owns the local-player binding and the smoothed
+            // display value. Do not let NitroBarGraphic resolve an arbitrary
+            // remote/AI car and overwrite it in its own Update().
+            barGraphic.TargetCar = playerCar;
+            barGraphic.AutoSyncWithCar = false;
 
             bool full = actualFill >= 0.999f;
             Color fillColor;

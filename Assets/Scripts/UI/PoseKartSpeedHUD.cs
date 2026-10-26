@@ -1,6 +1,8 @@
 
 using UnityEngine;
 using TMPro;
+using PoseKart.UI;
+using PoseKart.Vehicle;
 
 public class PoseKartSpeedHUD : MonoBehaviour
 {
@@ -8,10 +10,29 @@ public class PoseKartSpeedHUD : MonoBehaviour
     public TMP_Text speedText;
 
     private float displayedSpeed;
+    private CarController playerCar;
+    private float nextResolveTime;
+
+    private void OnEnable()
+    {
+        playerCar = null;
+        displayedSpeed = 0f;
+    }
 
     void LateUpdate()
     {
-        if (playerRigidbody == null || speedText == null)
+        if (speedText == null)
+            return;
+
+        if (playerCar == null || !PoseKartLocalPlayerResolver.IsLocalHuman(playerCar) ||
+            Time.unscaledTime >= nextResolveTime)
+        {
+            nextResolveTime = Time.unscaledTime + 0.25f;
+            playerCar = PoseKartLocalPlayerResolver.FindLocalCar();
+            playerRigidbody = playerCar != null ? playerCar.TargetBody : null;
+        }
+
+        if (playerRigidbody == null)
             return;
 
         Vector3 velocity = playerRigidbody.linearVelocity;

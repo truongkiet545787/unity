@@ -56,10 +56,10 @@ namespace PoseKart.UI
         [SerializeField] private Color idleStart = new Color(0.95f, 0.65f, 0.05f, 1f);
         [SerializeField] private Color idleEnd = new Color(1f, 0.85f, 0.12f, 1f);
 
-        [Header("Perfect Nitro Timing Section (Asphalt 8 / Reference Image)")]
-        [Tooltip("Red section for Perfect Nitro timing window")]
-        [SerializeField] private Color redSectionStart = new Color(0.92f, 0.12f, 0.08f, 1f);
-        [SerializeField] private Color redSectionEnd = new Color(1f, 0.28f, 0.14f, 1f);
+        [Header("Perfect Nitro Timing Section")]
+        [Tooltip("Cyan section for the Perfect Nitro timing window")]
+        [SerializeField] private Color redSectionStart = new Color(0.08f, 0.82f, 1f, 1f);
+        [SerializeField] private Color redSectionEnd = new Color(0.35f, 1f, 1f, 1f);
 
         private float nextCarResolveTime;
 
@@ -103,7 +103,7 @@ namespace PoseKart.UI
             if (!Application.isPlaying || !autoSyncWithCar)
                 return;
 
-            if (targetCar == null || !targetCar.isActiveAndEnabled)
+            if (!PoseKartLocalPlayerResolver.IsLocalHuman(targetCar))
             {
                 if (Time.unscaledTime >= nextCarResolveTime)
                 {
@@ -120,27 +120,7 @@ namespace PoseKart.UI
 
         private void ResolveTargetCar()
         {
-            RaceManager raceManager = FindFirstObjectByType<RaceManager>();
-            if (raceManager != null && raceManager.PlayerController != null)
-            {
-                targetCar = raceManager.PlayerController;
-                return;
-            }
-
-            CarController[] cars = FindObjectsByType<CarController>(FindObjectsSortMode.None);
-            for (int i = 0; i < cars.Length; i++)
-            {
-                if (cars[i] != null && cars[i].name.IndexOf("Player", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    targetCar = cars[i];
-                    return;
-                }
-            }
-
-            if (cars.Length > 0)
-            {
-                targetCar = cars[0];
-            }
+            targetCar = PoseKartLocalPlayerResolver.FindLocalCar();
         }
 
         /// <summary>
@@ -240,39 +220,6 @@ namespace PoseKart.UI
             float amount = Mathf.Clamp01(fillAmount);
             bool isTimingActive = targetCar != null && targetCar.IsNitroTimingActive;
 
-            // 2. Draw static RED SECTION during Single Nitro timing (Asphalt 8 / Reference Image style)
-            // Note: This red section is positioned at FIXED normalized coordinates [redMin, redMax] on the bar.
-            // It does NOT shrink or move with the depleting yellow fuel fill!
-            if (isTimingActive)
-            {
-                float redMin = targetCar != null ? targetCar.PerfectZoneMin01 : 0.72f;
-                float redMax = targetCar != null ? targetCar.PerfectZoneMax01 : 0.86f;
-
-                if (redMax > redMin)
-                {
-                    bool isPerfect = targetCar != null && targetCar.IsPerfectTimingNow;
-
-                    Color rStart = redSectionStart;
-                    Color rEnd = redSectionEnd;
-
-                    if (isPerfect)
-                    {
-                        // Flashing pulse animation when the yellow bar tip is inside the red section!
-                        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 28f);
-                        rStart = Color.Lerp(rStart, Color.white, pulse * 0.7f);
-                        rEnd = Color.Lerp(rEnd, Color.white, pulse * 0.85f);
-                    }
-
-                    // 2a. Draw the fixed RED SECTION
-                    AddSlantedSlice(vertexHelper, redMin, redMax, left, right, bottom, top, slant, rStart, rEnd);
-
-                    // 2b. Slanted white divider lines bounding the red section
-                    Color dividerCol = new Color(1f, 1f, 1f, isPerfect ? 1f : 0.9f);
-                    AddDividerLine(vertexHelper, redMin, left, right, bottom, top, slant, dividerCol, 2f);
-                    AddDividerLine(vertexHelper, redMax, left, right, bottom, top, slant, dividerCol, 2f);
-                }
-            }
-
             if (amount <= 0.0001f || rect.width <= 0.001f)
                 return;
 
@@ -296,13 +243,45 @@ namespace PoseKart.UI
                     AddSlantedSlice(vertexHelper, redMax, amount, left, right, bottom, top, slant, fillStartColor, fillEndColor);
                 }
 
-                // If the tip is inside the red section or at leading edge:
-                // Add a crisp white tip indicator at amount
-                AddDividerLine(vertexHelper, amount, left, right, bottom, top, slant, Color.white, 3f);
             }
             else
             {
                 AddSlantedSlice(vertexHelper, 0f, amount, left, right, bottom, top, slant, fillStartColor, fillEndColor);
+            }
+
+            // Draw the Perfect section after the fuel so it remains visible
+            // even when the current amount is above the timing window.
+            if (isTimingActive)
+            {
+                float redMin = targetCar != null ? targetCar.PerfectZoneMin01 : 0.72f;
+                float redMax = targetCar != null ? targetCar.PerfectZoneMax01 : 0.86f;
+
+                if (redMax > redMin)
+                {
+                    bool isPerfect = targetCar != null && targetCar.IsPerfectTimingNow;
+                    Color rStart = redSectionStart;
+                    Color rEnd = redSectionEnd;
+
+                    if (isPerfect)
+                    {
+                        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 28f);
+                        rStart = Color.Lerp(rStart, Color.white, pulse * 0.7f);
+                        rEnd = Color.Lerp(rEnd, Color.white, pulse * 0.85f);
+                    }
+
+                    AddSlantedSlice(vertexHelper, redMin, redMax,
+                        left, right, bottom, top, slant, rStart, rEnd);
+
+                    Color dividerCol = new Color(1f, 1f, 1f, isPerfect ? 1f : 0.9f);
+                    AddDividerLine(vertexHelper, redMin, left, right,
+                        bottom, top, slant, dividerCol, 2f);
+                    AddDividerLine(vertexHelper, redMax, left, right,
+                        bottom, top, slant, dividerCol, 2f);
+                }
+
+                // Keep the current fuel cursor above the timing overlay.
+                AddDividerLine(vertexHelper, amount, left, right,
+                    bottom, top, slant, Color.white, 3f);
             }
 
             // 4. Intense glowing flare head at the leading edge

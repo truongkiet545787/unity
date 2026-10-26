@@ -255,12 +255,10 @@ namespace PoseKart.UI
 
             if (playerRacer != null && playerCar == null)
             {
-                playerCar = playerRacer.GetComponent<CarController>() ?? playerRacer.GetComponentInParent<CarController>();
-            }
-
-            if (playerCar == null)
-            {
-                playerCar = FindFirstObjectByType<CarController>();
+                playerCar =
+                    playerRacer.CarController ??
+                    playerRacer.GetComponent<CarController>() ??
+                    playerRacer.GetComponentInParent<CarController>();
             }
         }
 

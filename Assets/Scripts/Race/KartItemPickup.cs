@@ -1,5 +1,6 @@
 using PoseKart.Vehicle;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace PoseKart.Race
 {
@@ -20,17 +21,30 @@ namespace PoseKart.Race
         [SerializeField] private float respawnSeconds = 6f;
 
         private static readonly System.Collections.Generic.List<KartItemPickup> allPickups = new System.Collections.Generic.List<KartItemPickup>();
+        private static int initializedSceneHandle = -1;
         public static System.Collections.Generic.IReadOnlyList<KartItemPickup> AllPickups => allPickups;
 
         private int pickupIndex = -1;
         public int PickupIndex => pickupIndex;
         public float RespawnSeconds => respawnSeconds;
         private bool isAvailable = true;
+        // Debounce a specific car rather than blocking every racer touching this gift.
+        private CarController lastTriggerCar;
+        private float nextTriggerAttemptTime;
         public bool IsAvailable => isAvailable && (trigger == null || trigger.enabled);
 
         public static void InitializeAllPickups()
         {
-            if (allPickups.Count > 0) return;
+            int activeSceneHandle =
+                SceneManager.GetActiveScene().handle;
+
+            if (initializedSceneHandle == activeSceneHandle &&
+                allPickups.Count > 0)
+            {
+                return;
+            }
+
+            allPickups.Clear();
             allPickups.AddRange(FindObjectsByType<KartItemPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None));
             allPickups.Sort((a, b) =>
             {
@@ -40,13 +54,20 @@ namespace PoseKart.Race
                 if (cx != 0) return cx;
                 int cy = pa.y.CompareTo(pb.y);
                 if (cy != 0) return cy;
-                return pa.z.CompareTo(pb.z);
+                int cz = pa.z.CompareTo(pb.z);
+                if (cz != 0) return cz;
+
+                return GetHierarchyPath(a.transform).CompareTo(
+                    GetHierarchyPath(b.transform)
+                );
             });
             for (int i = 0; i < allPickups.Count; i++)
             {
                 if (allPickups[i] != null)
                     allPickups[i].pickupIndex = i;
             }
+
+            initializedSceneHandle = activeSceneHandle;
         }
 
         [Header("Ink Shot - Item Pool Injection")]
@@ -103,11 +124,23 @@ namespace PoseKart.Race
 
         private void OnTriggerEnter(Collider other)
         {
+            TryHandleTrigger(other);
+        }
+
+        private void OnTriggerStay(Collider other)
+        {
+            TryHandleTrigger(other);
+        }
+
+        private void TryHandleTrigger(Collider other)
+        {
             if (!isAvailable || trigger == null || !trigger.enabled)
                 return;
 
             Rigidbody otherBody = other.attachedRigidbody;
-            CarController car = otherBody != null ? otherBody.GetComponentInParent<CarController>() : null;
+            CarController car = otherBody != null
+                ? otherBody.GetComponentInParent<CarController>()
+                : null;
             if (car == null)
                 car = other.GetComponentInParent<CarController>();
             if (car == null)
@@ -115,15 +148,40 @@ namespace PoseKart.Race
 
             if (PoseKartNetworkItemBridge.IsOnlineRace)
             {
-                var bridge = car.GetComponent<PoseKartNetworkItemBridge>();
-                if (bridge != null)
-                {
-                    bridge.HandlePickupTrigger(pickupIndex);
+                // Remote clones must not take the trigger cooldown on a client.
+                // Only the local human owner (or the Server for AI / humans)
+                // is allowed to attempt a network pickup.
+                var manager = Unity.Netcode.NetworkManager.Singleton;
+                if (manager == null || !manager.IsListening)
                     return;
-                }
+
+                var networkObject = car.GetComponent<Unity.Netcode.NetworkObject>();
+                if (!manager.IsServer &&
+                    (networkObject == null ||
+                     !networkObject.IsPlayerObject ||
+                     !networkObject.IsOwner))
+                    return;
+
+                var bridge = car.GetComponent<PoseKartNetworkItemBridge>();
+                if (bridge == null)
+                    return; // Never fall back to offline collection during an online race.
+
+                // Other cars should not suppress this owner's pickup attempt.
+                if (lastTriggerCar == car &&
+                    Time.unscaledTime < nextTriggerAttemptTime)
+                    return;
+
+                lastTriggerCar = car;
+                nextTriggerAttemptTime = Time.unscaledTime + 0.2f;
+                bridge.HandlePickupTrigger(pickupIndex);
+                return;
             }
 
             // OFFLINE MODE (original logic)
+            if (lastTriggerCar == car &&
+                Time.unscaledTime < nextTriggerAttemptTime)
+                return;
+
             KartItemInventory inventory = GetOrAddComponent<KartItemInventory>(car.gameObject);
             if (inventory == null)
                 return;
@@ -131,6 +189,9 @@ namespace PoseKart.Race
             ItemType rolledItem = RollAuthoritativeItem();
             if (!inventory.TryCollect(rolledItem))
                 return;
+
+            lastTriggerCar = car;
+            nextTriggerAttemptTime = Time.unscaledTime + 0.2f;
 
             PoseKart.Audio.AudioManager.PlayPickup(car, transform.position);
             KartParticleEffect.Burst(transform.position, new Color(1f, .78f, .16f, 1f), 48);
@@ -145,6 +206,31 @@ namespace PoseKart.Race
 
             CancelInvoke(nameof(Respawn));
             Invoke(nameof(Respawn), respawnSeconds);
+        }
+
+        private void OnDestroy()
+        {
+            allPickups.Remove(this);
+
+            if (allPickups.Count == 0)
+                initializedSceneHandle = -1;
+        }
+
+        private static string GetHierarchyPath(Transform target)
+        {
+            if (target == null)
+                return string.Empty;
+
+            string path = target.name;
+            Transform parent = target.parent;
+
+            while (parent != null)
+            {
+                path = parent.name + "/" + path;
+                parent = parent.parent;
+            }
+
+            return path;
         }
 
         private void Respawn()
@@ -167,6 +253,23 @@ namespace PoseKart.Race
 
         public static bool Activate(CarController car, ItemType type, KartItemInventory settings)
         {
+            return Activate(
+                car,
+                type,
+                settings,
+                default,
+                Quaternion.identity,
+                false);
+        }
+
+        public static bool Activate(
+            CarController car,
+            ItemType type,
+            KartItemInventory settings,
+            Vector3 itemSpawnPosition,
+            Quaternion itemSpawnRotation,
+            bool hasItemSpawnPose)
+        {
             if (car == null)
                 return false;
 
@@ -176,7 +279,14 @@ namespace PoseKart.Race
                 return false;
 
             if (type == ItemType.HomingMissile)
-                return LaunchMissile(car, settings);
+            {
+                return LaunchMissile(
+                    car,
+                    settings,
+                    itemSpawnPosition,
+                    itemSpawnRotation,
+                    hasItemSpawnPose);
+            }
 
             if (type == ItemType.BananaTrap)
             {
@@ -189,7 +299,14 @@ namespace PoseKart.Race
             }
 
             if (type == ItemType.InkShot)
-                return LaunchInk(car, settings);
+            {
+                return LaunchInk(
+                    car,
+                    settings,
+                    itemSpawnPosition,
+                    itemSpawnRotation,
+                    hasItemSpawnPose);
+            }
 
             if (type == ItemType.Shield)
             {
@@ -249,22 +366,114 @@ namespace PoseKart.Race
             }
         }
 
-        private static bool LaunchMissile(CarController owner, KartItemInventory settings)
+        private static bool LaunchMissile(
+            CarController owner,
+            KartItemInventory settings,
+            Vector3 requestedSpawnPosition = default,
+            Quaternion requestedSpawnRotation = default,
+            bool hasRequestedSpawnPose = false)
         {
             if (owner == null || owner.TargetBody == null)
                 return false;
 
+            bool onlineRace = PoseKartNetworkItemBridge.IsOnlineRace;
+            if (onlineRace)
+            {
+                Unity.Netcode.NetworkManager networkManager =
+                    Unity.Netcode.NetworkManager.Singleton;
+
+                if (networkManager == null ||
+                    !networkManager.IsListening ||
+                    !networkManager.IsServer)
+                {
+                    Debug.LogError(
+                        "[KartItemPickup] Online Missile activation rejected: " +
+                        "the Server network is not listening.",
+                        owner
+                    );
+                    return false;
+                }
+            }
+
             float range = settings != null ? settings.MissileTargetRange : 130f;
             float angle = settings != null ? settings.MissileTargetAngle : 110f;
             CarController target = FindTarget(owner, range, angle);
-            if (target == null)
-                return false;
 
-            Vector3 spawnPosition = owner.transform.position + owner.transform.forward * 2.5f + Vector3.up * .8f;
-            Vector3 targetDirection = target.transform.position - spawnPosition;
-            Quaternion spawnRotation = targetDirection.sqrMagnitude > .001f
-                ? Quaternion.LookRotation(targetDirection)
-                : owner.transform.rotation;
+            if (target == null)
+            {
+                Debug.LogWarning(
+                    $"[MISSILE TARGET FAILED] " +
+                    $"owner={owner.name} | " +
+                    $"range={range} | " +
+                    $"angle={angle} | " +
+                    $"position={owner.transform.position}",
+                    owner
+                );
+
+                return false;
+            }
+
+            // Fallback: giữ vị trí spawn cũ khi launcher chưa sẵn sàng.
+            Vector3 spawnPosition =
+                owner.transform.position +
+                owner.transform.forward * 2.5f +
+                Vector3.up * 1.6f;
+
+            Quaternion spawnRotation = owner.transform.rotation;
+
+            // The remote Client owns the visible turret pose, while the
+            // Server owns the gameplay projectile. Accept only a pose close
+            // to the authoritative car; never trust an arbitrary transform.
+            bool acceptedRequestedPose = onlineRace &&
+                hasRequestedSpawnPose &&
+                IsFinite(requestedSpawnPosition) &&
+                IsFinite(requestedSpawnRotation) &&
+                Vector3.Distance(
+                    requestedSpawnPosition,
+                    owner.transform.position) <= 8f;
+
+            if (acceptedRequestedPose)
+            {
+                spawnPosition = requestedSpawnPosition;
+                spawnRotation = requestedSpawnRotation;
+            }
+
+            KartLauncherSkill launcher =
+                owner.GetComponent<KartLauncherSkill>() ??
+                owner.GetComponentInChildren<KartLauncherSkill>(true);
+
+            if (launcher != null)
+            {
+                Transform muzzle = launcher.MuzzlePoint;
+
+                // Chỉ dùng đầu nòng nếu launcher trên Server
+                // đang triển khai thật, không bị scale về zero.
+                if (!acceptedRequestedPose &&
+                    muzzle != null &&
+                    muzzle.gameObject.activeInHierarchy &&
+                    muzzle.lossyScale.sqrMagnitude > 0.001f)
+                {
+                    Vector3 candidate = muzzle.position;
+
+                    // Chặn tham chiếu muzzle bị lệch quá xa xe.
+                    if (Vector3.Distance(
+                        candidate,
+                        owner.transform.position) < 8f)
+                    {
+                        spawnPosition = candidate;
+                    }
+                }
+            }
+
+            Vector3 targetDirection =
+                (target.TargetBody.worldCenterOfMass +
+                 Vector3.up * 1.5f) - spawnPosition;
+            if (!acceptedRequestedPose)
+            {
+                spawnRotation = targetDirection.sqrMagnitude > .001f
+                    ? Quaternion.LookRotation(targetDirection)
+                    : owner.transform.rotation;
+            }
 
             bool usingPrefab = settings != null && settings.MissilePrefab != null;
             GameObject projectile = usingPrefab
@@ -284,7 +493,20 @@ namespace PoseKart.Race
             // Do not use ?? to retrieve/add Unity components: a missing component
             // can otherwise leave a non-usable Unity reference behind.
             // Create the Rigidbody BEFORE adding the fallback missile visual.
-            Rigidbody body = GetOrAddComponent<Rigidbody>(projectile);
+            Rigidbody body = projectile.GetComponent<Rigidbody>();
+            if (body == null && onlineRace)
+            {
+                Debug.LogError(
+                    "[KartItemPickup] Online Missile prefab is missing Rigidbody.",
+                    projectile
+                );
+                Destroy(projectile);
+                return false;
+            }
+
+            if (body == null)
+                body = projectile.AddComponent<Rigidbody>();
+
             if (body == null)
             {
                 Debug.LogError("[KartItemPickup] Could not create a Rigidbody for AutoAim_Missile.", projectile);
@@ -322,7 +544,20 @@ namespace PoseKart.Race
                 }
             }
 
-            HomingKartMissile homing = GetOrAddComponent<HomingKartMissile>(projectile);
+            HomingKartMissile homing = projectile.GetComponent<HomingKartMissile>();
+            if (homing == null && onlineRace)
+            {
+                Debug.LogError(
+                    "[KartItemPickup] Online Missile prefab is missing HomingKartMissile.",
+                    projectile
+                );
+                Destroy(projectile);
+                return false;
+            }
+
+            if (homing == null)
+                homing = projectile.AddComponent<HomingKartMissile>();
+
             if (homing == null)
             {
                 Debug.LogError("[KartItemPickup] Could not create HomingKartMissile on AutoAim_Missile.", projectile);
@@ -360,14 +595,18 @@ namespace PoseKart.Race
     settings != null ? settings.MissileGroundFireRadius : 3f,
     settings == null || settings.MissileGroundFireAffectsRacers
 );
-            if (PoseKartNetworkItemBridge.IsOnlineRace)
+            if (onlineRace)
             {
                 var netObj = projectile.GetComponent<Unity.Netcode.NetworkObject>();
+                var netTransform =
+                    projectile.GetComponent<Unity.Netcode.Components.NetworkTransform>();
 
-                if (netObj == null)
+                if (netObj == null || netTransform == null ||
+                    !netObj.enabled || !netTransform.enabled)
                 {
                     Debug.LogError(
-                        "[KartItemPickup] Online missile prefab is missing NetworkObject.",
+                        "[KartItemPickup] Online Missile prefab must have enabled " +
+                        "NetworkObject and NetworkTransform.",
                         projectile
                     );
 
@@ -375,15 +614,53 @@ namespace PoseKart.Race
                     return false;
                 }
 
-                if (!netObj.IsSpawned)
-                    netObj.Spawn(true);
+                try
+                {
+                    if (!netObj.IsSpawned)
+                        netObj.Spawn(true);
+
+                    if (!netObj.IsSpawned)
+                    {
+                        Debug.LogError(
+                            "[KartItemPickup] Online Missile NetworkObject.Spawn " +
+                            "did not produce a spawned object.",
+                            projectile
+                        );
+                        Destroy(projectile);
+                        return false;
+                    }
+                }
+                catch (System.Exception exception)
+                {
+                    Debug.LogException(exception, projectile);
+                    Destroy(projectile);
+                    return false;
+                }
             }
 
             PoseKart.Audio.AudioManager.PlayMissileLaunch(projectile.transform.position);
             return true;
         }
 
-        private static bool LaunchInk(CarController owner, KartItemInventory settings)
+        private static bool IsFinite(Vector3 value)
+        {
+            return !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+                   !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&
+                   !float.IsNaN(value.z) && !float.IsInfinity(value.z);
+        }
+
+        private static bool IsFinite(Quaternion value)
+        {
+            return IsFinite(new Vector3(value.x, value.y, value.z)) &&
+                   !float.IsNaN(value.w) && !float.IsInfinity(value.w);
+        }
+
+        private static bool LaunchInk(
+            CarController owner,
+            KartItemInventory settings,
+            Vector3 requestedSpawnPosition = default,
+            Quaternion requestedSpawnRotation = default,
+            bool hasRequestedSpawnPose = false)
         {
             if (owner == null || owner.TargetBody == null)
                 return false;
@@ -399,6 +676,19 @@ namespace PoseKart.Race
             if (launcher != null)
             {
                 muzzle = launcher.CurrentMuzzlePoint;
+                if (muzzle != null &&
+                    (!muzzle.gameObject.activeInHierarchy ||
+                     muzzle.lossyScale.sqrMagnitude <= 0.001f ||
+                     Vector3.Distance(
+                         muzzle.position,
+                         owner.transform.position) > 8f))
+                {
+                    // A remote Client turret can be hidden or scaled to zero
+                    // on the Server. Do not use that stale Transform as Ink's
+                    // spawn point; Launch() will use its safe body fallback
+                    // unless an owner-sampled pose was supplied.
+                    muzzle = null;
+                }
             }
 
             return KartInkProjectile.Launch(
@@ -410,9 +700,43 @@ namespace PoseKart.Race
                 settings != null ? settings.InkAISteeringWobble : 0.28f,
                 settings != null ? settings.InkAIThrottleMultiplier : 0.86f,
                 settings != null ? settings.InkProjectilePrefab : null,
-                muzzle);
+                muzzle,
+                requestedSpawnPosition,
+                requestedSpawnRotation,
+                hasRequestedSpawnPose);
         }
+        public static CarController FindTargetForLauncher(
+    CarController owner,
+    ItemType item,
+    KartItemInventory settings)
+        {
+            if (owner == null)
+                return null;
 
+            if (item == ItemType.HomingMissile)
+            {
+                float range = settings != null
+                    ? settings.MissileTargetRange : 130f;
+
+                float angle = settings != null
+                    ? settings.MissileTargetAngle : 110f;
+
+                return FindTarget(owner, range, angle);
+            }
+
+            if (item == ItemType.InkShot)
+            {
+                float range = settings != null
+                    ? settings.InkTargetRange : 95f;
+
+                float angle = settings != null
+                    ? settings.InkTargetAngle : 85f;
+
+                return FindTarget(owner, range, angle);
+            }
+
+            return null;
+        }
         private static CarController FindTarget(CarController owner, float range, float angle)
         {
             if (owner == null || owner.TargetBody == null)

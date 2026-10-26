@@ -115,6 +115,8 @@ namespace PoseKart.Race
 
         private float targetGoTime;
 
+        private bool onlineRaceStartBlocked;
+
 
 
         public RaceState State => state;
@@ -129,7 +131,26 @@ namespace PoseKart.Race
 
         public int PlayerFinishPosition => playerFinishPosition > 0 ? playerFinishPosition : PlayerPosition;
 
-        public float SecondsUntilGo => targetGoTime > 0f ? Mathf.Max(0f, targetGoTime - Time.time) : 0f;
+        public float SecondsUntilGo
+        {
+            get
+            {
+                if (onlineRuntimeRace &&
+                    networkRaceClock != null &&
+                    networkRaceClock.HasGoTime)
+                {
+                    return Mathf.Max(
+                        0f,
+                        (float)(networkRaceClock.GoServerTime -
+                                networkRaceClock.ServerNow)
+                    );
+                }
+
+                return targetGoTime > 0f
+                    ? Mathf.Max(0f, targetGoTime - Time.time)
+                    : 0f;
+            }
+        }
 
         public bool IsInCountdown => state == RaceState.Countdown;
         private PoseKartNetworkRaceClock networkRaceClock;
@@ -443,8 +464,19 @@ namespace PoseKart.Race
 
                     if (netObject.IsPlayerObject)
                     {
-                        racerName =
-                            $"Player {netObject.OwnerClientId + 1}";
+                        PoseKartNetworkPlayerOwner networkPlayer =
+                            netObject.GetComponent<PoseKartNetworkPlayerOwner>();
+
+                        racerName = networkPlayer != null
+                            ? networkPlayer.DisplayName
+                            : string.Empty;
+
+                        if (string.IsNullOrWhiteSpace(racerName))
+                        {
+                            racerName = string.IsNullOrWhiteSpace(racer.RacerName)
+                                ? $"Player {netObject.OwnerClientId + 1}"
+                                : racer.RacerName;
+                        }
                     }
                     else
                     {
@@ -480,21 +512,6 @@ namespace PoseKart.Race
                     $"LocalPlayer={(localPlayer != null ? localPlayer.RacerName : "NONE")}",
                     this
                 );
-                PoseKart.UI.PoseKartMinimap minimap =
-    FindFirstObjectByType<PoseKart.UI.PoseKartMinimap>();
-
-                if (minimap != null)
-                {
-                    minimap.ConfigureRuntimeRacers(
-                        onlineRacers
-                    );
-
-                    Debug.Log(
-                        "[RaceManager] Minimap bound to online racers.",
-                        minimap
-                    );
-                }
-
                 if (valid.Count >= onlineExpectedRacers &&
                     localPlayer != null)
                 {
@@ -523,6 +540,10 @@ namespace PoseKart.Race
                     this
                 );
 
+                AbortOnlineRaceStart(
+                    "Network racer roster did not complete before timeout."
+                );
+
                 yield break;
             }
 
@@ -534,7 +555,29 @@ namespace PoseKart.Race
                     this
                 );
 
+                AbortOnlineRaceStart(
+                    "Local player object was not available."
+                );
+
                 yield break;
+            }
+
+
+            PoseKart.UI.PoseKartMinimap minimap =
+                FindFirstObjectByType<PoseKart.UI.PoseKartMinimap>();
+
+            if (minimap != null)
+            {
+                minimap.ConfigureRuntimeRacers(
+                    onlineRacers
+                );
+
+                Debug.Log(
+                    $"[RaceManager] Minimap bound to online racers | " +
+                    $"Racers={onlineRacers.Length} | " +
+                    $"Player={localPlayer.RacerName}",
+                    minimap
+                );
             }
 
 
@@ -547,6 +590,10 @@ namespace PoseKart.Race
                 Debug.LogError(
                     "[RaceManager] CheckpointManager NULL.",
                     this
+                );
+
+                AbortOnlineRaceStart(
+                    "CheckpointManager was not available."
                 );
 
                 yield break;
@@ -667,6 +714,24 @@ namespace PoseKart.Race
                 this
             );
 
+            if (NetworkManager.Singleton != null &&
+                NetworkManager.Singleton.IsServer)
+            {
+                yield return WaitForOnlineRaceParticipantsReady();
+
+                if (onlineRaceStartBlocked)
+                {
+                    Debug.LogError(
+                        "[RaceManager] ONLINE START BLOCKED. " +
+                        "Countdown was not armed because scene/player " +
+                        "readiness did not complete.",
+                        this
+                    );
+
+                    yield break;
+                }
+            }
+
 
             yield return RunRaceStartSequence();
 
@@ -676,6 +741,189 @@ namespace PoseKart.Race
                 $"State={state}",
                 this
             );
+        }
+
+        private IEnumerator WaitForOnlineRaceParticipantsReady()
+        {
+            if (!onlineRuntimeRace ||
+                NetworkManager.Singleton == null ||
+                !NetworkManager.Singleton.IsServer)
+            {
+                yield break;
+            }
+
+            PoseKartOnlineRaceBootstrap bootstrap =
+                FindFirstObjectByType<PoseKartOnlineRaceBootstrap>();
+
+            float deadline =
+                Time.realtimeSinceStartup +
+                onlineRosterTimeoutSeconds;
+
+            bool loggedWaiting = false;
+
+            while (Time.realtimeSinceStartup < deadline)
+            {
+                NetworkManager network = NetworkManager.Singleton;
+
+                if (network == null || !network.IsListening)
+                {
+                    onlineRaceStartBlocked = true;
+                    Debug.LogError(
+                        "[RaceManager] ONLINE START BLOCKED: " +
+                        "network stopped before all players were ready.",
+                        this
+                    );
+
+                    yield break;
+                }
+
+                if (bootstrap == null)
+                {
+                    bootstrap =
+                        FindFirstObjectByType<PoseKartOnlineRaceBootstrap>();
+
+                    if (!loggedWaiting)
+                    {
+                        Debug.Log(
+                            "[RaceManager] WAITING: race bootstrap is " +
+                            "not available yet.",
+                            this
+                        );
+                        loggedWaiting = true;
+                    }
+
+                    yield return null;
+                    continue;
+                }
+
+                if (bootstrap.NetworkSceneLoadTimedOut)
+                {
+                    onlineRaceStartBlocked = true;
+                    Debug.LogError(
+                        "[RaceManager] ONLINE START BLOCKED: " +
+                        "NGO scene loading reported timed-out clients.",
+                        bootstrap
+                    );
+
+                    yield break;
+                }
+
+                if (!bootstrap.NetworkSceneLoadCompleted)
+                {
+                    if (!loggedWaiting)
+                    {
+                        Debug.Log(
+                            "[RaceManager] WAITING: NGO scene load " +
+                            "has not completed for every expected client.",
+                            this
+                        );
+                        loggedWaiting = true;
+                    }
+
+                    yield return null;
+                    continue;
+                }
+
+                if (!AreAllOnlineRaceParticipantsReady())
+                {
+                    if (!loggedWaiting)
+                    {
+                        Debug.Log(
+                            "[RaceManager] WAITING: all Network Player " +
+                            "Objects are present, but local race setup is " +
+                            "not ready on every expected client.",
+                            this
+                        );
+                        loggedWaiting = true;
+                    }
+
+                    yield return null;
+                    continue;
+                }
+
+                Debug.Log(
+                    "[RaceManager] ALL ONLINE PLAYERS READY. " +
+                    "Server may arm the shared countdown.",
+                    this
+                );
+
+                yield break;
+            }
+
+            onlineRaceStartBlocked = true;
+            AbortOnlineRaceStart(
+                "Expected network players did not become ready before timeout."
+            );
+            Debug.LogError(
+                "[RaceManager] ONLINE READINESS TIMEOUT. " +
+                "Race remains locked; GO was not scheduled.",
+                this
+            );
+        }
+
+        private bool AreAllOnlineRaceParticipantsReady()
+        {
+            NetworkManager network = NetworkManager.Singleton;
+
+            if (network == null ||
+                !network.IsServer ||
+                racers == null ||
+                racers.Length < onlineExpectedRacers)
+            {
+                return false;
+            }
+
+            PoseKartOnlineSession session =
+                PoseKartOnlineSession.Instance;
+
+            int expectedHumans =
+                session != null && session.PlayerCount > 0
+                    ? session.PlayerCount
+                    : network.ConnectedClientsIds.Count;
+
+            if (network.ConnectedClientsIds.Count < expectedHumans)
+                return false;
+
+            for (int i = 0;
+                 i < network.ConnectedClientsIds.Count;
+                 i++)
+            {
+                ulong clientId =
+                    network.ConnectedClientsIds[i];
+
+                if (!network.ConnectedClients.TryGetValue(
+                        clientId,
+                        out NetworkClient client) ||
+                    client == null ||
+                    client.PlayerObject == null)
+                {
+                    return false;
+                }
+
+                PoseKartNetworkPlayerOwner networkPlayer =
+                    client.PlayerObject.GetComponent<PoseKartNetworkPlayerOwner>();
+
+                if (networkPlayer == null ||
+                    !networkPlayer.IsRaceSetupReady)
+                {
+                    return false;
+                }
+            }
+
+            for (int i = 0; i < racers.Length; i++)
+            {
+                RaceParticipant racer = racers[i];
+                if (racer == null || !racer.IsConfigured)
+                    return false;
+
+                NetworkObject networkObject =
+                    racer.GetComponentInParent<NetworkObject>();
+
+                if (networkObject == null || !networkObject.IsSpawned)
+                    return false;
+            }
+
+            return true;
         }
 
 
@@ -769,6 +1017,59 @@ namespace PoseKart.Race
                     GetElapsedRaceTime();
             }
         }
+
+        public void PublishNetworkRaceProgress()
+        {
+            if (!onlineRuntimeRace ||
+                NetworkManager.Singleton == null ||
+                !NetworkManager.Singleton.IsServer ||
+                racers == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < racers.Length; i++)
+            {
+                RaceParticipant racer = racers[i];
+                if (racer == null)
+                    continue;
+
+                PoseKartNetworkPlayerOwner playerSync =
+                    racer.GetComponent<PoseKartNetworkPlayerOwner>();
+                if (playerSync != null)
+                {
+                    playerSync.PublishRaceProgress(racer);
+                    continue;
+                }
+
+                PoseKartNetworkAI aiSync =
+                    racer.GetComponent<PoseKartNetworkAI>();
+                aiSync?.PublishRaceProgress(racer);
+            }
+        }
+
+        public void ApplyNetworkParticipantProgress(
+            RaceParticipant racer,
+            PoseKartRaceProgressState progress)
+        {
+            if (racer == null ||
+                NetworkManager.Singleton == null ||
+                !NetworkManager.Singleton.IsListening ||
+                NetworkManager.Singleton.IsServer ||
+                !progress.finished ||
+                !racer.IsPlayer ||
+                playerFinished)
+            {
+                return;
+            }
+
+            raceTimeSeconds = progress.finishTime;
+            state = RaceState.Finished;
+            countdownDisplay = "FINISH";
+            checkpointManager?.SetAcceptingCheckpoints(false);
+            racer.CarController?.SetControlPermission(false, true);
+            CompletePlayerFinish(progress.finishTime, progress.finishOrder);
+        }
         private void PrepareRace()
 
         {
@@ -836,6 +1137,8 @@ namespace PoseKart.Race
 
 
             checkpointManager.SetAcceptingCheckpoints(false);
+
+            PublishNetworkRaceProgress();
 
         }
 
@@ -1135,13 +1438,33 @@ namespace PoseKart.Race
                 networkRaceClock =
                     PoseKartNetworkRaceClock.Instance;
 
-                while (networkRaceClock == null ||
-                       !networkRaceClock.IsSpawned)
+                float clockDeadline =
+                    Time.realtimeSinceStartup +
+                    onlineRosterTimeoutSeconds;
+
+                while (Time.realtimeSinceStartup < clockDeadline &&
+                       (networkRaceClock == null ||
+                        !networkRaceClock.IsSpawned))
                 {
                     networkRaceClock =
                         PoseKartNetworkRaceClock.Instance;
 
                     yield return null;
+                }
+
+                if (networkRaceClock == null ||
+                    !networkRaceClock.IsSpawned)
+                {
+                    state = RaceState.Waiting;
+                    countdownDisplay = string.Empty;
+
+                    Debug.LogError(
+                        "[RaceManager] ONLINE COUNTDOWN ABORTED: " +
+                        "network race clock was not spawned.",
+                        this
+                    );
+
+                    yield break;
                 }
 
 
@@ -1164,9 +1487,43 @@ namespace PoseKart.Race
 
 
                 // Client đợi Host phát GO timestamp xuống.
-                while (!networkRaceClock.HasGoTime)
+                float goDeadline =
+                    Time.realtimeSinceStartup +
+                    onlineRosterTimeoutSeconds;
+
+                while (Time.realtimeSinceStartup < goDeadline &&
+                       !networkRaceClock.HasGoTime &&
+                       !networkRaceClock.RaceStartAborted)
                 {
                     yield return null;
+                }
+
+                if (networkRaceClock.RaceStartAborted)
+                {
+                    state = RaceState.Waiting;
+                    countdownDisplay = string.Empty;
+
+                    Debug.LogWarning(
+                        "[RaceManager] ONLINE COUNTDOWN CANCELLED: " +
+                        "server did not start the race.",
+                        this
+                    );
+
+                    yield break;
+                }
+
+                if (!networkRaceClock.HasGoTime)
+                {
+                    state = RaceState.Waiting;
+                    countdownDisplay = string.Empty;
+
+                    Debug.LogError(
+                        "[RaceManager] ONLINE COUNTDOWN ABORTED: " +
+                        "server did not publish a GO timestamp before timeout.",
+                        this
+                    );
+
+                    yield break;
                 }
 
 
@@ -1302,13 +1659,17 @@ namespace PoseKart.Race
                         RaceParticipant racer
                         in racers)
                     {
-                        racer.CarController
-                            .SetControlPermission(
-                                true
-                            );
+                        if (ShouldEnableOnlineControl(racer))
+                        {
+                            racer.CarController
+                                .SetControlPermission(
+                                    true
+                                );
+                        }
                     }
                 }
-                else
+                else if (NetworkManager.Singleton == null ||
+                         NetworkManager.Singleton.IsServer)
                 {
                     playerController
                         .SetControlPermission(
@@ -1347,7 +1708,6 @@ namespace PoseKart.Race
 
                 yield break;
             }
-
 
             // =====================================================
             // OFFLINE - GIỮ NGUYÊN FLOW CŨ
@@ -1468,6 +1828,49 @@ namespace PoseKart.Race
             {
                 countdownDisplay =
                     string.Empty;
+            }
+        }
+
+        private bool ShouldEnableOnlineControl(RaceParticipant racer)
+        {
+            if (!onlineRuntimeRace)
+                return true;
+
+            NetworkManager network = NetworkManager.Singleton;
+
+            if (network == null || racer == null)
+                return false;
+
+            NetworkObject networkObject =
+                racer.GetComponentInParent<NetworkObject>();
+
+            if (networkObject == null || !networkObject.IsSpawned)
+                return false;
+
+            if (networkObject.IsPlayerObject)
+                return networkObject.IsOwner;
+
+            // AI is server-owned. Remote clients keep their AI controls locked.
+            return network.IsServer;
+        }
+
+        private void AbortOnlineRaceStart(string reason)
+        {
+            if (!onlineRuntimeRace ||
+                NetworkManager.Singleton == null ||
+                !NetworkManager.Singleton.IsServer)
+            {
+                return;
+            }
+
+            onlineRaceStartBlocked = true;
+
+            PoseKartNetworkRaceClock clock =
+                PoseKartNetworkRaceClock.Instance;
+
+            if (clock != null && clock.IsSpawned)
+            {
+                clock.AbortRaceStart(reason);
             }
         }
 
@@ -1593,6 +1996,8 @@ namespace PoseKart.Race
                 checkpointManager.SetAcceptingCheckpoints(false);
 
             }
+
+            PublishNetworkRaceProgress();
 
         }
 

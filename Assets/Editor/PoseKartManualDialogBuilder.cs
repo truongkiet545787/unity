@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEditor;
@@ -20,6 +21,12 @@ namespace PoseKart.EditorTools
     {
         private const string PrefabDirectory = "Assets/Prefabs/UI";
         private const string PrefabPath = "Assets/Prefabs/UI/PoseKart_ManualDialog.prefab";
+
+        private sealed class ManualVisualSnapshot
+        {
+            public readonly Dictionary<string, Sprite> sprites = new Dictionary<string, Sprite>();
+            public readonly Dictionary<string, TMP_FontAsset> fonts = new Dictionary<string, TMP_FontAsset>();
+        }
 
         [MenuItem("PoseKart/UI/Build Manual Dialog", false, 100)]
         public static void BuildManualDialogMenu()
@@ -54,6 +61,9 @@ namespace PoseKart.EditorTools
 
             // 2. Kiểm tra xem ManualDialog đã tồn tại chưa
             Transform existingDialogTransform = canvasTransform.Find("ManualDialog");
+            ManualVisualSnapshot visualSnapshot = existingDialogTransform != null
+                ? CaptureVisuals(existingDialogTransform)
+                : null;
             if (existingDialogTransform != null && !forceRebuild)
             {
                 // Kiểm tra xem đã có ManualWindowPanel chưa
@@ -364,6 +374,12 @@ namespace PoseKart.EditorTools
 
             // --- 5. Cấu hình Controller & Kết nối Serialized References ---
             ConfigureDialogController(manualDialogGo, canvasTransform);
+            ApplyVisualSnapshot(manualDialogGo, visualSnapshot);
+
+            // The manual window is a modal dialog. It must start hidden and
+            // only be shown by PoseKartManualDialog.Open() from the Manual
+            // button, otherwise it covers the Vehicle Select screen on entry.
+            manualDialogGo.SetActive(false);
 
             // --- 6. Lưu Prefab & Scene ---
             EnsureDirectoryExists(PrefabDirectory);
@@ -390,6 +406,69 @@ namespace PoseKart.EditorTools
             // 2. Tìm Canvas bất kỳ trong Scene
             Canvas anyCanvas = UnityEngine.Object.FindFirstObjectByType<Canvas>();
             return anyCanvas;
+        }
+
+        private static ManualVisualSnapshot CaptureVisuals(Transform root)
+        {
+            ManualVisualSnapshot snapshot = new ManualVisualSnapshot();
+            if (root == null)
+                return snapshot;
+
+            Image[] images = root.GetComponentsInChildren<Image>(true);
+            foreach (Image image in images)
+            {
+                string path = RelativePath(root, image.transform);
+                if (image.sprite != null)
+                    snapshot.sprites[path] = image.sprite;
+            }
+
+            TextMeshProUGUI[] texts = root.GetComponentsInChildren<TextMeshProUGUI>(true);
+            foreach (TextMeshProUGUI text in texts)
+            {
+                string path = RelativePath(root, text.transform);
+                if (text.font != null)
+                    snapshot.fonts[path] = text.font;
+            }
+
+            return snapshot;
+        }
+
+        private static void ApplyVisualSnapshot(GameObject rootObject, ManualVisualSnapshot snapshot)
+        {
+            if (rootObject == null || snapshot == null)
+                return;
+
+            Transform root = rootObject.transform;
+            Image[] images = root.GetComponentsInChildren<Image>(true);
+            foreach (Image image in images)
+            {
+                if (snapshot.sprites.TryGetValue(RelativePath(root, image.transform), out Sprite sprite))
+                    image.sprite = sprite;
+            }
+
+            TextMeshProUGUI[] texts = root.GetComponentsInChildren<TextMeshProUGUI>(true);
+            foreach (TextMeshProUGUI text in texts)
+            {
+                if (snapshot.fonts.TryGetValue(RelativePath(root, text.transform), out TMP_FontAsset font))
+                    text.font = font;
+            }
+        }
+
+        private static string RelativePath(Transform root, Transform target)
+        {
+            if (root == target)
+                return string.Empty;
+
+            List<string> parts = new List<string>();
+            Transform current = target;
+            while (current != null && current != root)
+            {
+                parts.Add(current.name);
+                current = current.parent;
+            }
+
+            parts.Reverse();
+            return string.Join("/", parts);
         }
 
         private static void CreatePanelHeader(Transform parent, string headerText, Color color, TMP_FontAsset font)

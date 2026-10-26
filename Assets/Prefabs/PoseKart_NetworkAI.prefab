@@ -11281,7 +11281,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.CarController
   maxNitroCharge: 2.5
-  minimumNitroToStart: 0.7
+  minimumNitroToStart: 0.08
   driftNitroPerSecond: 0.4
   airNitroPerSecond: 0.25
   minimumRewardAirTime: 0.55

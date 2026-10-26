@@ -7,6 +7,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using PoseKart.Multiplayer;
+using Unity.Netcode;
 namespace PoseKart.UI
 {
     public enum FinishEditorPreviewMode
@@ -132,7 +133,10 @@ namespace PoseKart.UI
         // =========================================================
         // TEXT ADAPTER
         // =========================================================
+        [SerializeField]
+        private string onlineLobbyScene = "PoseKart_OnlineLobby";
 
+        private bool returningToLobby;
         private sealed class TextBinding
         {
             private TMP_Text tmp;
@@ -985,7 +989,8 @@ namespace PoseKart.UI
 
 
                 if (eventSystem != null &&
-                    playAgainButton != null)
+                    playAgainButton != null &&
+                    playAgainButton.interactable)
                 {
                     eventSystem
                         .SetSelectedGameObject(
@@ -1002,30 +1007,58 @@ namespace PoseKart.UI
 
         public void PlayAgain()
         {
-            PoseKart.Audio.AudioManager
-                .PlayButtonClick();
+            if (returningToLobby)
+                return;
 
-            Time.timeScale = 1f;
+            var nm = NetworkManager.Singleton;
 
-
-            PoseKartOnlineRaceRestart onlineRestart =
-                FindFirstObjectByType<
-                    PoseKartOnlineRaceRestart>();
-
-
-            if (onlineRestart != null)
+            // MULTIPLAYER
+            if (nm != null && nm.IsListening)
             {
-                onlineRestart.RequestPlayAgain();
+                // Chỉ Host được chuyển scene.
+                if (!nm.IsServer)
+                {
+                    Debug.Log("Waiting for Host to return to Lobby.");
+                    return;
+                }
 
+                if (!Application.CanStreamedLevelBeLoaded(onlineLobbyScene))
+                {
+                    Debug.LogError(
+                        "Lobby scene missing: " + onlineLobbyScene);
+                    return;
+                }
+
+                if (nm.SceneManager == null)
+                {
+                    Debug.LogError("NGO SceneManager unavailable.");
+                    return;
+                }
+
+                Time.timeScale = 1f;
+
+                var status = nm.SceneManager.LoadScene(
+                    onlineLobbyScene,
+                    LoadSceneMode.Single
+                );
+
+                if (status != SceneEventProgressStatus.Started)
+                {
+                    Debug.LogError(
+                        "Return to Lobby failed: " + status);
+                    return;
+                }
+
+                returningToLobby = true;
+                SetButtonsInteractable(false);
                 return;
             }
 
-
-            // Offline fallback.
+            // OFFLINE: giữ hành vi chơi lại cũ.
+            PoseKart.Audio.AudioManager.PlayButtonClick();
+            Time.timeScale = 1f;
             SceneManager.LoadScene(
-                SceneManager
-                    .GetActiveScene()
-                    .buildIndex
+                SceneManager.GetActiveScene().buildIndex
             );
         }
 
@@ -1061,27 +1094,34 @@ namespace PoseKart.UI
         private void SetButtonsInteractable(
             bool interactable)
         {
+            // While NGO is loading the Lobby, never re-enable buttons
+            // even though AnimateResults keeps updating every frame.
+            bool canInteract = interactable && !returningToLobby;
+
+            NetworkManager nm = NetworkManager.Singleton;
+            bool isOnline = nm != null && nm.IsListening;
+            bool canPlayAgain = !isOnline || nm.IsServer;
+
             if (playAgainButton != null)
             {
                 playAgainButton.interactable =
-                    interactable;
+                    canInteract && canPlayAgain;
             }
 
-
+            // Keep the Select Vehicle behavior unchanged in this stage.
             if (selectVehicleButton != null)
             {
                 selectVehicleButton.interactable =
-                    interactable;
+                    canInteract;
             }
-
 
             if (resultsGroup != null)
             {
                 resultsGroup.blocksRaycasts =
-                    interactable;
+                    canInteract;
 
                 resultsGroup.interactable =
-                    interactable;
+                    canInteract;
             }
         }
 

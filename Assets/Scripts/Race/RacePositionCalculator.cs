@@ -1,4 +1,5 @@
 using UnityEngine;
+using Unity.Netcode;
 
 namespace PoseKart.Race
 {
@@ -26,6 +27,12 @@ namespace PoseKart.Race
         }
         private void LateUpdate()
         {
+            NetworkManager network = NetworkManager.Singleton;
+            if (network != null && network.IsListening && !network.IsServer)
+            {
+                return;
+            }
+
             if (!IsConfigured || checkpointManager.CheckpointCount < 2)
             {
                 return;
@@ -61,6 +68,8 @@ namespace PoseKart.Race
                 racer.SetRacePosition(actualRank);
                 actualRank++;
             }
+
+            FindFirstObjectByType<RaceManager>()?.PublishNetworkRaceProgress();
         }
 
         private float CalculateProgress(RaceParticipant racer)

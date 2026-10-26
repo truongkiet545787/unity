@@ -239,7 +239,9 @@ namespace PoseKart.Race
         public bool TryCollect(KartItemPickup.ItemType item)
         {
             // Last line of defense against legacy Boost grants from any caller.
-            if (hasItem || item == KartItemPickup.ItemType.Boost)
+            if (hasItem ||
+                (racer != null && racer.Finished) ||
+                item == KartItemPickup.ItemType.Boost)
                 return false;
             if (item != KartItemPickup.ItemType.HomingMissile &&
                 item != KartItemPickup.ItemType.BananaTrap &&
@@ -266,10 +268,13 @@ namespace PoseKart.Race
         {
             if (!hasItem) return;
 
+            if (racer != null && racer.Finished)
+                return;
+
             // Do not burn an item during the pre-race countdown. Using a
             // countdown value instead of Time.time also naturally pauses while
             // the game is paused.
-            if (car == null || !car.ControlEnabled)
+            if (!CanAdvanceHeldItemState())
                 return;
 
             itemTimeRemaining = Mathf.Max(0f, itemTimeRemaining - Time.deltaTime);
@@ -342,7 +347,10 @@ namespace PoseKart.Race
         }
         public void UseItem()
         {
-            if (!hasItem || car == null || !car.ControlEnabled)
+            if (!hasItem ||
+                (racer != null && racer.Finished) ||
+                car == null ||
+                !car.ControlEnabled)
                 return;
 
             // =========================================================
@@ -451,8 +459,47 @@ namespace PoseKart.Race
 
         public void NotifyActivationFailedDirect(KartItemPickup.ItemType failedItem)
         {
-            noTargetFeedbackUntil = Time.unscaledTime + 1.5f;
+            // Chỉ Missile/Ink có khái niệm target. Shield/Banana có thể bị
+            // từ chối vì lifecycle/authority nhưng không được báo NO TARGET.
+            if (failedItem == KartItemPickup.ItemType.HomingMissile ||
+                failedItem == KartItemPickup.ItemType.InkShot)
+            {
+                noTargetFeedbackUntil =
+                    Time.unscaledTime + 1.5f;
+            }
+            else
+            {
+                noTargetFeedbackUntil = 0f;
+            }
+
             ItemActivationFailed?.Invoke(failedItem);
+        }
+
+        private bool CanAdvanceHeldItemState()
+        {
+            if (car == null)
+                return false;
+
+            if (car.ControlEnabled)
+                return true;
+
+            if (!PoseKartNetworkItemBridge.IsOnlineRace)
+                return false;
+
+            Unity.Netcode.NetworkManager networkManager =
+                Unity.Netcode.NetworkManager.Singleton;
+            Unity.Netcode.NetworkObject networkObject =
+                GetComponent<Unity.Netcode.NetworkObject>();
+
+            // Trên Server, proxy của Client không có driving authority nên
+            // ControlEnabled=false. Inventory Server vẫn phải đếm lifetime;
+            // nhánh human-network phía dưới sẽ ngăn proxy tự đọc input/auto-use.
+            return networkManager != null &&
+                   networkManager.IsListening &&
+                   networkManager.IsServer &&
+                   networkObject != null &&
+                   networkObject.IsPlayerObject &&
+                   !networkObject.IsOwner;
         }
 
         public void ConsumeHeldCharge()

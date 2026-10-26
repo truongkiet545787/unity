@@ -80,7 +80,8 @@ namespace PoseKart.Race
                 if (!ps.gameObject.activeSelf)
                     ps.gameObject.SetActive(true);
 
-                ps.Play(true);
+                if (!ps.isPlaying)
+                    ps.Play(true);
             }
 
             TrailRenderer[] trails =
@@ -102,52 +103,9 @@ namespace PoseKart.Race
                 if (renderer != null)
                     renderer.enabled = true;
             }
-        }
-        private void Start()
-        {
-            EnsureVisualEffectsPlaying();
-        }
 
-        private void EnsureVisualEffectsPlaying()
-        {
-            // Particle được gắn sẵn trong OFFICAL_ROCKET prefab.
-            ParticleSystem[] systems =
-                GetComponentsInChildren<ParticleSystem>(true);
-
-            for (int i = 0; i < systems.Length; i++)
-            {
-                ParticleSystem ps = systems[i];
-
-                if (ps == null ||
-                    !ps.gameObject.activeInHierarchy)
-                {
-                    continue;
-                }
-
-                if (!ps.isPlaying)
-                {
-                    ps.Play(true);
-                }
-            }
-
-            // Nếu prefab có TrailRenderer thì bật lại trên mọi peer.
-            TrailRenderer[] trails =
-                GetComponentsInChildren<TrailRenderer>(true);
-
-            for (int i = 0; i < trails.Length; i++)
-            {
-                TrailRenderer trail = trails[i];
-
-                if (trail == null)
-                    continue;
-
-                trail.Clear();
-                trail.emitting = true;
-            }
-
-            // Không có particle nào trong prefab
-            // -> tạo fallback flame cả trên Client.
-            if (systems.Length == 0 && exhaust == null)
+            // Không có particle nào trong prefab -> tạo fallback flame
+            if (particles.Length == 0 && exhaust == null)
             {
                 exhaust = KartParticleEffect.Create(
                     "Missile flame",
@@ -157,6 +115,14 @@ namespace PoseKart.Race
                     0.3f
                 );
             }
+        }
+
+        private void Update()
+        {
+            if (spent || exhaust == null)
+                return;
+
+            exhaust.Emit(Mathf.Max(1, Mathf.RoundToInt(Time.deltaTime * 200f)));
         }
         private void OnDisable()
         {
@@ -243,7 +209,7 @@ namespace PoseKart.Race
             // Chỉ huỷ nếu không có người bắn (chấp nhận target bị null)
             if (owner == null)
             {
-                Destroy(gameObject);
+                DespawnNetworkObjectOrDestroy();
                 return;
             }
 
@@ -275,22 +241,33 @@ namespace PoseKart.Race
                     Vector3 targetPosition = target.TargetBody.worldCenterOfMass;
                     Vector3 delta = targetPosition - from;
                     if (!spawnGraceActive &&
-    delta.sqrMagnitude <= ArrivalRadius * ArrivalRadius)
-                    {
-                        Explode(targetPosition, target);
-                        return;
-                    }
-                    if (delta.sqrMagnitude <= ArrivalRadius * ArrivalRadius)
+                        delta.sqrMagnitude <= ArrivalRadius * ArrivalRadius)
                     {
                         Explode(targetPosition, target);
                         return;
                     }
 
-                    Vector3 destination = PredictTargetPosition(from, targetPosition);
-                    desiredDirection = delta.normalized;
+                    Vector3 destination =
+    PredictTargetPosition(from, targetPosition);
+
+                    // Khi ở xa, Missile ngắm cao hơn để tránh cắm xuống đường.
+                    // Khi đến gần mục tiêu, giảm dần độ nâng.
+                    float horizontalDistance = Vector2.Distance(
+                        new Vector2(from.x, from.z),
+                        new Vector2(targetPosition.x, targetPosition.z)
+                    );
+
+                    float flightHeight =
+                        Mathf.Clamp(horizontalDistance * 0.06f, 0f, 3f);
+
+                    destination += Vector3.up * flightHeight;
+
                     Vector3 predictedDelta = destination - from;
+
                     if (predictedDelta.sqrMagnitude > 0.0001f)
                         desiredDirection = predictedDelta.normalized;
+                    else if (delta.sqrMagnitude > 0.0001f)
+                        desiredDirection = delta.normalized;
                 }
             }
 
@@ -363,11 +340,8 @@ namespace PoseKart.Race
             }
             body.MovePosition(newPosition);
 
-            if (exhaust != null)
-                exhaust.Emit(4);
-            
             // Quét nổ backup khi ở gần mục tiêu (chỉ quét nếu có target)
-            if (target != null)
+            if (target != null && target.TargetBody != null)
             {
                 if ((target.TargetBody.worldCenterOfMass - newPosition).sqrMagnitude <= ArrivalRadius * ArrivalRadius)
                     Explode(target.TargetBody.worldCenterOfMass, target);
@@ -434,6 +408,9 @@ namespace PoseKart.Race
             if (!configured || spent || other == null || other.transform.IsChildOf(transform))
                 return;
 
+            if (Time.time < spawnGraceUntil)
+                return;
+
             if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && !Unity.Netcode.NetworkManager.Singleton.IsServer)
                 return;
 
@@ -484,7 +461,38 @@ namespace PoseKart.Race
             spent = true;
             activeMissiles.Remove(this);
             PoseKart.Audio.AudioManager.PlayMissileImpact(point);
-            SpawnImpactExplosion(point);
+
+            if (PoseKartNetworkItemBridge.IsOnlineRace)
+            {
+                PoseKartNetworkItemBridge bridge =
+                    owner != null
+                        ? owner.GetComponent<PoseKartNetworkItemBridge>()
+                        : null;
+
+                if (bridge == null)
+                {
+                    bridge = FindFirstObjectByType<PoseKartNetworkItemBridge>();
+                }
+
+                if (bridge != null && bridge.IsSpawned && bridge.IsServer)
+                {
+                    bridge.ServerBroadcastMissileExplosionVfx(
+                        point,
+                        impactExplosionLifetime
+                    );
+                }
+                else
+                {
+                    // Keep the Server presentation alive even if an invalid
+                    // scene omits the persistent item bridge.
+                    SpawnImpactExplosion(point);
+                }
+            }
+            else
+            {
+                SpawnImpactExplosion(point);
+            }
+
             SpawnRadialShockwave(point);
             TriggerMissileCameraShake(directHitTarget);
             CheckAndSpawnGroundFire(point);
@@ -507,6 +515,23 @@ namespace PoseKart.Race
             }
 
             if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer)
+            {
+                var netObj = GetComponent<Unity.Netcode.NetworkObject>();
+                if (netObj != null && netObj.IsSpawned)
+                {
+                    netObj.Despawn(true);
+                    return;
+                }
+            }
+
+            Destroy(gameObject);
+        }
+
+        private void DespawnNetworkObjectOrDestroy()
+        {
+            if (PoseKartNetworkItemBridge.IsOnlineRace &&
+                Unity.Netcode.NetworkManager.Singleton != null &&
+                Unity.Netcode.NetworkManager.Singleton.IsServer)
             {
                 var netObj = GetComponent<Unity.Netcode.NetworkObject>();
                 if (netObj != null && netObj.IsSpawned)
@@ -548,6 +573,17 @@ namespace PoseKart.Race
                 && affectedCount < affectedCars.Length)
             {
                 affectedCars[affectedCount++] = directHitTarget;
+            }
+
+            // A swept hit can end on scenery or a compound collider while the
+            // tracked racer is still inside the blast radius. Keep the tracked
+            // target as a candidate so a missed child-collider query cannot
+            // drop the authoritative Host/Client impact. ApplyRacerKnockback
+            // still enforces radius, line-of-sight and Shield handling.
+            if (IsEligibleRacer(target) && !ContainsCar(target, affectedCount)
+                && affectedCount < affectedCars.Length)
+            {
+                affectedCars[affectedCount++] = target;
             }
 
             for (int index = 0; index < affectedCount; index++)
@@ -695,6 +731,15 @@ namespace PoseKart.Race
             GameObject effect = Instantiate(impactExplosionPrefab, point, transform.rotation);
             if (effect == null)
                 return;
+
+            if (!effect.activeSelf)
+                effect.SetActive(true);
+
+            foreach (Renderer renderer in effect.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer != null)
+                    renderer.enabled = true;
+            }
 
             ParticleSystem[] systems = effect.GetComponentsInChildren<ParticleSystem>(true);
             float cleanupDelay = impactExplosionLifetime;

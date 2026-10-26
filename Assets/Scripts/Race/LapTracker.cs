@@ -1,4 +1,5 @@
 using UnityEngine;
+using PoseKart.Multiplayer;
 
 namespace PoseKart.Race
 {
@@ -41,6 +42,17 @@ namespace PoseKart.Race
             lastValidCheckpoint = -1;
             checkpointsPassed = 0;
             raceCompleted = false;
+        }
+
+        public void ApplyNetworkProgress(PoseKartRaceProgressState state)
+        {
+            currentLap = Mathf.Clamp(state.currentLap, 1, totalLaps);
+            expectedCheckpoint = state.expectedCheckpoint;
+            checkpointsPassed = Mathf.Max(0, state.checkpointsPassed);
+            raceCompleted = state.finished;
+            lastValidCheckpoint = expectedCheckpoint < 0
+                ? 0
+                : Mathf.Max(-1, expectedCheckpoint - 1);
         }
 
         public CheckpointProgressResult RegisterCheckpoint(int checkpointIndex)

@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace PoseKart.Multiplayer
 {
@@ -42,11 +43,87 @@ namespace PoseKart.Multiplayer
         [SerializeField]
         private int spawnedHumans;
 
+        private NetworkSceneManager subscribedSceneManager;
+        private bool networkSceneLoadCompleted;
+        private bool networkSceneLoadTimedOut;
+
+        public bool NetworkSceneLoadCompleted =>
+            networkSceneLoadCompleted;
+
+        public bool NetworkSceneLoadTimedOut =>
+            networkSceneLoadTimedOut;
+
+        private void Awake()
+        {
+            SubscribeToNetworkSceneEvents();
+        }
+
+        private void SubscribeToNetworkSceneEvents()
+        {
+            NetworkManager network = NetworkManager.Singleton;
+
+            if (network == null ||
+                network.SceneManager == null ||
+                subscribedSceneManager != null)
+            {
+                return;
+            }
+
+            subscribedSceneManager = network.SceneManager;
+            subscribedSceneManager.OnLoadEventCompleted +=
+                HandleNetworkLoadEventCompleted;
+        }
+
+        private void HandleNetworkLoadEventCompleted(
+            string sceneName,
+            LoadSceneMode loadSceneMode,
+            List<ulong> clientsCompleted,
+            List<ulong> clientsTimedOut)
+        {
+            NetworkManager network = NetworkManager.Singleton;
+
+            if (network == null ||
+                !network.IsServer ||
+                sceneName != SceneManager.GetActiveScene().name)
+            {
+                return;
+            }
+
+            networkSceneLoadTimedOut =
+                clientsTimedOut != null &&
+                clientsTimedOut.Count > 0;
+
+            networkSceneLoadCompleted =
+                !networkSceneLoadTimedOut;
+
+            Debug.Log(
+                $"[OnlineRaceBootstrap] NGO scene load completed | " +
+                $"Scene={sceneName} | Mode={loadSceneMode} | " +
+                $"Completed={clientsCompleted?.Count ?? 0} | " +
+                $"TimedOut={clientsTimedOut?.Count ?? 0}",
+                this
+            );
+        }
+
+        private void OnDestroy()
+        {
+            if (subscribedSceneManager != null)
+            {
+                subscribedSceneManager.OnLoadEventCompleted -=
+                    HandleNetworkLoadEventCompleted;
+                subscribedSceneManager = null;
+            }
+        }
+
 
         private IEnumerator Start()
         {
             // Đợi scene + NetworkManager ổn định.
             yield return null;
+
+            // Awake normally subscribes before NGO reports completion. Retry
+            // once in case the NetworkManager became available one frame later.
+            SubscribeToNetworkSceneEvents();
 
             PoseKartOnlineSession online =
                 PoseKartOnlineSession.Instance;

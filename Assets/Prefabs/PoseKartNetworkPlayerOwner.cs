@@ -32,6 +32,52 @@ namespace PoseKart.Multiplayer
             NetworkVariableReadPermission.Everyone,
             NetworkVariableWritePermission.Owner
         );
+
+        public string DisplayName => networkDisplayName.Value.ToString();
+
+        private readonly NetworkVariable<PoseKartRaceProgressState>
+            networkRaceProgress =
+                new NetworkVariable<PoseKartRaceProgressState>(
+                    default,
+                    NetworkVariableReadPermission.Everyone,
+                    NetworkVariableWritePermission.Server
+                );
+
+        private readonly NetworkVariable<bool>
+            networkRaceSetupReady =
+                new NetworkVariable<bool>(
+                    false,
+                    NetworkVariableReadPermission.Everyone,
+                    NetworkVariableWritePermission.Owner
+                );
+
+        // Nitro is still simulated by the local physics owner. These two
+        // owner-written values only replicate fuel/mode state so remote VFX
+        // and audio can present the same boost without taking physics authority.
+        private readonly NetworkVariable<float>
+            networkNitroFill01 =
+                new NetworkVariable<float>(
+                    0f,
+                    NetworkVariableReadPermission.Everyone,
+                    NetworkVariableWritePermission.Owner
+                );
+
+        private readonly NetworkVariable<byte>
+            networkNitroMode =
+                new NetworkVariable<byte>(
+                    0,
+                    NetworkVariableReadPermission.Everyone,
+                    NetworkVariableWritePermission.Owner
+                );
+
+        public bool IsRaceSetupReady =>
+            networkRaceSetupReady.Value;
+
+        private Coroutine raceSetupReadyRoutine;
+        private float nextNitroReplicationTime;
+        private float lastPublishedNitroFill = -1f;
+        private byte lastPublishedNitroMode = byte.MaxValue;
+
         private void Awake()
         {
             if (raceParticipant == null)
@@ -59,6 +105,15 @@ namespace PoseKart.Multiplayer
 
             networkDisplayName.OnValueChanged +=
                 OnNetworkDisplayNameChanged;
+            networkRaceProgress.OnValueChanged +=
+                OnNetworkRaceProgressChanged;
+            networkNitroFill01.OnValueChanged +=
+                OnNetworkNitroStateChanged;
+            networkNitroMode.OnValueChanged +=
+                OnNetworkNitroStateChanged;
+
+            if (IsOwner)
+                networkRaceSetupReady.Value = false;
 
 
             // Owner tự đưa tên lobby của mình lên NetworkVariable.
@@ -79,10 +134,16 @@ namespace PoseKart.Multiplayer
             SetLocalControl(IsOwner);
 
             ConfigureRaceParticipant();
+            ApplyNetworkRaceProgress(networkRaceProgress.Value);
+            ApplyNetworkNitroState();
 
 
             if (IsOwner)
             {
+                raceSetupReadyRoutine = StartCoroutine(
+                    ReportRaceSetupReadyWhenConfigured()
+                );
+
                 StartCoroutine(
                     WaitForRaceStartThenEnableControl()
                 );
@@ -101,6 +162,31 @@ namespace PoseKart.Multiplayer
                 $"Name={networkDisplayName.Value}",
                 this
             );
+        }
+
+        private void Update()
+        {
+            if (!IsSpawned || !IsOwner || carController == null)
+                return;
+
+            if (Time.unscaledTime < nextNitroReplicationTime &&
+                (byte)carController.CurrentNitroMode == lastPublishedNitroMode)
+            {
+                return;
+            }
+
+            float fill01 = carController.NitroFill01;
+            byte mode = (byte)carController.CurrentNitroMode;
+            bool modeChanged = mode != lastPublishedNitroMode;
+            bool fillChanged = Mathf.Abs(fill01 - lastPublishedNitroFill) >= 0.01f;
+            if (!modeChanged && !fillChanged)
+                return;
+
+            networkNitroFill01.Value = fill01;
+            networkNitroMode.Value = mode;
+            lastPublishedNitroFill = fill01;
+            lastPublishedNitroMode = mode;
+            nextNitroReplicationTime = Time.unscaledTime + 0.1f;
         }
         private void ConfigureRaceParticipant()
         {
@@ -151,6 +237,46 @@ namespace PoseKart.Multiplayer
                 this
             );
         }
+
+        private IEnumerator ReportRaceSetupReadyWhenConfigured()
+        {
+            if (!IsOwner)
+                yield break;
+
+            while (IsSpawned)
+            {
+                RaceManager raceManager =
+                    FindFirstObjectByType<RaceManager>();
+
+                if (raceManager != null &&
+                    raceManager.IsConfigured &&
+                    raceManager.State == RaceState.Waiting &&
+                    raceManager.Racers != null &&
+                    raceParticipant != null)
+                {
+                    for (int i = 0;
+                         i < raceManager.Racers.Length;
+                         i++)
+                    {
+                        if (raceManager.Racers[i] == raceParticipant)
+                        {
+                            networkRaceSetupReady.Value = true;
+
+                            Debug.Log(
+                                "[NetworkPlayer] RACE SETUP READY | " +
+                                $"Owner={OwnerClientId}",
+                                this
+                            );
+
+                            yield break;
+                        }
+                    }
+                }
+
+                yield return null;
+            }
+        }
+
         private IEnumerator WaitForRaceStartThenEnableControl()
         {
             CarController car =
@@ -352,8 +478,23 @@ namespace PoseKart.Multiplayer
 
         public override void OnNetworkDespawn()
         {
+            if (raceSetupReadyRoutine != null)
+            {
+                StopCoroutine(raceSetupReadyRoutine);
+                raceSetupReadyRoutine = null;
+            }
+
             networkDisplayName.OnValueChanged -=
                 OnNetworkDisplayNameChanged;
+            networkRaceProgress.OnValueChanged -=
+                OnNetworkRaceProgressChanged;
+            networkNitroFill01.OnValueChanged -=
+                OnNetworkNitroStateChanged;
+            networkNitroMode.OnValueChanged -=
+                OnNetworkNitroStateChanged;
+
+            if (carController != null)
+                carController.ClearRemoteNitroPresentation();
 
             SetLocalControl(false);
 
@@ -364,6 +505,68 @@ namespace PoseKart.Multiplayer
     FixedString64Bytes newName)
         {
             ConfigureRaceParticipant();
+        }
+
+        private void OnNetworkRaceProgressChanged(
+            PoseKartRaceProgressState oldState,
+            PoseKartRaceProgressState newState)
+        {
+            if (!IsServer)
+                ApplyNetworkRaceProgress(newState);
+        }
+
+        private void OnNetworkNitroStateChanged(float oldValue, float newValue)
+        {
+            if (!IsOwner)
+                ApplyNetworkNitroState();
+        }
+
+        private void OnNetworkNitroStateChanged(byte oldValue, byte newValue)
+        {
+            if (!IsOwner)
+                ApplyNetworkNitroState();
+        }
+
+        private void ApplyNetworkNitroState()
+        {
+            if (IsOwner || carController == null)
+                return;
+
+            CarController.NitroMode mode =
+                (CarController.NitroMode)networkNitroMode.Value;
+            if (!System.Enum.IsDefined(typeof(CarController.NitroMode), mode))
+                mode = CarController.NitroMode.None;
+
+            carController.ApplyRemoteNitroPresentation(
+                networkNitroFill01.Value,
+                mode);
+        }
+
+        private void ApplyNetworkRaceProgress(PoseKartRaceProgressState state)
+        {
+            if (raceParticipant == null)
+                raceParticipant = GetComponent<RaceParticipant>();
+
+            if (raceParticipant == null)
+                return;
+
+            raceParticipant.ApplyNetworkProgress(state);
+
+            RaceManager raceManager = FindFirstObjectByType<RaceManager>();
+            if (raceManager != null)
+                raceManager.ApplyNetworkParticipantProgress(raceParticipant, state);
+        }
+
+        public void PublishRaceProgress(RaceParticipant racer)
+        {
+            if (!IsServer || racer == null)
+                return;
+
+            PoseKartRaceProgressState next =
+                PoseKartRaceProgressState.From(racer);
+
+            if (!networkRaceProgress.Value.Equals(next))
+                networkRaceProgress.Value = next;
         }
 
 

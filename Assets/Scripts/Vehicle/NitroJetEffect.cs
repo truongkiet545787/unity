@@ -72,11 +72,11 @@ namespace PoseKart.Vehicle
         private void LateUpdate()
         {
             // Boost pad chỉ tăng tốc chứ không kích hoạt nitrojet
-            bool active = car != null && car.IsNitroBoosting;
+            bool active = car != null && car.IsVisualNitroBoosting;
 
             if (car != null && active)
             {
-                CarController.NitroMode mode = car.CurrentNitroMode;
+                CarController.NitroMode mode = car.VisualNitroMode;
                 if (mode != lastMode)
                 {
                     ApplyModeVisuals(mode, false);

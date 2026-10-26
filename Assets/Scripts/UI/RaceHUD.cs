@@ -225,8 +225,8 @@ namespace PoseKart.UI
             if (HasDedicatedNitroMeter())
                 return;
 
-            if (nitroPlayerCar == null && raceManager != null)
-                nitroPlayerCar = raceManager.PlayerController;
+            if (!PoseKartLocalPlayerResolver.IsLocalHuman(nitroPlayerCar))
+                nitroPlayerCar = PoseKartLocalPlayerResolver.FindLocalCar(raceManager);
 
             if (nitroPlayerCar == null)
             {
@@ -287,7 +287,10 @@ namespace PoseKart.UI
 
         private bool HasDedicatedNitroMeter()
         {
-            return GetComponent<PoseKartNitroMeterUI>() != null;
+            // The dedicated meter is a child of RaceHUD in the online scenes.
+            // Include inactive children so RaceHUD never creates/binds a second
+            // legacy bar during scene load or domain reload.
+            return GetComponentInChildren<PoseKartNitroMeterUI>(true) != null;
         }
 
         private void RefreshNitroMode()

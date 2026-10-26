@@ -258,6 +258,7 @@ namespace PoseKart.UI
             SetVerticesDirty();
         }
 
+#if UNITY_EDITOR
         protected override void OnValidate()
         {
             raycastTarget = false;
@@ -267,5 +268,6 @@ namespace PoseKart.UI
             minimumLineWidth = Mathf.Min(minimumLineWidth, maximumLineWidth);
             initialized = false;
         }
+#endif
     }
 }
