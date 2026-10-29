@@ -225,7 +225,33 @@ namespace PoseKart.Race
 
             ServerProcessPickup(pickupIndex);
         }
+        private FlashImage localHitFlash;
 
+        private void PlayLocalHitFlash(
+            Color color,
+            float duration,
+            float maxAlpha)
+        {
+            // Không flash cho AI hoặc remote clone
+            if (!IsHumanNetworkPlayer() || !IsOwner)
+                return;
+
+            if (localHitFlash == null)
+            {
+                localHitFlash =
+                    FindFirstObjectByType<FlashImage>(
+                        FindObjectsInactive.Include);
+            }
+
+            if (localHitFlash == null)
+                return;
+
+            localHitFlash.Flash(
+                duration,
+                0f,
+                maxAlpha,
+                color);
+        }
         private void ServerProcessPickup(int pickupIndex)
         {
             if (!IsServer)
@@ -557,6 +583,18 @@ namespace PoseKart.Race
                 return;
             }
 
+            // Missile/Ink gameplay đã được Server tạo ở trên. Chỉ đồng bộ
+            // muzzle VFX cosmetic một lần sau activation thành công.
+            if (heldItem == KartItemPickup.ItemType.HomingMissile ||
+                heldItem == KartItemPickup.ItemType.InkShot)
+            {
+                ServerSyncLauncherMuzzleVfx(
+                    heldItem,
+                    itemSpawnPosition,
+                    itemSpawnRotation,
+                    hasItemSpawnPose);
+            }
+
             // Server inventory là authoritative.
             inventory.ConsumeHeldCharge();
 
@@ -573,6 +611,97 @@ namespace PoseKart.Race
                     requestId
                 );
             }
+        }
+
+        private void ServerSyncLauncherMuzzleVfx(
+            KartItemPickup.ItemType itemType,
+            Vector3 requestedPosition,
+            Quaternion requestedRotation,
+            bool hasRequestedPose)
+        {
+            if (!IsServer)
+                return;
+
+            Vector3 position = car != null
+                ? car.transform.position + car.transform.forward * 1.6f + Vector3.up * 1.2f
+                : transform.position;
+            Quaternion rotation = car != null
+                ? car.transform.rotation
+                : transform.rotation;
+
+            // Đây chính là pose mà owner đã gửi và LaunchMissile/LaunchInk
+            // đã chấp nhận, nên Client thấy muzzle cùng vị trí projectile.
+            if (hasRequestedPose &&
+                IsValidMuzzlePose(requestedPosition, requestedRotation))
+            {
+                position = requestedPosition;
+                rotation = requestedRotation;
+            }
+            else
+            {
+                PoseKart.KartLauncherSkill launcher =
+                    GetComponent<PoseKart.KartLauncherSkill>() ??
+                    GetComponentInChildren<PoseKart.KartLauncherSkill>(true);
+
+                if (launcher != null &&
+                    launcher.TryGetActiveNetworkShotPose(
+                        out Vector3 localPosition,
+                        out Quaternion localRotation))
+                {
+                    position = localPosition;
+                    rotation = localRotation;
+                }
+            }
+
+            SyncLauncherMuzzleVfxRpc(
+                (int)itemType,
+                position,
+                rotation);
+        }
+
+        private static bool IsValidMuzzlePose(
+            Vector3 position,
+            Quaternion rotation)
+        {
+            return !float.IsNaN(position.x) &&
+                   !float.IsNaN(position.y) &&
+                   !float.IsNaN(position.z) &&
+                   !float.IsInfinity(position.x) &&
+                   !float.IsInfinity(position.y) &&
+                   !float.IsInfinity(position.z) &&
+                   !float.IsNaN(rotation.x) &&
+                   !float.IsNaN(rotation.y) &&
+                   !float.IsNaN(rotation.z) &&
+                   !float.IsNaN(rotation.w) &&
+                   !float.IsInfinity(rotation.x) &&
+                   !float.IsInfinity(rotation.y) &&
+                   !float.IsInfinity(rotation.z) &&
+                   !float.IsInfinity(rotation.w);
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void SyncLauncherMuzzleVfxRpc(
+            int itemTypeInt,
+            Vector3 position,
+            Quaternion rotation)
+        {
+            if (itemTypeInt != (int)KartItemPickup.ItemType.HomingMissile &&
+                itemTypeInt != (int)KartItemPickup.ItemType.InkShot)
+            {
+                return;
+            }
+
+            PoseKart.KartLauncherSkill launcher =
+                GetComponent<PoseKart.KartLauncherSkill>() ??
+                GetComponentInChildren<PoseKart.KartLauncherSkill>(true);
+
+            if (launcher == null)
+                return;
+
+            launcher.PlayNetworkMuzzleVfx(
+                (KartItemPickup.ItemType)itemTypeInt,
+                position,
+                rotation);
         }
 
         [Rpc(SendTo.Owner)]
@@ -647,6 +776,47 @@ namespace PoseKart.Race
             networkShieldActive.Value = active;
         }
 
+        public void ServerBroadcastShieldExpiredSfx(Vector3 worldPosition)
+        {
+            if (!IsServer || !IsSpawned)
+                return;
+
+            SyncShieldExpiredSfxRpc(worldPosition);
+        }
+
+        public void ServerBroadcastShieldContactSfx(Vector3 worldPosition)
+        {
+            if (!IsServer || !IsSpawned)
+                return;
+
+            SyncShieldContactSfxRpc(worldPosition);
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void SyncShieldContactSfxRpc(Vector3 worldPosition)
+        {
+            // Physical Shield collisions are detected by the server-only
+            // force field, so remote listeners need an explicit one-shot.
+            if (!IsServer)
+            {
+                PoseKart.Audio.AudioManager.PlayShieldBlock(
+                    worldPosition
+                );
+            }
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void SyncShieldExpiredSfxRpc(Vector3 worldPosition)
+        {
+            // The server already played the authoritative local sound.
+            if (!IsServer)
+            {
+                PoseKart.Audio.AudioManager.PlayShieldExpire(
+                    worldPosition
+                );
+            }
+        }
+
         /// <summary>
         /// Server authoritative shield block.
         /// </summary>
@@ -685,13 +855,18 @@ namespace PoseKart.Race
         private void SyncShieldBlockedRpc(
             Vector3 impactPoint)
         {
-            KartItemDefense.PlayDeflectPingSoundAt(
-                impactPoint
-            );
+            // TryBlockIncomingItem already played both sounds on the server.
+            // Replicate them only to clients so a Host does not hear doubles.
+            if (!IsServer)
+            {
+                KartItemDefense.PlayDeflectPingSoundAt(
+                    impactPoint
+                );
 
-            PoseKart.Audio.AudioManager.PlayShieldBlock(
-                impactPoint
-            );
+                PoseKart.Audio.AudioManager.PlayShieldBlock(
+                    impactPoint
+                );
+            }
 
             Color energyCyan =
                 new Color(
@@ -814,37 +989,14 @@ namespace PoseKart.Race
                 deltaVelocity,
                 0.7f,
                 point,
-                torqueStrength * 1.35f
+                torqueStrength
             );
-
-            Rigidbody body = car.TargetBody;
-
-            if (body != null && !body.isKinematic)
+            if (car.TargetBody != null && !car.IsShockwaveActive)
             {
-                body.AddForce(
-                    Vector3.up * 3.5f,
-                    ForceMode.VelocityChange
-                );
-
-                Vector3 direction =
-                    deltaVelocity.sqrMagnitude > 0.001f
-                        ? deltaVelocity.normalized
-                        : car.transform.forward;
-
-                Vector3 tumbleAxis =
-                    (
-                        Vector3.Cross(
-                            direction,
-                            Vector3.up
-                        ) +
-                        Random.insideUnitSphere * 0.4f
-                    ).normalized;
-
-                body.AddTorque(
-                    tumbleAxis *
-                    (torqueStrength * 1.5f),
-                    ForceMode.Impulse
-                );
+                PlayLocalHitFlash(
+                    new Color(1f, 0.08f, 0.02f, 1f),
+                    0.16f,
+                    0.28f);
             }
         }
 
@@ -1105,7 +1257,10 @@ namespace PoseKart.Race
 
             if (!stunned)
                 return;
-
+            PlayLocalHitFlash(
+    new Color(1f, 0.75f, 0.05f, 1f),
+    0.14f,
+    0.22f);
             KartBananaTrap.PlayDizzyEffect(car);
 
             Rigidbody body = car.TargetBody;
@@ -1229,6 +1384,10 @@ namespace PoseKart.Race
                     KartInkScreenOverlay.ShowUntil(
                         Time.time + blindDuration
                     );
+                    PlayLocalHitFlash(
+    new Color(0.04f, 0.08f, 0.2f, 1f),
+    0.20f,
+    0.18f);
                 }
             }
             else
@@ -1260,8 +1419,13 @@ namespace PoseKart.Race
             float blindDuration)
         {
             KartInkScreenOverlay.ShowUntil(
+
                 Time.time + blindDuration
             );
+            PlayLocalHitFlash(
+    new Color(0.04f, 0.08f, 0.2f, 1f),
+    0.20f,
+    0.18f);
         }
 
         [Rpc(SendTo.ClientsAndHost)]

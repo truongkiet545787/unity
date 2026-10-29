@@ -25,6 +25,10 @@ namespace PoseKart.Multiplayer
         [Header("Physics")]
         [SerializeField]
         private Rigidbody body;
+
+        [Header("Local Camera")]
+        [Tooltip("Drag the FirstPersonAnchor child from this vehicle prefab here.")]
+        [SerializeField] private Transform firstPersonAnchor;
         private readonly NetworkVariable<FixedString64Bytes>
     networkDisplayName =
         new NetworkVariable<FixedString64Bytes>(
@@ -393,6 +397,8 @@ namespace PoseKart.Multiplayer
 
             if (chaseCamera != null)
             {
+                chaseCamera.SetLocalOwner(IsOwner);
+                chaseCamera.SetFirstPersonAnchor(ResolveFirstPersonAnchor());
                 chaseCamera.SetTarget(body);
 
                 Debug.Log(
@@ -449,6 +455,8 @@ namespace PoseKart.Multiplayer
             PoseKartCinematicCamera cinematicCam = FindFirstObjectByType<PoseKartCinematicCamera>();
             if (cinematicCam != null && body != null)
             {
+                cinematicCam.SetLocalOwner(IsOwner);
+                cinematicCam.SetFirstPersonAnchor(ResolveFirstPersonAnchor());
                 cinematicCam.SetTarget(body);
                 cinematicCam.enabled = true;
             }
@@ -459,6 +467,9 @@ namespace PoseKart.Multiplayer
             {
                 introCam.StopAllCoroutines();
                 introCam.enabled = false;
+
+                if (cinematicCam != null)
+                    cinematicCam.SetIntroHandedOff(true);
             }
 
             // 3. Bind vao Arcade HUD de hien thi KM/H, Nitro
@@ -474,6 +485,24 @@ namespace PoseKart.Multiplayer
             {
                 carController.SetControlPermission(true);
             }
+        }
+
+        private Transform ResolveFirstPersonAnchor()
+        {
+            if (firstPersonAnchor != null)
+                return firstPersonAnchor;
+
+            if (body == null)
+                return null;
+
+            Transform[] children = body.GetComponentsInChildren<Transform>(true);
+            foreach (Transform child in children)
+            {
+                if (child != null && child.name == "FirstPersonAnchor")
+                    return child;
+            }
+
+            return null;
         }
 
         public override void OnNetworkDespawn()
@@ -495,6 +524,14 @@ namespace PoseKart.Multiplayer
 
             if (carController != null)
                 carController.ClearRemoteNitroPresentation();
+
+            if (IsOwner)
+            {
+                PoseKartCinematicCamera camera =
+                    FindFirstObjectByType<PoseKartCinematicCamera>();
+                if (camera != null)
+                    camera.SetLocalOwner(false);
+            }
 
             SetLocalControl(false);
 

@@ -375,7 +375,28 @@ namespace PoseKart.Race
                 deflectPingClip.SetData(samples, 0);
             }
 
-            AudioSource.PlayClipAtPoint(deflectPingClip, position, 0.95f);
+            PoseKart.Audio.AudioManager audioManager =
+                PoseKart.Audio.AudioManager.Instance;
+
+            if (audioManager != null)
+            {
+                audioManager.PlaySFXAtPosition(
+                    deflectPingClip,
+                    position,
+                    0.95f,
+                    1f,
+                    3f,
+                    100f
+                );
+            }
+            else
+            {
+                AudioSource.PlayClipAtPoint(
+                    deflectPingClip,
+                    position,
+                    0.95f
+                );
+            }
         }
 
         private void Update()
@@ -415,14 +436,17 @@ namespace PoseKart.Race
             blockedHitsRemaining = 0;
             shieldTimeRemaining = 0f;
 
+            PoseKartNetworkItemBridge networkBridge = null;
             if (PoseKartNetworkItemBridge.IsOnlineRace && Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer)
             {
-                GetComponent<PoseKartNetworkItemBridge>()?.ServerSetShieldActive(false);
+                networkBridge = GetComponent<PoseKartNetworkItemBridge>();
+                networkBridge?.ServerSetShieldActive(false);
             }
 
             if (expired)
             {
                 PoseKart.Audio.AudioManager.PlayShieldExpire(transform.position);
+                networkBridge?.ServerBroadcastShieldExpiredSfx(transform.position);
             }
 
             OnShieldDeactivated?.Invoke(expired);
@@ -611,6 +635,15 @@ namespace PoseKart.Race
                     PoseKart.Audio.AudioManager.PlayShieldBlock(
                         contactPoint
                     );
+
+                    if (PoseKartNetworkItemBridge.IsOnlineRace &&
+                        Unity.Netcode.NetworkManager.Singleton != null &&
+                        Unity.Netcode.NetworkManager.Singleton.IsServer)
+                    {
+                        defense?
+                            .GetComponent<PoseKartNetworkItemBridge>()?
+                            .ServerBroadcastShieldContactSfx(contactPoint);
+                    }
 
                     KartParticleEffect.Burst(
                         contactPoint,

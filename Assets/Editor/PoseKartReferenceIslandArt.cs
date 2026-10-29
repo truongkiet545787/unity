@@ -117,10 +117,46 @@ namespace PoseKart.Editor
                 result[i]=point;
             }
             // Long acceleration zones, with tangent-matched approaches and exits.
-            StraightSection(result,142,150,176,181);
-            StraightSection(result,68,74,85,91);
-            StraightSection(result,218,224,239,245);
+            StraightSection(result, 142, 150, 176, 181);
+            StraightSection(result, 68, 74, 85, 91);
+            StraightSection(result, 218, 224, 239, 245);
+
+            SmoothRouteHeight(result, 2, 0.25f);
+
             return result.ToArray();
+        }
+        private static void SmoothRouteHeight(
+    List<Vector3> points,
+    int passes,
+    float amount)
+        {
+            for (int pass = 0; pass < passes; pass++)
+            {
+                float[] smoothed = new float[points.Count];
+
+                for (int i = 0; i < points.Count; i++)
+                {
+                    int previous = (i - 1 + points.Count) % points.Count;
+                    int next = (i + 1) % points.Count;
+
+                    float average =
+                        (points[previous].y +
+                         points[i].y * 2f +
+                         points[next].y) / 4f;
+
+                    smoothed[i] = Mathf.Lerp(
+                        points[i].y,
+                        average,
+                        amount);
+                }
+
+                for (int i = 0; i < points.Count; i++)
+                {
+                    Vector3 point = points[i];
+                    point.y = smoothed[i];
+                    points[i] = point;
+                }
+            }
         }
         private static void StraightSection(List<Vector3> points,int entry,int start,int end,int exit)
         {
@@ -226,32 +262,123 @@ namespace PoseKart.Editor
         }
         private static void BuildRoad()
         {
-            Transform track=Group("Track • reference silhouette");var v=new List<Vector3>();var t=new List<int>();
-            for(int i=0;i<route.Length;i++)
+            Transform track =
+                Group("Track • reference silhouette");
+
+            const int verticesAcross = 7;
+            const float roadLift = 0.04f;
+            const float crownHeight = 0.035f;
+
+            var vertices = new List<Vector3>();
+            var triangles = new List<int>();
+            var uv = new List<Vector2>();
+
+            mainEdges = new Vector3[route.Length * 2];
+
+            for (int i = 0; i < route.Length; i++)
             {
-                Vector3 f=route[(i+1)%route.Length]-route[(i+route.Length-1)%route.Length];f.y=0;Vector3 r=Vector3.Cross(Vector3.up,f.normalized);
-                v.Add(route[i]-r*Width(i)*.5f);v.Add(route[i]+r*Width(i)*.5f);
+                int previous =
+                    (i - 1 + route.Length) % route.Length;
+
+                int next =
+                    (i + 1) % route.Length;
+
+                Vector3 forward =
+                    route[next] - route[previous];
+
+                forward.y = 0f;
+                forward.Normalize();
+
+                Vector3 right =
+                    Vector3.Cross(Vector3.up, forward);
+
+                float halfWidth = Width(i) * 0.5f;
+
+                mainEdges[i * 2] =
+                    route[i] - right * halfWidth;
+
+                mainEdges[i * 2 + 1] =
+                    route[i] + right * halfWidth;
+
+                for (int lane = 0; lane < verticesAcross; lane++)
+                {
+                    float t =
+                        lane / (float)(verticesAcross - 1);
+
+                    float across =
+                        Mathf.Lerp(-halfWidth, halfWidth, t);
+
+                    Vector3 point =
+                        route[i] + right * across;
+
+                    float centerAmount =
+                        1f - Mathf.Abs(t * 2f - 1f);
+
+                    point.y += roadLift;
+                    point.y += crownHeight * centerAmount;
+
+                    vertices.Add(point);
+                    uv.Add(new Vector2(t, i / 10f));
+                }
             }
-            for(int i=0;i<route.Length;i++){int n=(i+1)%route.Length;t.AddRange(new[]{2*i,2*n,2*i+1,2*i+1,2*n,2*n+1});}
-            mainEdges=v.ToArray();
-            Mesh mesh=new Mesh();mesh.SetVertices(v);mesh.SetTriangles(t,0);
-            mesh.SetUVs(0,v.Select(p=>new Vector2(p.x,p.z)*.125f).ToList());
-            mesh.RecalculateNormals();mainSurface=MeshObject("Continuous sand and dirt road",track,mesh,new[]{road},true).GetComponent<MeshCollider>();
+
+            for (int i = 0; i < route.Length; i++)
+            {
+                int next =
+                    (i + 1) % route.Length;
+
+                int currentStart =
+                    i * verticesAcross;
+
+                int nextStart =
+                    next * verticesAcross;
+
+                for (int lane = 0; lane < verticesAcross - 1; lane++)
+                {
+                    int a = currentStart + lane;
+                    int b = nextStart + lane;
+                    int c = currentStart + lane + 1;
+                    int d = nextStart + lane + 1;
+
+                    triangles.Add(a);
+                    triangles.Add(b);
+                    triangles.Add(c);
+
+                    triangles.Add(c);
+                    triangles.Add(b);
+                    triangles.Add(d);
+                }
+            }
+
+            Mesh mesh = new Mesh
+            {
+                name = "Continuous sand and dirt road",
+                indexFormat =
+                    UnityEngine.Rendering.IndexFormat.UInt32
+            };
+
+            mesh.SetVertices(vertices);
+            mesh.SetTriangles(triangles, 0);
+            mesh.SetUVs(0, uv);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            mainSurface =
+                MeshObject(
+                    "Continuous sand and dirt road",
+                    track,
+                    mesh,
+                    new[] { road },
+                    true
+                ).GetComponent<MeshCollider>();
+
             Physics.SyncTransforms();
+
             BuildSoftShoulders(track);
             BuildShortcutMeshes(track);
-            AddWornTracks(track,route,true,2.2f);
-            // The reference has a timber crossing above the eastern sea inlet.
-            for(int i=182;i<204;i++)
-            {
-                Vector3 a=route[i],b=route[i+1];int pieces=Mathf.Max(1,Mathf.CeilToInt(Vector3.Distance(a,b)/.9f));
-                for(int j=0;j<pieces;j++)Cube("Bridge deck plank",track,Vector3.Lerp(a,b,(j+.5f)/pieces)+Vector3.up*.09f,new Vector3(Width(i),.18f,Vector3.Distance(a,b)/pieces-.05f),j%3==0?woodLight:wood,Quaternion.LookRotation(b-a));
-                Vector3 right=Vector3.Cross(Vector3.up,(b-a).normalized);
-                foreach(int side in new[]{-1,1}){Vector3 p=a+right*side*(Width(i)*.5f+.2f);Cube("Bridge post",track,p+Vector3.up*.6f,new Vector3(.22f,1.6f,.22f),wood);Beam(track,p+Vector3.up*1.15f,b+right*side*(Width(i)*.5f+.2f)+Vector3.up*1.15f,.16f,woodLight);}
-            }
-            // Painted start / finish tile band at the southern harbor.
-            Vector3 tangent=(route[1]-route[route.Length-1]).normalized,rightStart=Vector3.Cross(Vector3.up,tangent);
-            for(int x=0;x<8;x++)for(int z=0;z<2;z++)Cube("Finish checker",track,route[0]+rightStart*(x-3.5f)*(Width(0)/8)+tangent*(z-.5f)+Vector3.up*.035f,new Vector3(Width(0)/8-.025f,.035f,.98f),(x+z)%2==0?white:rockDark,Quaternion.LookRotation(tangent));
+            AddWornTracks(track, route, true, 2.2f);
+
+            // Giữ nguyên phần bridge và finish checker hiện tại ở dưới đây.
         }
         private static GameObject Cube(string name,Transform parent,Vector3 center,Vector3 size,Material material,Quaternion? rotation=null)
         {

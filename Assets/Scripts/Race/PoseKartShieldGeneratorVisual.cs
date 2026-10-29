@@ -356,8 +356,19 @@ namespace PoseKart.Race
             // 5. Ensure AudioSource
             if (shieldAudioSource == null)
             {
-                shieldAudioSource = GetComponent<AudioSource>();
+                // Do not reuse the kart engine AudioSource: assigning the
+                // shield loop there would replace/stop the engine clip.
+                shieldAudioSource = gameObject.AddComponent<AudioSource>();
             }
+
+            shieldAudioSource.playOnAwake = false;
+            shieldAudioSource.loop = true;
+            shieldAudioSource.spatialBlend = 1f;
+            shieldAudioSource.rolloffMode = AudioRolloffMode.Logarithmic;
+            shieldAudioSource.minDistance = 3f;
+            shieldAudioSource.maxDistance = 70f;
+            shieldAudioSource.dopplerLevel = 0f;
+            shieldAudioSource.volume = 0.45f;
         }
 
         public void RecalculateShieldScale()
@@ -686,15 +697,8 @@ namespace PoseKart.Race
                 Destroy(vfx, 2.5f);
             }
 
-            // Activation Audio
-            if (activationClip != null)
-            {
-                AudioSource.PlayClipAtPoint(activationClip, transform.position);
-            }
-            else
-            {
-                AudioManager.PlayShieldActivate(transform.position);
-            }
+            // KartItemDefense owns one-shot Shield audio. Keeping audio out
+            // of the visual path prevents duplicate Host/Client playback.
 
             // Looping Audio
             if (shieldAudioSource != null && shieldLoopClip != null)
@@ -750,15 +754,7 @@ namespace PoseKart.Race
                 Destroy(vfx, 2.0f);
             }
 
-            // Impact Audio
-            if (impactClip != null)
-            {
-                AudioSource.PlayClipAtPoint(impactClip, vfxPos);
-            }
-            else
-            {
-                AudioManager.PlayShieldBlock(vfxPos);
-            }
+            // KartItemDefense / its network bridge owns impact audio.
 
             // Impact Pulse Animation
             if (forceShieldInstance != null && forceShieldInstance.activeSelf)
@@ -823,15 +819,7 @@ namespace PoseKart.Race
                 Destroy(vfx, 2.5f);
             }
 
-            // Expiration Audio
-            if (expired && expirationClip != null)
-            {
-                AudioSource.PlayClipAtPoint(expirationClip, center);
-            }
-            else if (expired)
-            {
-                AudioManager.PlayShieldExpire(center);
-            }
+            // KartItemDefense / its network bridge owns expiration audio.
 
             // Collapse Force Shield
             if (forceShieldInstance != null && forceShieldInstance.activeSelf)

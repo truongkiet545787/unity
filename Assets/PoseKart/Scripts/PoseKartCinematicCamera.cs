@@ -1,11 +1,20 @@
 using UnityEngine;
 using System.Collections; // Đã thêm thư viện này cho IEnumerator
+using UnityEngine.InputSystem;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
+
 
 [RequireComponent(typeof(Camera))]
 [DisallowMultipleComponent]
 [AddComponentMenu("PoseKart/Cinematic Camera")]
 public sealed class PoseKartCinematicCamera : MonoBehaviour
 {
+    [SerializeField] private Volume raceVolume;
+    [SerializeField, Range(0f, 0.3f)] private float nitroMotionBlur = 0.14f;
+    [SerializeField, Range(0.1f, 20f)] private float motionBlurResponse = 8f;
+
+    private MotionBlur motionBlur;
     [Header("Asphalt Intro - Flash Transitions")]
     [SerializeField] private CanvasGroup flashGroup;
 
@@ -30,6 +39,14 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
 
     [Header("Target")]
     public Rigidbody targetRigidbody;
+
+    [Header("First Person View")]
+    [Tooltip("Optional fallback anchor for offline use. In multiplayer the local owner supplies the vehicle anchor at runtime.")]
+    [SerializeField] private Transform firstPersonAnchor;
+    [SerializeField] private KeyCode viewToggleKey = KeyCode.C;
+    [SerializeField, Min(0.1f)] private float viewTransitionSpeed = 12f;
+    [SerializeField, Range(35f, 105f)] private float firstPersonFov = 72f;
+    [SerializeField, Range(0f, 12f)] private float firstPersonNitroFovPunch = 3f;
 
     [Header("Follow")]
     public float distance = 4.2f;
@@ -177,6 +194,11 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
     private bool previousAirborne;
     private bool previousNitro;
 
+    private bool firstPersonView;
+    private bool localOwnerInputEnabled = true;
+    private bool introHandedOff = true;
+    private float firstPersonBlend = 1f;
+
     private float shakeRemaining;
     private float shakeDuration;
     private float shakeStrength;
@@ -187,6 +209,61 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
 
         if (cam != null)
             baseFov = cam.fieldOfView;
+        if (raceVolume != null && raceVolume.profile != null &&
+    raceVolume.profile.TryGet(out motionBlur))
+        {
+            motionBlur.active = true;
+            motionBlur.intensity.overrideState = true;
+            motionBlur.intensity.value = 0f;
+        }
+    }
+
+    private void Update()
+    {
+        if (!localOwnerInputEnabled || !introHandedOff || firstPersonAnchor == null)
+            return;
+
+        if (Keyboard.current != null &&
+    Keyboard.current.cKey.wasPressedThisFrame)
+        {
+            firstPersonView = !firstPersonView;
+
+            if (firstPersonView)
+                firstPersonBlend = 0f;
+        }
+    }
+
+    public void SetLocalOwner(bool isLocalOwner)
+    {
+        localOwnerInputEnabled = isLocalOwner;
+
+        if (!isLocalOwner)
+        {
+            firstPersonView = false;
+            firstPersonBlend = 1f;
+        }
+    }
+
+    public void SetFirstPersonAnchor(Transform anchor)
+    {
+        firstPersonAnchor = anchor;
+
+        if (firstPersonAnchor == null)
+        {
+            firstPersonView = false;
+            firstPersonBlend = 1f;
+        }
+    }
+
+    public void SetIntroHandedOff(bool handedOff)
+    {
+        introHandedOff = handedOff;
+
+        if (!handedOff)
+        {
+            firstPersonView = false;
+            firstPersonBlend = 1f;
+        }
     }
 
     public void SetTarget(Rigidbody rb)
@@ -264,8 +341,19 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
         bool airborne = targetCar != null && targetCar.IsAirAction;
 
         nitroActive = targetCar != null
-            ? targetCar.IsBoosting
-            : nitroFallbackState;
+    ? targetCar.IsBoosting
+    : nitroFallbackState;
+
+        UpdateNitroMotionBlur(dt);
+
+        // The chase camera must not overwrite the first-person anchor pose.
+        // Camera shake remains available through KartCollisionCameraShake and
+        // the local cinematic shake is applied by UpdateFirstPersonCamera().
+        if (firstPersonView && firstPersonAnchor != null)
+        {
+            UpdateFirstPersonCamera(dt);
+            return;
+        }
 
         // --------------------------------------------------
         // 1. INITIALIZATION
@@ -706,13 +794,95 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
         );
     }
 
+    private void UpdateFirstPersonCamera(float dt)
+    {
+        if (firstPersonBlend < 1f)
+        {
+            firstPersonBlend = Mathf.MoveTowards(
+                firstPersonBlend,
+                1f,
+                Mathf.Max(0.1f, viewTransitionSpeed) * dt
+            );
+
+            transform.position = Vector3.Lerp(
+                transform.position,
+                firstPersonAnchor.position,
+                firstPersonBlend
+            );
+
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation,
+                firstPersonAnchor.rotation,
+                firstPersonBlend
+            );
+        }
+        else
+        {
+            // Once the transition is complete, follow the anchor exactly.
+            // Continuous Lerp here would make the camera lag behind at speed.
+            transform.SetPositionAndRotation(
+                firstPersonAnchor.position,
+                firstPersonAnchor.rotation
+            );
+        }
+
+        Vector3 shakeOffset = Vector3.zero;
+        if (shakeRemaining > 0f)
+        {
+            float fade = Mathf.Clamp01(
+                shakeRemaining / Mathf.Max(0.01f, shakeDuration)
+            );
+            float t = Time.time * Mathf.Max(1f, shakeFrequency);
+            shakeOffset = new Vector3(
+                Mathf.PerlinNoise(t, 0.17f) * 2f - 1f,
+                Mathf.PerlinNoise(0.43f, t) * 2f - 1f,
+                0f
+            ) * shakeStrength * fade;
+            shakeRemaining -= dt;
+
+            if (shakeRemaining <= 0f)
+            {
+                shakeRemaining = 0f;
+                shakeDuration = 0f;
+                shakeStrength = 0f;
+            }
+        }
+
+        transform.position += transform.right * shakeOffset.x
+            + transform.up * shakeOffset.y;
+
+        float desiredFov = firstPersonFov
+            + (nitroActive ? firstPersonNitroFovPunch : 0f);
+        desiredFov = Mathf.Clamp(desiredFov, 35f, 105f);
+
+        if (cam != null)
+        {
+            cam.fieldOfView = Mathf.Lerp(
+                cam.fieldOfView,
+                desiredFov,
+                ExpFactor(fovResponse, dt)
+            );
+        }
+    }
+
     private static float ExpFactor(float response, float dt)
     {
         return 1f - Mathf.Exp(
             -Mathf.Max(0.01f, response) * dt
         );
     }
+    private void UpdateNitroMotionBlur(float dt)
+    {
+        if (motionBlur == null)
+            return;
 
+        float targetIntensity = nitroActive ? nitroMotionBlur : 0f;
+
+        motionBlur.intensity.value = Mathf.MoveTowards(
+            motionBlur.intensity.value,
+            targetIntensity,
+            motionBlurResponse * dt);
+    }
     private void TriggerShake(float strength, float duration)
     {
         if (strength <= 0f || duration <= 0f)
@@ -749,6 +919,8 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
             cam.fieldOfView = baseFov;
 
         initialized = false;
+        firstPersonView = false;
+        firstPersonBlend = 1f;
     }
 
     // ====================================================================

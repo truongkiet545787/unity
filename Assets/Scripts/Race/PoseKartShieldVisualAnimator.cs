@@ -69,18 +69,22 @@ namespace PoseKart.Race
         }
 
         private Vector3 initialLocalScale = Vector3.one;
-
+        private bool baseScaleConfigured;
         public void SetBaseScale(Vector3 scale)
         {
-            if (scale.sqrMagnitude > 0.0001f)
-            {
-                initialLocalScale = scale;
-            }
+            if (scale.sqrMagnitude <= 0.0001f)
+                return;
+
+            initialLocalScale = scale;
+            baseScaleConfigured = true;
         }
 
         private void Start()
         {
-            if (transform.localScale.sqrMagnitude > 0.0001f)
+            // Không ghi đè scale mà PoseKartShieldGeneratorVisual
+            // đã cấu hình trước lần kích hoạt đầu tiên.
+            if (!baseScaleConfigured &&
+                transform.localScale.sqrMagnitude > 0.0001f)
             {
                 initialLocalScale = transform.localScale;
             }

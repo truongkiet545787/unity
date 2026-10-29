@@ -22,6 +22,30 @@ public sealed class PoseKartRaceIntroCamera : MonoBehaviour
     [SerializeField, Min(0.1f)] private float rearShotDuration = 1.0f;
     [SerializeField, Min(0.1f)] private float chaseBlendDuration = 1.1f;
 
+    [Header("Scene Shot Cameras (optional)")]
+    [Tooltip("Camera mẫu cho shot Hero. Main Camera sẽ copy vị trí, rotation và FOV từ camera này.")]
+    [SerializeField] private UnityEngine.Camera heroShotCamera;
+    [Tooltip("Camera mẫu cho shot Grid. Main Camera sẽ copy vị trí, rotation và FOV từ camera này.")]
+    [SerializeField] private UnityEngine.Camera gridShotCamera;
+    [Tooltip("Camera mẫu cho shot Rear. Main Camera sẽ copy vị trí, rotation và FOV từ camera này.")]
+    [SerializeField] private UnityEngine.Camera rearShotCamera;
+
+    [Header("Manual Shot Overrides")]
+    [Tooltip("Fallback khi camera mẫu tương ứng chưa được gán. Bật để tự chỉnh vị trí/góc quay intro trong Inspector.")]
+    [SerializeField] private bool useManualShotOverrides = false;
+    [Tooltip("Offset local theo hướng xe: X = phải, Y = cao, Z = phía trước.")]
+    [SerializeField] private Vector3 heroShotPositionOffset = new Vector3(-2.6f, 1.1f, 3.6f);
+    [SerializeField] private Vector3 heroShotRotationEuler = new Vector3(15f, 180f, 0f);
+    [SerializeField, Min(1f)] private float heroShotFov = 50f;
+    [Tooltip("Offset local theo hướng xe, lấy tâm grid làm gốc.")]
+    [SerializeField] private Vector3 gridShotPositionOffset = new Vector3(4.8f, 5.2f, -7.8f);
+    [SerializeField] private Vector3 gridShotRotationEuler = new Vector3(25f, 145f, 0f);
+    [SerializeField, Min(1f)] private float gridShotFov = 59f;
+    [Tooltip("Offset local theo hướng xe: dùng offset âm Z để đứng phía sau xe.")]
+    [SerializeField] private Vector3 rearShotPositionOffset = new Vector3(1.6f, 1.45f, -3.1f);
+    [SerializeField] private Vector3 rearShotRotationEuler = new Vector3(12f, 0f, 0f);
+    [SerializeField, Min(1f)] private float rearShotFov = 58f;
+
     private UnityEngine.Camera sceneCamera;
     private bool playing;
 
@@ -32,6 +56,9 @@ public sealed class PoseKartRaceIntroCamera : MonoBehaviour
         sceneCamera = GetComponent<UnityEngine.Camera>();
         if (chaseCamera == null)
             chaseCamera = GetComponent<PoseKartCinematicCamera>();
+
+        if (chaseCamera != null)
+            chaseCamera.SetIntroHandedOff(false);
     }
 
     /// <summary>
@@ -43,6 +70,9 @@ public sealed class PoseKartRaceIntroCamera : MonoBehaviour
         if (playing)
             yield break;
 
+        if (chaseCamera != null)
+            chaseCamera.SetIntroHandedOff(false);
+
         if (sceneCamera == null)
             sceneCamera = GetComponent<UnityEngine.Camera>();
         if (chaseCamera == null)
@@ -50,6 +80,9 @@ public sealed class PoseKartRaceIntroCamera : MonoBehaviour
 
         if (playerCar == null || chaseCamera == null || sceneCamera == null)
         {
+            if (chaseCamera != null)
+                chaseCamera.SetIntroHandedOff(true);
+
             Debug.LogWarning(
                 "[PoseKartRaceIntroCamera] Missing Player Car, Chase Camera, or Camera. Skipping intro.", this);
             yield break;
@@ -75,6 +108,7 @@ public sealed class PoseKartRaceIntroCamera : MonoBehaviour
 
         chaseCamera.SetTarget(playerCar); // Resets its follow initialization.
         chaseCamera.enabled = true;
+        chaseCamera.SetIntroHandedOff(true);
         playing = false;
     }
 
@@ -120,6 +154,57 @@ public sealed class PoseKartRaceIntroCamera : MonoBehaviour
         Vector3 player = playerCar.transform.position;
         Vector3 forward = FlatForward();
         Vector3 right = Vector3.Cross(Vector3.up, forward);
+
+        UnityEngine.Camera sceneShotCamera = GetSceneShotCamera(index);
+        if (sceneShotCamera != null)
+        {
+            Transform shotTransform = sceneShotCamera.transform;
+            return new ShotPose(
+                shotTransform.position,
+                shotTransform.rotation,
+                sceneShotCamera.fieldOfView);
+        }
+
+        if (useManualShotOverrides)
+        {
+            Vector3 origin = index == 1 ? GridCenter() : player;
+            Vector3 positionOffset;
+            Vector3 rotationEuler;
+            float manualFov;
+
+            switch (index)
+            {
+                case 0:
+                    positionOffset = heroShotPositionOffset;
+                    rotationEuler = heroShotRotationEuler;
+                    manualFov = heroShotFov;
+                    break;
+                case 1:
+                    positionOffset = gridShotPositionOffset;
+                    rotationEuler = gridShotRotationEuler;
+                    manualFov = gridShotFov;
+                    break;
+                default:
+                    positionOffset = rearShotPositionOffset;
+                    rotationEuler = rearShotRotationEuler;
+                    manualFov = rearShotFov;
+                    break;
+            }
+
+            Vector3 manualPosition = origin
+                + right * positionOffset.x
+                + Vector3.up * positionOffset.y
+                + forward * positionOffset.z;
+
+            Quaternion vehicleBasis =
+                Quaternion.LookRotation(forward, Vector3.up);
+
+            return new ShotPose(
+                manualPosition,
+                vehicleBasis * Quaternion.Euler(rotationEuler),
+                manualFov);
+        }
+
         Vector3 position;
         Vector3 lookAt;
         float fov;
@@ -154,6 +239,19 @@ public sealed class PoseKartRaceIntroCamera : MonoBehaviour
         }
 
         return LookPose(position, lookAt, fov);
+    }
+
+    private UnityEngine.Camera GetSceneShotCamera(int index)
+    {
+        switch (index)
+        {
+            case 0:
+                return heroShotCamera;
+            case 1:
+                return gridShotCamera;
+            default:
+                return rearShotCamera;
+        }
     }
 
     private ShotPose EvaluateChasePose()

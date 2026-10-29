@@ -50,6 +50,8 @@ namespace PoseKart.Race
         [Header("VFX & Audio Feedback")]
         [Tooltip("Hệ thống hạt khói/lửa lóe sáng ở đầu nòng khi bắn mỗi quả.")]
         [SerializeField] private ParticleSystem muzzleFlash;
+        [Tooltip("Prefab muzzle VFX của Banana. Chỉ là cosmetic, không được có NetworkObject.")]
+        [SerializeField] private GameObject muzzleVfxPrefab;
         [Tooltip("AudioSource chuyên dụng phát tiếng bắn trên bệ phóng (tùy chọn).")]
         [SerializeField] private AudioSource launchAudioSource;
         [Tooltip("Âm thanh khi triển khai mọc tháp phóng chuối.")]
@@ -453,6 +455,8 @@ namespace PoseKart.Race
                     settings
                 );
 
+                PlayMuzzleVfx(spawnPos, launchVel);
+
                 // =====================================================
                 // ONLINE VISUAL SYNC
                 // Cho Client thấy viên chuối bay khỏi nòng.
@@ -527,6 +531,10 @@ namespace PoseKart.Race
             {
                 muzzleFlash.Play();
             }
+
+            // Dùng đúng pose authoritative của Server, không phụ thuộc vào
+            // turret remote có đang active/đồng bộ scale hay không.
+            PlayMuzzleVfx(serverSpawnPosition, velocity);
 
             // Sound
             PlayFireSound(visualSpawnPosition);
@@ -642,6 +650,47 @@ namespace PoseKart.Race
             // Chỉ là projectile visual.
             // Trap thật sẽ được Server spawn sau khi gameplay projectile đáp đất.
             Destroy(visual, 2.5f);
+        }
+
+        private void PlayMuzzleVfx(
+            Vector3 worldPosition,
+            Vector3 direction)
+        {
+            if (muzzleVfxPrefab == null)
+                return;
+
+            Quaternion rotation = direction.sqrMagnitude > 0.001f
+                ? Quaternion.LookRotation(direction.normalized)
+                : transform.rotation;
+
+            GameObject effect = Instantiate(
+                muzzleVfxPrefab,
+                worldPosition,
+                rotation);
+
+            if (effect == null)
+                return;
+
+            effect.name = "Banana_MuzzleVFX";
+
+            ParticleSystem[] systems =
+                effect.GetComponentsInChildren<ParticleSystem>(true);
+
+            float lifetime = 1.5f;
+            foreach (ParticleSystem system in systems)
+            {
+                if (system == null)
+                    continue;
+
+                ParticleSystem.MainModule main = system.main;
+                float particleLifetime = main.startLifetime.constantMax;
+                lifetime = Mathf.Max(
+                    lifetime,
+                    main.duration + particleLifetime);
+                system.Play(true);
+            }
+
+            Destroy(effect, lifetime + 0.1f);
         }
         private void SpawnBananaProjectile(Vector3 spawnPosition, Vector3 velocity, KartItemInventory settings)
         {

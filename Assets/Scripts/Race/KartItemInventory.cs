@@ -30,13 +30,16 @@ namespace PoseKart.Race
 
         [Header("Homing Missile")]
         [SerializeField, Min(1f)] private float missileTargetRange = 130f;
-        [SerializeField, Range(1f, 180f)] private float missileTargetAngle = 110f;
+        [SerializeField, Range(1f, 180f)]
+private float missileTargetAngle = 180f;
         [SerializeField, Min(1f)] private float missileSpeed = 62f;
-        [SerializeField, Min(0.1f)] private float missileTrackingStrength = 8f;
+        [SerializeField, Min(0.1f)] private float missileTrackingStrength = 18f;
+        [Tooltip("Maximum missile turn rate. Prevents instant 180-degree homing turns.")]
+        [SerializeField, Min(1f)] private float missileMaximumTurnDegreesPerSecond = 210f;
         [Tooltip("How strongly the missile leads the target's current velocity. 0 aims at the current position; 1 uses the full calculated lead.")]
-        [SerializeField, Range(0f, 1f)] private float missileTargetPrediction = 0.75f;
+        [SerializeField, Range(0f, 1f)] private float missileTargetPrediction = 0.55f;
         [Tooltip("Maximum seconds to aim ahead of a moving target. Keeps prediction stable during sharp turns.")]
-        [SerializeField, Range(0f, 3f)] private float missileMaximumPredictionTime = 1.25f;
+        [SerializeField, Range(0f, 3f)] private float missileMaximumPredictionTime = 0.9f;
         [Tooltip("Number of missiles granted by one Homing Missile pickup. Each Space press fires one missile.")]
         [SerializeField, Min(1)] private int missileShotsPerPickup = 3;
         [SerializeField, Min(0.5f)] private float missileLifetime = 7f;
@@ -45,10 +48,20 @@ namespace PoseKart.Race
         [SerializeField, Min(0.25f)] private float missileImpactExplosionLifetime = 4f;
         [Tooltip("Gameplay radius of the missile shockwave. This is independent from the VFX prefab size.")]
         [SerializeField, Min(0.5f)] private float missileExplosionRadius = 6f;
+        [Tooltip("Maximum sideways visual deviation while the missile is far from its target.")]
+        [SerializeField, Min(0f)] private float missileDeviationAmplitude = 0.45f;
+        [Tooltip("Side-to-side deviation frequency in radians per second.")]
+        [SerializeField, Min(0f)] private float missileDeviationFrequency = 12f;
+        [Tooltip("Distance at which prediction and weaving fade into terminal guidance.")]
+        [SerializeField, Min(0.1f)] private float missileTerminalGuidanceDistance = 24f;
         [SerializeField, Min(0f)] private float missileMaximumHorizontalKnockback = 5f;
         [SerializeField, Min(0f)] private float missileMaximumUpwardKnockback = 2.5f;
         [Tooltip("Angular impulse applied by a missile hit. Higher values make the kart flip more aggressively.")]
         [SerializeField, Min(0f)] private float missileImpactTorque = 12f;
+        [Tooltip("Direct-hit multiplier. A kart struck by the missile gets the strongest impact.")]
+        [SerializeField, Min(1f)] private float missileDirectHitForceMultiplier = 1.2f;
+        [Tooltip("Multiplier applied to non-direct blast victims before distance falloff.")]
+        [SerializeField, Range(0f, 1f)] private float missileNearbyForceMultiplier = 0.85f;
         [SerializeField, Min(0f)] private float missileMinimumEffectiveDistance = 0.5f;
         [Tooltip("Falloff input is 0 at the edge of the radius and 1 at the explosion center.")]
         [SerializeField] private AnimationCurve missileExplosionFalloff = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
@@ -171,15 +184,21 @@ namespace PoseKart.Race
         public float MissileTargetAngle => missileTargetAngle;
         public float MissileSpeed => missileSpeed;
         public float MissileTrackingStrength => missileTrackingStrength;
+        public float MissileMaximumTurnDegreesPerSecond => missileMaximumTurnDegreesPerSecond;
         public float MissileTargetPrediction => missileTargetPrediction;
         public float MissileMaximumPredictionTime => missileMaximumPredictionTime;
         public float MissileLifetime => missileLifetime;
         public GameObject MissileImpactExplosionPrefab => missileImpactExplosionPrefab;
         public float MissileImpactExplosionLifetime => missileImpactExplosionLifetime;
         public float MissileExplosionRadius => missileExplosionRadius;
+        public float MissileDeviationAmplitude => missileDeviationAmplitude;
+        public float MissileDeviationFrequency => missileDeviationFrequency;
+        public float MissileTerminalGuidanceDistance => missileTerminalGuidanceDistance;
         public float MissileMaximumHorizontalKnockback => missileMaximumHorizontalKnockback;
         public float MissileMaximumUpwardKnockback => missileMaximumUpwardKnockback;
         public float MissileImpactTorque => missileImpactTorque;
+        public float MissileDirectHitForceMultiplier => missileDirectHitForceMultiplier;
+        public float MissileNearbyForceMultiplier => missileNearbyForceMultiplier;
         public float MissileMinimumEffectiveDistance => missileMinimumEffectiveDistance;
         public AnimationCurve MissileExplosionFalloff => missileExplosionFalloff;
         public float MissileKnockbackRecoveryDuration => missileKnockbackRecoveryDuration;

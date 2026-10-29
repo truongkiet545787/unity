@@ -27,6 +27,8 @@ namespace PoseKart
         [SerializeField] private Transform muzzlePoint;
         [Tooltip("Prefab tên lửa (OFFICAL_ROCKET hoặc lấy từ KartItemInventory).")]
         [SerializeField] private GameObject missilePrefab;
+        [Tooltip("Prefab muzzle VFX của Missile. Chỉ là cosmetic, không được có NetworkObject.")]
+        [SerializeField] private GameObject missileMuzzleVfxPrefab;
         [Tooltip("Tỉ lệ kích thước khi bung lên của Missile Launcher (mặc định 0.7, 0.7, 0.7).")]
         [SerializeField] private Vector3 targetScale = new Vector3(0.7f, 0.7f, 0.7f);
 
@@ -39,6 +41,8 @@ namespace PoseKart
         [SerializeField] private Transform inkMuzzlePoint;
         [Tooltip("Prefab đạn mực / cannon ball đen (hoặc lấy từ KartItemInventory / Resources).")]
         [SerializeField] private GameObject inkPrefab;
+        [Tooltip("Prefab muzzle VFX của Ink. Chỉ là cosmetic, không được có NetworkObject.")]
+        [SerializeField] private GameObject inkMuzzleVfxPrefab;
         [Tooltip("Tỉ lệ kích thước khi bung lên của Ink Launcher (mặc định 1.6, 1.6, 1.6 tương ứng với model Zenithe).")]
         [SerializeField] private Vector3 inkTargetScale = new Vector3(1.6f, 1.6f, 1.6f);
 
@@ -340,6 +344,54 @@ namespace PoseKart
         }
 
         /// <summary>
+        /// Phát muzzle VFX tại pose đã được Server xác nhận.
+        /// Đây chỉ là visual local trên từng máy, không tạo projectile gameplay.
+        /// </summary>
+        public void PlayNetworkMuzzleVfx(
+            KartItemPickup.ItemType itemType,
+            Vector3 worldPosition,
+            Quaternion worldRotation)
+        {
+            GameObject prefab = itemType == KartItemPickup.ItemType.InkShot
+                ? inkMuzzleVfxPrefab
+                : itemType == KartItemPickup.ItemType.HomingMissile
+                    ? missileMuzzleVfxPrefab
+                    : null;
+
+            if (prefab == null)
+                return;
+
+            GameObject effect = Instantiate(
+                prefab,
+                worldPosition,
+                worldRotation);
+
+            if (effect == null)
+                return;
+
+            effect.name = $"{itemType}_MuzzleVFX";
+
+            ParticleSystem[] systems =
+                effect.GetComponentsInChildren<ParticleSystem>(true);
+
+            float lifetime = 1.5f;
+            foreach (ParticleSystem system in systems)
+            {
+                if (system == null)
+                    continue;
+
+                ParticleSystem.MainModule main = system.main;
+                float particleLifetime = main.startLifetime.constantMax;
+                lifetime = Mathf.Max(
+                    lifetime,
+                    main.duration + particleLifetime);
+                system.Play(true);
+            }
+
+            Destroy(effect, lifetime + 0.1f);
+        }
+
+        /// <summary>
         /// Returns the local owner's visible missile muzzle pose for the
         /// authoritative Server spawn request. The Server must not discover
         /// this pose from a remote turret which may be hidden or scaled to 0.
@@ -637,7 +689,7 @@ namespace PoseKart
                                     Quaternion.Slerp(
                                         activeModel.transform.rotation,
                                         targetWorldRot,
-                                        Time.deltaTime * 12f
+                                        Time.deltaTime * 16f
                                     );
                             }
                         }
@@ -867,13 +919,19 @@ namespace PoseKart
                 currentTargetCar,
                 inventory != null ? inventory.MissileSpeed : 65f,
                 inventory != null ? inventory.MissileTrackingStrength : 8.5f,
+                inventory != null ? inventory.MissileMaximumTurnDegreesPerSecond : 120f,
                 inventory != null ? inventory.MissileLifetime : 6f,
                 inventory != null ? inventory.MissileImpactExplosionPrefab : null,
                 inventory != null ? inventory.MissileImpactExplosionLifetime : 4f,
                 inventory != null ? inventory.MissileExplosionRadius : 6f,
+                inventory != null ? inventory.MissileDeviationAmplitude : 1.8f,
+                inventory != null ? inventory.MissileDeviationFrequency : 14f,
+                inventory != null ? inventory.MissileTerminalGuidanceDistance : 15f,
                 inventory != null ? inventory.MissileMaximumHorizontalKnockback : 5f,
                 inventory != null ? inventory.MissileMaximumUpwardKnockback : 2.5f,
                 inventory != null ? inventory.MissileImpactTorque : 12f,
+                inventory != null ? inventory.MissileDirectHitForceMultiplier : 1.2f,
+                inventory != null ? inventory.MissileNearbyForceMultiplier : 0.85f,
                 inventory != null ? inventory.MissileMinimumEffectiveDistance : 0.5f,
                 inventory != null ? inventory.MissileExplosionFalloff : null,
                 inventory != null ? inventory.MissileKnockbackRecoveryDuration : 0.7f,

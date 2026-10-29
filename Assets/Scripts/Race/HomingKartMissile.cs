@@ -29,16 +29,22 @@ namespace PoseKart.Race
         private ParticleSystem exhaust;
         private float born;
         private float missileSpeed = 62f;
-        private float trackingStrength = 8f;
-        private float targetPredictionStrength = 0.75f;
-        private float maximumPredictionTime = 1.25f;
+        private float trackingStrength = 18f;
+        private float maximumTurnDegreesPerSecond = 210f;
+        private float targetPredictionStrength = 0.55f;
+        private float maximumPredictionTime = 0.9f;
         private float lifetime = 6f;
         private GameObject impactExplosionPrefab;
         private float impactExplosionLifetime = 4f;
         private float explosionRadius = 6f;
+        private float deviationAmplitude = 0.45f;
+        private float deviationFrequency = 12f;
+        private float terminalGuidanceDistance = 24f;
         private float maximumHorizontalKnockback = 5f;
         private float maximumUpwardKnockback = 2.5f;
         private float impactTorqueStrength = 12f;
+        private float directHitForceMultiplier = 1.2f;
+        private float nearbyForceMultiplier = .85f;
         private float minimumEffectiveDistance = .5f;
         private AnimationCurve explosionFalloff;
         private float knockbackRecoveryDuration = .7f;
@@ -139,20 +145,26 @@ namespace PoseKart.Race
             CarController destination,
             float speed = 62f,
             float tracking = 8f,
+            float maxTurnDegreesPerSecond = 210f,
             float maxLifetime = 6f,
             GameObject explosionPrefab = null,
             float explosionLifetime = 4f,
             float blastRadius = 6f,
+            float maxDeviationAmplitude = 0.45f,
+            float maxDeviationFrequency = 12f,
+            float terminalDistance = 24f,
             float maxHorizontalKnockback = 5f,
             float maxUpwardKnockback = 2.5f,
             float maxImpactTorque = 12f,
+            float directHitMultiplier = 1.2f,
+            float nearbyMultiplier = .85f,
             float minEffectiveDistance = .5f,
             AnimationCurve falloff = null,
             float recoveryDuration = .7f,
             bool affectNearbyRacers = true,
             bool requireLineOfSight = true,
-            float prediction = .75f,
-            float maxPredictionTime = 1.25f,
+            float prediction = .55f,
+            float maxPredictionTime = .9f,
             GameObject firePrefab = null,
             float fireDuration = 5f,
             float fireRadius = 3f,
@@ -166,15 +178,21 @@ namespace PoseKart.Race
             configured = true;
             missileSpeed = Mathf.Max(1f, speed);
             trackingStrength = Mathf.Max(0.1f, tracking);
+            maximumTurnDegreesPerSecond = Mathf.Max(1f, maxTurnDegreesPerSecond);
             targetPredictionStrength = Mathf.Clamp01(prediction);
             maximumPredictionTime = Mathf.Clamp(maxPredictionTime, 0f, 3f);
             lifetime = Mathf.Max(0.5f, maxLifetime);
             impactExplosionPrefab = explosionPrefab;
             impactExplosionLifetime = Mathf.Max(0.25f, explosionLifetime);
             explosionRadius = Mathf.Max(.5f, blastRadius);
+            deviationAmplitude = Mathf.Max(0f, maxDeviationAmplitude);
+            deviationFrequency = Mathf.Max(0f, maxDeviationFrequency);
+            terminalGuidanceDistance = Mathf.Max(.1f, terminalDistance);
             maximumHorizontalKnockback = Mathf.Max(0f, maxHorizontalKnockback);
             maximumUpwardKnockback = Mathf.Max(0f, maxUpwardKnockback);
             impactTorqueStrength = Mathf.Max(0f, maxImpactTorque);
+            directHitForceMultiplier = Mathf.Max(1f, directHitMultiplier);
+            nearbyForceMultiplier = Mathf.Clamp01(nearbyMultiplier);
             minimumEffectiveDistance = Mathf.Clamp(minEffectiveDistance, 0f, explosionRadius);
             explosionFalloff = falloff;
             knockbackRecoveryDuration = Mathf.Max(.05f, recoveryDuration);
@@ -248,7 +266,16 @@ namespace PoseKart.Race
                     }
 
                     Vector3 destination =
-    PredictTargetPosition(from, targetPosition);
+                        PredictTargetPosition(from, targetPosition);
+
+                    // Blend the lead back toward the real target near impact so
+                    // the missile does not overshoot during the final approach.
+                    float terminalBlend = Mathf.Clamp01(
+                        delta.magnitude / Mathf.Max(.1f, terminalGuidanceDistance));
+                    destination = Vector3.Lerp(
+                        targetPosition,
+                        destination,
+                        terminalBlend);
 
                     // Khi ở xa, Missile ngắm cao hơn để tránh cắm xuống đường.
                     // Khi đến gần mục tiêu, giảm dần độ nâng.
@@ -257,8 +284,11 @@ namespace PoseKart.Race
                         new Vector2(targetPosition.x, targetPosition.z)
                     );
 
+                    // Lift the flight path enough to clear the road and make
+                    // the launch visually readable, while terminal homing
+                    // still brings the missile back to the target center.
                     float flightHeight =
-                        Mathf.Clamp(horizontalDistance * 0.06f, 0f, 3f);
+                        Mathf.Clamp(horizontalDistance * 0.10f, 0f, 5f);
 
                     destination += Vector3.up * flightHeight;
 
@@ -276,8 +306,15 @@ namespace PoseKart.Race
 
             // Xoay mượt mà (sẽ không bị lệch nếu desiredDirection = currentDirection)
             float turnBlend = 1f - Mathf.Exp(-trackingStrength * Time.fixedDeltaTime);
-            Vector3 flightDirection = Vector3.Slerp(
-                currentDirection, desiredDirection, turnBlend).normalized;
+            Vector3 blendedDirection = Vector3.Slerp(
+                currentDirection,
+                desiredDirection,
+                turnBlend).normalized;
+            Vector3 flightDirection = Vector3.RotateTowards(
+                currentDirection,
+                blendedDirection,
+                maximumTurnDegreesPerSecond * Mathf.Deg2Rad * Time.fixedDeltaTime,
+                0f).normalized;
 
             if (flightDirection.sqrMagnitude < 0.0001f)
                 flightDirection = desiredDirection;
@@ -328,9 +365,12 @@ namespace PoseKart.Race
 
             // Tự động triệt tiêu độ lượn khi tên lửa lao sát mục tiêu (<15m) để đảm bảo độ chuẩn xác
             float weaveDampen = (target != null && target.TargetBody != null)
-                ? Mathf.Clamp01((target.TargetBody.worldCenterOfMass - from).magnitude / 15f)
+                ? Mathf.Clamp01((target.TargetBody.worldCenterOfMass - from).magnitude /
+                    Mathf.Max(.1f, terminalGuidanceDistance))
                 : 1f;
-            Vector3 weaveOffset = rightAxis * (Mathf.Sin(weaveAge * 14f) * 1.8f * weaveDampen * Time.fixedDeltaTime);
+            Vector3 weaveOffset = rightAxis * (
+                Mathf.Sin(weaveAge * deviationFrequency) *
+                deviationAmplitude * weaveDampen * Time.fixedDeltaTime);
 
             Vector3 newPosition = from + flightDirection * travel + weaveOffset;
             Vector3 actualFlightDir = (newPosition - from);
@@ -604,7 +644,7 @@ namespace PoseKart.Race
             float factor;
             if (directHit)
             {
-                factor = 1f;
+                factor = directHitForceMultiplier;
             }
             else
             {
@@ -621,20 +661,27 @@ namespace PoseKart.Race
                 factor = explosionFalloff != null
                     ? Mathf.Clamp01(explosionFalloff.Evaluate(centerWeight))
                     : Mathf.SmoothStep(0f, 1f, centerWeight);
+                factor *= nearbyForceMultiplier;
             }
 
             if (factor <= .001f)
                 return;
 
-            Vector3 horizontal = Vector3.ProjectOnPlane(bodyPoint - point, Vector3.up);
+            Vector3 awayFromExplosion = bodyPoint - point;
+            Vector3 horizontal = Vector3.ProjectOnPlane(awayFromExplosion, Vector3.up);
             if (horizontal.sqrMagnitude < .0001f)
                 horizontal = Vector3.ProjectOnPlane(car.transform.forward, Vector3.up);
             if (horizontal.sqrMagnitude < .0001f)
                 horizontal = Vector3.right;
             horizontal.Normalize();
 
+            // Use the vector from the blast centre to the Rigidbody, with a small
+            // upward bias so a kart jolts naturally without being launched vertically.
+            float distanceForDirection = Mathf.Max(.01f, awayFromExplosion.magnitude);
+            float verticalDirection = awayFromExplosion.y / distanceForDirection;
+            float liftFactor = Mathf.Clamp(Mathf.Max(.35f, verticalDirection + .25f), .35f, 1f);
             Vector3 deltaVelocity = horizontal * (maximumHorizontalKnockback * factor)
-                                  + Vector3.up * (maximumUpwardKnockback * factor);
+                                  + Vector3.up * (maximumUpwardKnockback * factor * liftFactor);
 
             if (PoseKartNetworkItemBridge.IsOnlineRace)
             {
@@ -649,30 +696,13 @@ namespace PoseKart.Race
             KartItemDefense defense = car.GetComponent<KartItemDefense>();
             if (defense != null && defense.TryBlockMissileExplosion(point))
                 return;
-            if (horizontal.sqrMagnitude < .0001f)
-                horizontal = Vector3.ProjectOnPlane(car.transform.forward, Vector3.up);
-            if (horizontal.sqrMagnitude < .0001f)
-                horizontal = Vector3.right;
-            horizontal.Normalize();
-
-            deltaVelocity =
-    horizontal * (maximumHorizontalKnockback * factor)
-    + Vector3.up * (maximumUpwardKnockback * factor);
             car.ApplyMissileExplosionImpact(
                 deltaVelocity,
                 knockbackRecoveryDuration,
                 point,
-                impactTorqueStrength * 1.35f);
+                impactTorqueStrength);
 
-            // Stunt / Flip Tumble physics: hất tung xe và lộn nhào ngoạn mục
-            if (car.TargetBody != null && !car.TargetBody.isKinematic)
-            {
-                car.TargetBody.AddForce(Vector3.up * (maximumUpwardKnockback * 1.4f), ForceMode.VelocityChange);
-                Vector3 tumbleAxis = (Vector3.Cross(horizontal, Vector3.up) + Random.insideUnitSphere * 0.4f).normalized;
-                car.TargetBody.AddTorque(tumbleAxis * (impactTorqueStrength * 1.5f), ForceMode.Impulse);
-            }
-
-            // Khói đen bốc lên bám theo xe nạn nhân 1.8 giây
+            // VFX/audio/camera feedback stay separate from the authoritative force.
             SpawnVictimBurnSmoke(car, 1.8f);
 
             // Rung màn hình Cinemachine Impulse cực mạnh cho cả 2 bên

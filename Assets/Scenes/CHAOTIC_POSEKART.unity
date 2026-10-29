@@ -18675,7 +18675,7 @@ MonoBehaviour:
   bananaDropClip: {fileID: 8300000, guid: 5710a9c259c8ec345a788c9c1f532e89, type: 3}
   bananaSlipClip: {fileID: 8300000, guid: dd6e91ccb28bfa840ab2eb56fca1f730, type: 3}
   shieldActivateClip: {fileID: 8300000, guid: 76a25d8484008944ba4bcda1c1e3b030, type: 3}
-  shieldBlockClip: {fileID: 8300000, guid: fccd75a8b5df49b4c8bcf95a6d667014, type: 3}
+  shieldBlockClip: {fileID: 8300000, guid: bb6cdd13aeb95f743847b1cd460889bc, type: 3}
   shieldExpireClip: {fileID: 8300000, guid: 7639682497ab39d48a99fe3831385a1f, type: 3}
   effectVolume: 0.75
   countdownBeepClip: {fileID: 0}

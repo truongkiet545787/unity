@@ -298,7 +298,7 @@ Transform:
   m_GameObject: {fileID: 255547091857042956}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.21, y: 0.5, z: 1.5}
+  m_LocalPosition: {x: 0.462, y: 0.29, z: 1.376}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -314,11 +314,11 @@ Light:
   m_Enabled: 1
   serializedVersion: 12
   m_Type: 0
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_Intensity: 1
-  m_Range: 10
-  m_SpotAngle: 30
-  m_InnerSpotAngle: 21.80208
+  m_Color: {r: 0.98490566, g: 0.84915066, b: 0.6225347, a: 1}
+  m_Intensity: 0.5
+  m_Range: 20
+  m_SpotAngle: 39.751347
+  m_InnerSpotAngle: 26.421625
   m_CookieSize2D: {x: 0.5, y: 0.5}
   m_Shadows:
     m_Type: 0
@@ -354,7 +354,7 @@ Light:
     serializedVersion: 2
     m_Bits: 4294967295
   m_RenderingLayerMask: 1
-  m_Lightmapping: 4
+  m_Lightmapping: 1
   m_LightShadowCasterMode: 0
   m_AreaSize: {x: 1, y: 1}
   m_BounceIntensity: 1
@@ -11843,7 +11843,7 @@ ParticleSystemRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 0}
+  - {fileID: 2100000, guid: 421e78f4ac395ed4d9d82e67feda29e0, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -28625,7 +28625,7 @@ Transform:
   m_GameObject: {fileID: 2792007255278022565}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.27499825, y: 0.5, z: 1.5}
+  m_LocalPosition: {x: -0.372, y: 0.266, z: 1.522}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -28641,11 +28641,11 @@ Light:
   m_Enabled: 1
   serializedVersion: 12
   m_Type: 0
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_Intensity: 1
-  m_Range: 10
-  m_SpotAngle: 30
-  m_InnerSpotAngle: 21.80208
+  m_Color: {r: 0.98490566, g: 0.84915066, b: 0.6225347, a: 1}
+  m_Intensity: 0.5
+  m_Range: 20
+  m_SpotAngle: 39.751347
+  m_InnerSpotAngle: 26.421625
   m_CookieSize2D: {x: 0.5, y: 0.5}
   m_Shadows:
     m_Type: 0
@@ -35355,7 +35355,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 2477335057
+  GlobalObjectIdHash: 3666233493
   InScenePlacedSourceGlobalObjectIdHash: 0
   m_InScenePlacedDisabledByDefault: 0
   DeferredDespawnTick: 0
@@ -35474,7 +35474,7 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
   perfectTimingStartSeconds: 0.35
   perfectTimingEndSeconds: 0.58
@@ -35487,12 +35487,12 @@ MonoBehaviour:
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 6865565733874094254}
   inputProviderSource: {fileID: 2489503725486730383}
@@ -35501,7 +35501,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -35541,6 +35541,10 @@ MonoBehaviour:
   airLateralAssistStrength: 1.5
   controlEnabled: 1
   brakeAllowedWhenControlDisabled: 0
+  missileImpactCooldown: 0.18
+  maximumMissileImpactVelocityChange: 7.5
+  maximumMissileImpactAngularSpeed: 10
+  missileImpactSteeringMultiplier: 0.55
   minimumImpactSpeed: 2
   collisionSpeedLossMultiplier: 0.55
   maximumCollisionSpeedLoss: 14
@@ -35626,6 +35630,111 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f17f3ac8f3d362c4295df1bf6308570d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.UI.PoseKartVehiclePaint
+  colors:
+  - displayName: Racing Red
+    color: {r: 0.9, g: 0.03, b: 0.02, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Jet Black
+    color: {r: 0.01, g: 0.01, b: 0.015, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Pearl White
+    color: {r: 0.95, g: 0.95, b: 1, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Electric Blue
+    color: {r: 0.02, g: 0.35, b: 1, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Neon Green
+    color: {r: 0.1, g: 1, b: 0.15, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Solar Yellow
+    color: {r: 1, g: 0.75, b: 0.02, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Royal Purple
+    color: {r: 0.35, g: 0.05, b: 0.65, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Sunset Orange
+    color: {r: 1, g: 0.28, b: 0.03, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
   vehicleModels:
   - {fileID: 8497820527421854824}
   - {fileID: 3034427893606942242}
@@ -35838,19 +35947,25 @@ MonoBehaviour:
   boostDuration: 1.3
   boostImpulse: 8
   missileTargetRange: 150
-  missileTargetAngle: 100
+  missileTargetAngle: 180
   missileSpeed: 65
-  missileTrackingStrength: 13
-  missileTargetPrediction: 0.85
-  missileMaximumPredictionTime: 1.25
+  missileTrackingStrength: 18
+  missileMaximumTurnDegreesPerSecond: 210
+  missileTargetPrediction: 0.55
+  missileMaximumPredictionTime: 0.9
   missileShotsPerPickup: 1
   missileLifetime: 6
   missileImpactExplosionPrefab: {fileID: 8945710356868823875, guid: 780d54d8680e53844b4bad6328acdc30, type: 3}
   missileImpactExplosionLifetime: 7
   missileExplosionRadius: 7
+  missileDeviationAmplitude: 0.45
+  missileDeviationFrequency: 12
+  missileTerminalGuidanceDistance: 24
   missileMaximumHorizontalKnockback: 10
   missileMaximumUpwardKnockback: 10
   missileImpactTorque: 12
+  missileDirectHitForceMultiplier: 1.2
+  missileNearbyForceMultiplier: 0.85
   missileMinimumEffectiveDistance: 1
   missileExplosionFalloff:
     serializedVersion: 2
@@ -35946,7 +36061,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Race.KartItemDefense
   shieldVisualPrefab: {fileID: 2906116991436775253, guid: d0bd7482581e6624a9144adbff7de729, type: 3}
-  shieldParticlePrefab: {fileID: 0}
+  shieldParticlePrefab: {fileID: 4664064001268603187, guid: 9fcc22501e57cea4da28f94416766bc3, type: 3}
   shieldDuration: 5
   maximumBlockedHits: 1
   shieldColor: {r: 0.15, g: 0.85, b: 1, a: 0.22}
@@ -36015,7 +36130,7 @@ MonoBehaviour:
   - {fileID: 5623902643012065321}
   - {fileID: 8770525174970312994}
   tireDust: {fileID: 948767616172997155}
-  undersideSparks: {fileID: 4866111304599138969}
+  undersideSparks: {fileID: 0}
   createFallbackParticles: 1
   dustPerTire: 10
   sparksOnHeavyLanding: 16
@@ -36177,7 +36292,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: caca40d41d54d7d429b2ee3bf22dad8a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::KartCollisionFX
-  sparkPrefab: {fileID: 3042519775331041172, guid: 841004c4c6a39e244abe2257394de913, type: 3}
+  sparkPrefab: {fileID: 4503612902121041701, guid: 5a936c83b1746f14f9100db745e94f04, type: 3}
   collisionForceThreshold: 5
   verticalAngleThreshold: 0.4
 --- !u!114 &7665976797657405803
@@ -36195,11 +36310,13 @@ MonoBehaviour:
   launcherModel: {fileID: 221522918776728038, guid: f747a07dd7f923e489fa29a508654e23, type: 3}
   muzzlePoint: {fileID: 2752511152441973168}
   missilePrefab: {fileID: 6891914729606440152, guid: 7fd6b00a993ab564089ff487807c5969, type: 3}
+  missileMuzzleVfxPrefab: {fileID: 6980259576133684760, guid: 1f58a1dea6bbd9347843e4935585e6a2, type: 3}
   targetScale: {x: 0.7, y: 0.7000003, z: 0.70000005}
   inkLauncherPrefab: {fileID: 0}
   inkLauncherModel: {fileID: 5346169743835382412}
   inkMuzzlePoint: {fileID: 7678473268153108464}
   inkPrefab: {fileID: 963016054784489402, guid: 432462a12b17de641879b506cc77bdcb, type: 3}
+  inkMuzzleVfxPrefab: {fileID: 8078720523478869859, guid: 4f5fc4bbd01b03a4499a6ed77f175fc7, type: 3}
   inkTargetScale: {x: 1.6, y: 1.6, z: 1.6}
   deployDuration: 0.4
   autoFireTimeout: 3.5
@@ -36336,7 +36453,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3790319936265005916}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b5a0bd69855098c4c9ea0bbd76699048, type: 3}
   m_Name: 
@@ -36420,6 +36537,7 @@ MonoBehaviour:
   bananaTrapPrefab: {fileID: 7539509150586453392, guid: 71bf361406278cf4084142e890457045, type: 3}
   landingVfxPrefab: {fileID: 8782009059513614302, guid: 171dda363e9efd94ca9bc63e38ca9658, type: 3}
   muzzleFlash: {fileID: 0}
+  muzzleVfxPrefab: {fileID: 8078720523478869859, guid: 4f5fc4bbd01b03a4499a6ed77f175fc7, type: 3}
   launchAudioSource: {fileID: 0}
   deployClip: {fileID: 8300000, guid: c726114d92d94d141bfefcc861b22b43, type: 3}
   fireClip: {fileID: 8300000, guid: 5710a9c259c8ec345a788c9c1f532e89, type: 3}
@@ -36510,7 +36628,7 @@ MonoBehaviour:
   - {fileID: 6395872203881389648}
   - {fileID: 6304102142790907100}
   - {fileID: 948767616172997155}
-  - {fileID: 4866111304599138969}
+  - {fileID: 0}
   - {fileID: 5339914551407686367}
   - {fileID: 633508468749955049}
   - {fileID: 9116098602393588094}
@@ -36746,6 +36864,7 @@ MonoBehaviour:
   - {fileID: 2193764631564567660}
   ownerOnlyObjects: []
   body: {fileID: 6865565733874094254}
+  firstPersonAnchor: {fileID: 1611790719465347144}
 --- !u!114 &6958926586864205336
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -43307,7 +43426,7 @@ ParticleSystemRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 0}
+  - {fileID: 2100000, guid: 421e78f4ac395ed4d9d82e67feda29e0, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -44089,7 +44208,7 @@ MonoBehaviour:
   stageOneSeconds: 0.5
   stageTwoSeconds: 1.2
   stageThreeSeconds: 2.2
-  ultraSparkColor: {r: 0.67, g: 0.32, b: 1, a: 1}
+  ultraSparkColor: {r: 0.6454576, g: 0.26981127, b: 1, a: 1}
   stageTwoEmissionMultiplier: 1.2
   stageThreeEmissionMultiplier: 1.5
   enableStageFlash: 1
@@ -44101,7 +44220,7 @@ MonoBehaviour:
   dustEmissionRate: 120
   dustSizeMultiplier: 2
   dustOpacity: 0.9
-  dustColor: {r: 0.86415094, g: 0.67882365, b: 0.31142044, a: 0.80784315}
+  dustColor: {r: 0.43529412, g: 0.41960785, b: 0.38039216, a: 0.84705883}
   rearLeftOffset: {x: 0, y: 0.02, z: 0}
   rearRightOffset: {x: 0, y: 0.02, z: 0}
   enableDriftSkidmarks: 1
@@ -55564,6 +55683,37 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!1 &6280176262395622821
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1611790719465347144}
+  m_Layer: 0
+  m_Name: FirstPersonAnchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1611790719465347144
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6280176262395622821}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0.0003077388, y: 0.035576407, z: 0.0013271981, w: -0.99936604}
+  m_LocalPosition: {x: 0.037, y: 0.708, z: 1.24}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 4172381555424039996}
+  m_LocalEulerAnglesHint: {x: -0.041, y: -4.078, z: -0.151}
 --- !u!1 &6282176470191737086
 GameObject:
   m_ObjectHideFlags: 0
@@ -63012,7 +63162,7 @@ ParticleSystemRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 0}
+  - {fileID: 2100000, guid: 421e78f4ac395ed4d9d82e67feda29e0, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -64628,11 +64778,13 @@ MonoBehaviour:
   launcherModel: {fileID: 4404144192412901165}
   muzzlePoint: {fileID: 2752511152441973168}
   missilePrefab: {fileID: 6891914729606440152, guid: 7fd6b00a993ab564089ff487807c5969, type: 3}
+  missileMuzzleVfxPrefab: {fileID: 0}
   targetScale: {x: 0.07, y: 0.07, z: 0.07}
   inkLauncherPrefab: {fileID: 0}
   inkLauncherModel: {fileID: 0}
   inkMuzzlePoint: {fileID: 0}
   inkPrefab: {fileID: 0}
+  inkMuzzleVfxPrefab: {fileID: 0}
   inkTargetScale: {x: 1, y: 1, z: 1}
   deployDuration: 0.35
   autoFireTimeout: 3
@@ -75800,6 +75952,10 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 960677089600665099, guid: cc46e1a030088af4585df9ab06366276, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 3996179841165582520, guid: cc46e1a030088af4585df9ab06366276, type: 3}
       propertyPath: m_Name
       value: Visual
@@ -75846,11 +76002,14 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6396508591925611700, guid: cc46e1a030088af4585df9ab06366276, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
-    m_AddedGameObjects: []
+    m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: 5422268324538900138, guid: cc46e1a030088af4585df9ab06366276, type: 3}
+      insertIndex: 0
+      addedObject: {fileID: 1611790719465347144}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: cc46e1a030088af4585df9ab06366276, type: 3}
 --- !u!1 &3034427893606942242 stripped
@@ -76026,7 +76185,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1557291425907120482, guid: 88c9dd3c3ab8c0e45aae9705fd7c94e5, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2222329472903070680, guid: 88c9dd3c3ab8c0e45aae9705fd7c94e5, type: 3}
       propertyPath: m_LocalScale.x

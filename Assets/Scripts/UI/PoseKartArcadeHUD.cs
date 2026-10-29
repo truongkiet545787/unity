@@ -102,6 +102,8 @@ namespace PoseKart.UI
         private PoseKartMinimap minimap;
         private KartItemInventory playerInventory;
         private PoseKart.Input.LocalPoseTracker poseTracker;
+        private PoseKart.Input.PoseKartHandUdpReceiver handReceiver;
+        private PoseKart.Input.PoseKartHandInputSwitcher handSwitcher;
         private bool inventorySubscribed;
         private bool layoutReady;
         private bool building;
@@ -260,17 +262,39 @@ namespace PoseKart.UI
                 poseTracker = playerCar != null
                     ? playerCar.GetComponent<PoseKart.Input.LocalPoseTracker>()
                     : null;
+                handReceiver = null;
+                handSwitcher = null;
             }
             else if (playerInventory == null && playerCar != null)
             {
                 playerInventory = playerCar.GetComponent<KartItemInventory>();
             }
+            ResolveHandControlReferences();
             // Re-subscribe after OnDisable/OnEnable, even if the inventory reference survived.
             if (playerInventory != null && !inventorySubscribed)
                 SubscribeInventory();
             if (raceManager != null && !raceManagerSubscribed)
                 SubscribeRaceManager();
             EnsurePauseButton();
+        }
+
+        private void ResolveHandControlReferences()
+        {
+            if (playerCar != null)
+            {
+                if (handReceiver == null)
+                    handReceiver = playerCar.GetComponentInParent<PoseKart.Input.PoseKartHandUdpReceiver>();
+                if (handSwitcher == null)
+                    handSwitcher = playerCar.GetComponentInParent<PoseKart.Input.PoseKartHandInputSwitcher>();
+            }
+
+            // These components are added to the local player at runtime by the
+            // existing hand-control switcher. Resolve them only when missing;
+            // never scan the scene every frame.
+            if (handReceiver == null)
+                handReceiver = FindFirstObjectByType<PoseKart.Input.PoseKartHandUdpReceiver>();
+            if (handSwitcher == null)
+                handSwitcher = FindFirstObjectByType<PoseKart.Input.PoseKartHandInputSwitcher>();
         }
 
         private bool raceManagerSubscribed;
@@ -843,23 +867,80 @@ namespace PoseKart.UI
         private void RefreshHandPanel()
         {
             if (handStatus == null) return;
+            ResolveHandControlReferences();
+
+            PoseKart.Input.PoseKartInputMode mode = handSwitcher != null
+                ? handSwitcher.CurrentMode
+                : PoseKart.Input.PoseKartHandInputSwitcher.GlobalMode;
+
+            if (mode != PoseKart.Input.PoseKartInputMode.HandControl)
+            {
+                const string keyboardStatus = "KEYBOARD: ACTIVE";
+                if (keyboardStatus != lastHandText)
+                {
+                    lastHandText = keyboardStatus;
+                    handConnectionState = keyboardStatus;
+                    handStatus.text = keyboardStatus;
+                    handStatus.color = Cyan;
+                }
+
+                if (handDetails != null)
+                    handDetails.text = showHandDetails ? "F2 TOGGLE HAND CONTROL" : string.Empty;
+                return;
+            }
+
+            if (handReceiver != null)
+            {
+                bool connected = handReceiver.IsConnected;
+                bool tracking = handReceiver.IsTracking;
+                string status = !connected
+                    ? "HAND: DISCONNECTED"
+                    : !tracking
+                        ? "HAND: NO TRACKING"
+                        : $"HAND: CONNECTED {Mathf.RoundToInt(handReceiver.Confidence * 100f)}%";
+
+                if (status != lastHandText)
+                {
+                    lastHandText = status;
+                    handConnectionState = status;
+                    handStatus.text = status;
+                    handStatus.color = tracking ? Cyan : White;
+                }
+
+                if (!showHandDetails || !tracking || handDetails == null)
+                {
+                    if (handDetails != null)
+                        handDetails.text = "STEER --   GA --   DRIFT --";
+                    return;
+                }
+
+                handDetails.SetText("STEER {0:+0.00;-0.00;0.00}   GA {1:0}%   DRIFT {2:0}",
+                    handReceiver.Steering,
+                    handReceiver.Throttle * 100f,
+                    handReceiver.Drift ? 1f : 0f);
+                return;
+            }
+
+            // Keep compatibility with the older LocalPoseTracker/WebSocket
+            // path if a project scene still uses it.
             if (poseTracker == null && playerCar != null)
                 poseTracker = playerCar.GetComponent<PoseKart.Input.LocalPoseTracker>();
-            string status;
-            if (poseTracker == null) status = "HAND: DISCONNECTED";
-            else if (poseTracker.TrackingValid && poseTracker.Fresh) status = "HAND: CONNECTED";
-            else if (poseTracker.Mode == "Connecting" || (poseTracker.Status != null && poseTracker.Status.Contains("Connecting"))) status = "HAND: CONNECTING";
-            else status = "HAND: WAITING";
-            if (status != lastHandText)
+            string legacyStatus;
+            if (poseTracker == null) legacyStatus = "HAND: DISCONNECTED";
+            else if (poseTracker.TrackingValid && poseTracker.Fresh) legacyStatus = "HAND: CONNECTED";
+            else if (poseTracker.Mode == "Connecting" || (poseTracker.Status != null && poseTracker.Status.Contains("Connecting"))) legacyStatus = "HAND: CONNECTING";
+            else legacyStatus = "HAND: WAITING";
+            if (legacyStatus != lastHandText)
             {
-                lastHandText = status;
-                handConnectionState = status;
-                handStatus.text = status;
-                handStatus.color = status == "HAND: CONNECTED" ? Cyan : White;
+                lastHandText = legacyStatus;
+                handConnectionState = legacyStatus;
+                handStatus.text = legacyStatus;
+                handStatus.color = legacyStatus == "HAND: CONNECTED" ? Cyan : White;
             }
-            if (!showHandDetails || poseTracker == null)
+            if (!showHandDetails || poseTracker == null || handDetails == null)
             {
-                handDetails.text = "STEER --   DRIFT --   SKILL --";
+                if (handDetails != null)
+                    handDetails.text = "STEER --   DRIFT --   SKILL --";
                 return;
             }
             handDetails.SetText("STEER {0:+0.00;-0.00;0.00}   DRIFT {1:0}   SKILL {2:0}",

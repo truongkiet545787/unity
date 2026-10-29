@@ -74,9 +74,9 @@ Material:
     - _OutlineWidth: 0.15
     - _PerspectiveFilter: 0.875
     - _Reflectivity: 10
-    - _ScaleRatioA: 0.8888889
-    - _ScaleRatioB: 0.5888889
-    - _ScaleRatioC: 0.46296296
+    - _ScaleRatioA: 0.875
+    - _ScaleRatioB: 0.5796875
+    - _ScaleRatioC: 0.45572913
     - _ScaleX: 1
     - _ScaleY: 1
     - _ShaderFlags: 0
@@ -100,13 +100,13 @@ Material:
     m_Colors:
     - _ClipRect: {r: -32767, g: -32767, b: 32767, a: 32767}
     - _EnvMatrixRotation: {r: 0, g: 0, b: 0, a: 0}
-    - _FaceColor: {r: 1, g: 0.9019608, b: 0.9019608, a: 1}
+    - _FaceColor: {r: 1, g: 1, b: 1, a: 1}
     - _GlowColor: {r: 0, g: 1, b: 0, a: 0.5}
     - _MaskCoord: {r: 0, g: 0, b: 32767, a: 32767}
-    - _OutlineColor: {r: 0.39607844, g: 0.22745098, b: 0.2784314, a: 1}
+    - _OutlineColor: {r: 0, g: 0, b: 0, a: 1}
     - _ReflectFaceColor: {r: 0, g: 0, b: 0, a: 1}
     - _ReflectOutlineColor: {r: 0, g: 0, b: 0, a: 1}
     - _SpecularColor: {r: 1, g: 1, b: 1, a: 1}
-    - _UnderlayColor: {r: 0.2901961, g: 0.16470589, b: 0.16470589, a: 1}
+    - _UnderlayColor: {r: 0, g: 0, b: 0, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

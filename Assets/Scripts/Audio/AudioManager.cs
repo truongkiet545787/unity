@@ -147,6 +147,7 @@ namespace PoseKart.Audio
         private readonly List<AudioSource> activeLoops = new List<AudioSource>();
         private Transform poolContainer;
         private float nextBirdTime;
+        private AudioSource persistentMusicSource;
 
         #endregion
 
@@ -170,23 +171,32 @@ namespace PoseKart.Audio
                 // Nếu bản cũ là bản sinh tự động rỗng ruột còn bản này có dữ liệu AudioClip
                 if (_instance.pickupClip == null && this.pickupClip != null)
                 {
+                    StopAndDisableAudioSources(_instance.gameObject);
                     Destroy(_instance.gameObject);
                     _instance = this;
                     DontDestroyOnLoad(gameObject);
                     Initialize2DSource();
                     InitializePool();
+                    RegisterSceneAudioLifecycle();
                     EnsureSingleAudioListener();
                     StartEnvironmentAmbience();
                     return;
                 }
 
+                _instance.AdoptMusicSourceFrom(this);
+                StopAndDisableAudioSources(gameObject);
                 Destroy(gameObject);
                 return;
             }
 
             _instance = this;
             DontDestroyOnLoad(gameObject);
-            // ...
+            // Positional SFX (including Missile impact) use the pooled 3D
+            // sources below.  Initialize them for the normal singleton path
+            // as well as for the replacement path above.
+            Initialize2DSource();
+            InitializePool();
+            RegisterSceneAudioLifecycle();
         }
 
         protected virtual void Start()
@@ -254,6 +264,107 @@ namespace PoseKart.Audio
             }
         }
 
+        private void RegisterSceneAudioLifecycle()
+        {
+            persistentMusicSource = FindMusicSourceOnObject(gameObject);
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
+            SceneManager.sceneLoaded += HandleSceneLoaded;
+        }
+
+        private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (persistentMusicSource == null || !persistentMusicSource.isPlaying)
+                return;
+
+            AudioSource[] sceneSources = FindObjectsByType<AudioSource>(
+                FindObjectsInactive.Exclude,
+                FindObjectsSortMode.None
+            );
+
+            for (int i = 0; i < sceneSources.Length; i++)
+            {
+                AudioSource source = sceneSources[i];
+                if (source == null || source == persistentMusicSource)
+                    continue;
+                if (source.gameObject.scene != scene)
+                    continue;
+                if (!source.isActiveAndEnabled || !source.playOnAwake || source.clip == null)
+                    continue;
+                if (source.GetComponentInParent<AudioManager>() != null)
+                    continue;
+                if (source.spatialBlend > 0.1f)
+                    continue;
+
+                // A scene-owned 2D music source is taking over. Stop the
+                // persistent track first so the new scene cannot layer music.
+                persistentMusicSource.Stop();
+                persistentMusicSource.enabled = false;
+                persistentMusicSource = null;
+                return;
+            }
+        }
+
+        private void AdoptMusicSourceFrom(AudioManager incomingManager)
+        {
+            if (incomingManager == null)
+                return;
+
+            AudioSource incoming = FindMusicSourceOnObject(incomingManager.gameObject);
+            if (incoming == null || incoming.clip == null)
+                return;
+
+            if (persistentMusicSource == null)
+            {
+                persistentMusicSource = gameObject.AddComponent<AudioSource>();
+            }
+
+            persistentMusicSource.enabled = true;
+            persistentMusicSource.clip = incoming.clip;
+            persistentMusicSource.loop = incoming.loop;
+            persistentMusicSource.volume = incoming.volume;
+            persistentMusicSource.pitch = incoming.pitch;
+            persistentMusicSource.outputAudioMixerGroup = incoming.outputAudioMixerGroup;
+            persistentMusicSource.spatialBlend = incoming.spatialBlend;
+            persistentMusicSource.rolloffMode = incoming.rolloffMode;
+            persistentMusicSource.minDistance = incoming.minDistance;
+            persistentMusicSource.maxDistance = incoming.maxDistance;
+            persistentMusicSource.playOnAwake = false;
+            persistentMusicSource.Play();
+        }
+
+        private static AudioSource FindMusicSourceOnObject(GameObject owner)
+        {
+            if (owner == null)
+                return null;
+
+            AudioSource[] sources = owner.GetComponents<AudioSource>();
+            for (int i = 0; i < sources.Length; i++)
+            {
+                AudioSource source = sources[i];
+                if (source != null && source.clip != null && source.loop && source.playOnAwake)
+                    return source;
+            }
+
+            return null;
+        }
+
+        private static void StopAndDisableAudioSources(GameObject owner)
+        {
+            if (owner == null)
+                return;
+
+            AudioSource[] sources = owner.GetComponentsInChildren<AudioSource>(true);
+            for (int i = 0; i < sources.Length; i++)
+            {
+                if (sources[i] == null)
+                    continue;
+
+                sources[i].Stop();
+                sources[i].playOnAwake = false;
+                sources[i].enabled = false;
+            }
+        }
+
         private AudioSource CreateNewPooledSource()
         {
             GameObject sourceObj = new GameObject("Pooled_AudioSource");
@@ -279,7 +390,11 @@ namespace PoseKart.Audio
                     return candidate;
                 }
             }
-            return CreateNewPooledSource();
+
+            AudioSource created = CreateNewPooledSource();
+            if (created != null)
+                created.gameObject.SetActive(true);
+            return created;
         }
 
         private void ReturnSourceToPool(AudioSource source)
@@ -553,7 +668,16 @@ namespace PoseKart.Audio
         {
             AudioManager mgr = Instance;
             if (mgr != null && mgr.missileImpactClip != null)
-                mgr.PlaySFXAtPosition(mgr.missileImpactClip, worldPosition, mgr.effectVolume);
+                // Keep the explosion positional: nearby impacts are loud and
+                // distant impacts attenuate instead of sounding next to the listener.
+                mgr.PlaySFXAtPosition(
+                    mgr.missileImpactClip,
+                    worldPosition,
+                    mgr.effectVolume,
+                    1f,
+                    4f,
+                    220f
+                );
         }
 
         public static void PlayBananaDrop(Vector3 worldPosition)
@@ -574,21 +698,42 @@ namespace PoseKart.Audio
         {
             AudioManager mgr = Instance;
             if (mgr != null && mgr.shieldActivateClip != null)
-                mgr.PlaySFXAtPosition(mgr.shieldActivateClip, worldPosition, mgr.effectVolume);
+                mgr.PlaySFXAtPosition(
+                    mgr.shieldActivateClip,
+                    worldPosition,
+                    mgr.effectVolume,
+                    1f,
+                    3f,
+                    120f
+                );
         }
 
         public static void PlayShieldBlock(Vector3 worldPosition)
         {
             AudioManager mgr = Instance;
             if (mgr != null && mgr.shieldBlockClip != null)
-                mgr.PlaySFXAtPosition(mgr.shieldBlockClip, worldPosition, mgr.effectVolume);
+                mgr.PlaySFXAtPosition(
+                    mgr.shieldBlockClip,
+                    worldPosition,
+                    mgr.effectVolume,
+                    1f,
+                    4f,
+                    160f
+                );
         }
 
         public static void PlayShieldExpire(Vector3 worldPosition)
         {
             AudioManager mgr = Instance;
             if (mgr != null && mgr.shieldExpireClip != null)
-                mgr.PlaySFXAtPosition(mgr.shieldExpireClip, worldPosition, mgr.effectVolume);
+                mgr.PlaySFXAtPosition(
+                    mgr.shieldExpireClip,
+                    worldPosition,
+                    mgr.effectVolume,
+                    1f,
+                    3f,
+                    120f
+                );
         }
 
         public static void PlayBoostActivate(Vector3 worldPosition)
@@ -668,6 +813,8 @@ namespace PoseKart.Audio
 
         protected virtual void OnDestroy()
         {
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
+
             if (_instance == this)
             {
                 _instance = null;

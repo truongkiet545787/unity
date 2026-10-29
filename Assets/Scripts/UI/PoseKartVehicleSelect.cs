@@ -124,6 +124,12 @@ namespace PoseKart.UI
             }
 
             Refresh();
+
+            // Build the graphics settings entry on this scene's existing Canvas.
+            // The helper is idempotent, so re-initializing Vehicle Select cannot
+            // create duplicate panels or buttons.
+            PoseKartGraphicsSettingsUI.AttachToCanvas(GetComponent<Canvas>());
+
             // Khi vừa vào scene, hiển thị preview xe và ẩn bảng hướng dẫn.
             if (preview != null)
                 preview.gameObject.SetActive(true);
@@ -200,7 +206,7 @@ namespace PoseKart.UI
 
             colorName.text =
                 "COLOR  /  " +
-                PoseKartVehiclePaint.ColorNames[selectedColor];
+                preview.GetColorName(selectedColor);
         }
 
         private void StartRace()

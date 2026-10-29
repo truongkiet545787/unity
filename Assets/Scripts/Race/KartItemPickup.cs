@@ -396,7 +396,7 @@ namespace PoseKart.Race
             }
 
             float range = settings != null ? settings.MissileTargetRange : 130f;
-            float angle = settings != null ? settings.MissileTargetAngle : 110f;
+            float angle = settings != null ? settings.MissileTargetAngle : 180f;
             CarController target = FindTarget(owner, range, angle);
 
             if (target == null)
@@ -572,24 +572,30 @@ namespace PoseKart.Race
     owner,
     target,
     settings != null ? settings.MissileSpeed : 62f,
-    settings != null ? settings.MissileTrackingStrength : 8f,
+    settings != null ? settings.MissileTrackingStrength : 18f,
+    settings != null ? settings.MissileMaximumTurnDegreesPerSecond : 210f,
     settings != null ? settings.MissileLifetime : 7f,
     settings != null ? settings.MissileImpactExplosionPrefab : null,
     settings != null ? settings.MissileImpactExplosionLifetime : 4f,
     settings != null ? settings.MissileExplosionRadius : 6f,
+    settings != null ? settings.MissileDeviationAmplitude : 0.45f,
+    settings != null ? settings.MissileDeviationFrequency : 12f,
+    settings != null ? settings.MissileTerminalGuidanceDistance : 24f,
     settings != null ? settings.MissileMaximumHorizontalKnockback : 5f,
     settings != null ? settings.MissileMaximumUpwardKnockback : 2.5f,
 
     // Hai thằng này lúc trước bị đảo.
     settings != null ? settings.MissileImpactTorque : 12f,
+    settings != null ? settings.MissileDirectHitForceMultiplier : 1.2f,
+    settings != null ? settings.MissileNearbyForceMultiplier : .85f,
     settings != null ? settings.MissileMinimumEffectiveDistance : .5f,
 
     settings != null ? settings.MissileExplosionFalloff : null,
     settings != null ? settings.MissileKnockbackRecoveryDuration : .7f,
     settings == null || settings.MissileExplosionAffectsNearbyRacers,
     settings == null || settings.MissileExplosionLineOfSightCheck,
-    settings != null ? settings.MissileTargetPrediction : .75f,
-    settings != null ? settings.MissileMaximumPredictionTime : 1.25f,
+    settings != null ? settings.MissileTargetPrediction : .55f,
+    settings != null ? settings.MissileMaximumPredictionTime : .9f,
     settings != null ? settings.MissileGroundFirePrefab : null,
     settings != null ? settings.MissileGroundFireDuration : 5f,
     settings != null ? settings.MissileGroundFireRadius : 3f,
@@ -719,7 +725,7 @@ namespace PoseKart.Race
                     ? settings.MissileTargetRange : 130f;
 
                 float angle = settings != null
-                    ? settings.MissileTargetAngle : 110f;
+                    ? settings.MissileTargetAngle : 180f;
 
                 return FindTarget(owner, range, angle);
             }
@@ -776,7 +782,10 @@ namespace PoseKart.Race
                 if (candidateAngle > angle)
                     continue;
 
-                float score = distanceSqr * (1f + candidateAngle / Mathf.Max(1f, angle));
+                float score = angle >= 179.9f
+    ? distanceSqr
+    : distanceSqr *
+      (1f + candidateAngle / Mathf.Max(1f, angle));
                 if (score < bestScore)
                 {
                     bestScore = score;

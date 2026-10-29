@@ -152,6 +152,16 @@ namespace PoseKart.Vehicle
         [SerializeField] private bool controlEnabled = true;
         [SerializeField] private bool brakeAllowedWhenControlDisabled;
 
+        [Header("Missile Impact Recovery")]
+        [Tooltip("Minimum time between missile impacts applied to this kart.")]
+        [SerializeField, Min(0f)] private float missileImpactCooldown = 0.18f;
+        [Tooltip("Maximum velocity change from one missile impact, before Rigidbody mass is applied as an impulse.")]
+        [SerializeField, Min(0.1f)] private float maximumMissileImpactVelocityChange = 7.5f;
+        [Tooltip("Maximum angular speed after a missile impact. Lower values reduce easy flips.")]
+        [SerializeField, Min(0.1f)] private float maximumMissileImpactAngularSpeed = 10f;
+        [Tooltip("Steering response immediately after impact, smoothly recovering to full control.")]
+        [SerializeField, Range(0.1f, 1f)] private float missileImpactSteeringMultiplier = 0.55f;
+
         [Header("Arcade Collision Speed Loss")]
         [SerializeField, Min(0f)] private float minimumImpactSpeed = 3f;
         [SerializeField, Min(0f)] private float collisionSpeedLossMultiplier = 0.45f;
@@ -217,6 +227,9 @@ namespace PoseKart.Vehicle
         private float smoothedSteering;
         private float lastCollisionLossTime = float.NegativeInfinity;
         private float impactRecoveryUntil = float.NegativeInfinity;
+        private float impactRecoveryStartedAt = float.NegativeInfinity;
+        private float impactRecoveryDuration;
+        private float nextMissileImpactTime = float.NegativeInfinity;
         private readonly RaycastHit[] groundProbeHits = new RaycastHit[8];
         private Vector3 previousObservedVelocity;
         private bool hasPreviousObservedVelocity;
@@ -611,21 +624,109 @@ namespace PoseKart.Vehicle
             Vector3 deltaVelocity,
             float recoveryDuration,
             Vector3 impactPoint,
-            float impactTorqueStrength)
+            float impactTorqueStrength,
+            bool balancedMissileImpact = true)
         {
             if (targetBody == null || IsShockwaveActive)
                 return;
 
+            if (!balancedMissileImpact)
+            {
+                ApplyLegacyShockwaveImpact(
+                    deltaVelocity,
+                    recoveryDuration,
+                    impactPoint,
+                    impactTorqueStrength);
+                return;
+            }
+
+            if (targetBody.isKinematic || Time.time < nextMissileImpactTime)
+                return;
+
             Vector3 horizontal = Vector3.ClampMagnitude(
-                Vector3.ProjectOnPlane(deltaVelocity, Vector3.up), 18f);
-            float vertical = Mathf.Clamp(deltaVelocity.y, -14f, 14f);
+                Vector3.ProjectOnPlane(deltaVelocity, Vector3.up),
+                maximumMissileImpactVelocityChange);
+            float vertical = Mathf.Clamp(
+                deltaVelocity.y,
+                -maximumMissileImpactVelocityChange,
+                maximumMissileImpactVelocityChange);
             Vector3 boundedDelta = horizontal + Vector3.up * vertical;
-            targetBody.AddForce(boundedDelta, ForceMode.VelocityChange);
+            if (boundedDelta.sqrMagnitude < 0.0001f)
+                return;
+
+            nextMissileImpactTime = Time.time + Mathf.Max(0f, missileImpactCooldown);
+            targetBody.AddForce(
+                boundedDelta * Mathf.Max(0.01f, targetBody.mass),
+                ForceMode.Impulse);
 
             // A force applied at the centre of mass only launches the kart. Add
             // a controlled angular impulse around the axis perpendicular to the
             // blast direction so front hits pitch and side hits roll.
-            Vector3 blastDirection = Vector3.ProjectOnPlane(impactPoint - targetBody.worldCenterOfMass, Vector3.up);
+            Vector3 blastDirection = Vector3.ProjectOnPlane(
+                targetBody.worldCenterOfMass - impactPoint,
+                Vector3.up);
+            if (blastDirection.sqrMagnitude < 0.0001f)
+                blastDirection = Vector3.ProjectOnPlane(-boundedDelta, Vector3.up);
+            if (blastDirection.sqrMagnitude < 0.0001f)
+                blastDirection = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            blastDirection.Normalize();
+
+            Vector3 flipAxis = Vector3.Cross(Vector3.up, blastDirection);
+            if (flipAxis.sqrMagnitude < 0.0001f)
+                flipAxis = transform.right;
+            flipAxis.Normalize();
+
+            float impulseStrength = Mathf.Clamp01(
+                boundedDelta.magnitude / Mathf.Max(0.1f, maximumMissileImpactVelocityChange));
+            float torqueImpulse = Mathf.Max(0f, impactTorqueStrength)
+                * Mathf.Lerp(.45f, .75f, impulseStrength)
+                * Mathf.Max(0.01f, targetBody.mass)
+                * 0.18f;
+            if (torqueImpulse > 0f)
+                targetBody.AddTorque(flipAxis * torqueImpulse, ForceMode.Impulse);
+            targetBody.angularVelocity = Vector3.ClampMagnitude(
+                targetBody.angularVelocity,
+                Mathf.Max(0.1f, maximumMissileImpactAngularSpeed));
+            debugLastMissileImpactDelta = boundedDelta;
+            MissileImpactEvent?.Invoke(boundedDelta);
+            StopNitro();
+            impactRecoveryStartedAt = Time.time;
+            impactRecoveryDuration = Mathf.Max(.05f, recoveryDuration);
+            impactRecoveryUntil = Mathf.Max(
+                impactRecoveryUntil,
+                impactRecoveryStartedAt + impactRecoveryDuration);
+            debugImpactRecovery = true;
+
+            // Give a grounded car a short airborne window only when the explosion
+            // actually contains an upward component. The Rigidbody remains fully
+            // physical; this only prevents the drive controller from cancelling it.
+            if (vertical > .1f)
+            {
+                launchedUntil = Mathf.Max(
+                    launchedUntil,
+                    Time.time + Mathf.Min(.35f, Mathf.Max(.05f, recoveryDuration) * .5f));
+                grounded = false;
+            }
+            stuntDuration = 0f;
+            yawRate = 0f;
+        }
+
+        private void ApplyLegacyShockwaveImpact(
+            Vector3 deltaVelocity,
+            float recoveryDuration,
+            Vector3 impactPoint,
+            float impactTorqueStrength)
+        {
+            Vector3 horizontal = Vector3.ClampMagnitude(
+                Vector3.ProjectOnPlane(deltaVelocity, Vector3.up),
+                18f);
+            float vertical = Mathf.Clamp(deltaVelocity.y, -14f, 14f);
+            Vector3 boundedDelta = horizontal + Vector3.up * vertical;
+            targetBody.AddForce(boundedDelta, ForceMode.VelocityChange);
+
+            Vector3 blastDirection = Vector3.ProjectOnPlane(
+                impactPoint - targetBody.worldCenterOfMass,
+                Vector3.up);
             if (blastDirection.sqrMagnitude < 0.0001f)
                 blastDirection = Vector3.ProjectOnPlane(-boundedDelta, Vector3.up);
             if (blastDirection.sqrMagnitude < 0.0001f)
@@ -638,26 +739,34 @@ namespace PoseKart.Vehicle
             flipAxis.Normalize();
 
             float impulseStrength = Mathf.Clamp01(boundedDelta.magnitude / 8f);
-            float torqueImpulse = Mathf.Max(0f, impactTorqueStrength) * Mathf.Lerp(.65f, 1f, impulseStrength);
-            targetBody.maxAngularVelocity = Mathf.Max(targetBody.maxAngularVelocity, 18f);
+            float torqueImpulse = Mathf.Max(0f, impactTorqueStrength)
+                * Mathf.Lerp(.65f, 1f, impulseStrength);
+            targetBody.maxAngularVelocity = Mathf.Max(
+                targetBody.maxAngularVelocity,
+                18f);
             if (torqueImpulse > 0f)
-                targetBody.AddTorque(flipAxis * torqueImpulse, ForceMode.VelocityChange);
-            targetBody.angularVelocity = Vector3.ClampMagnitude(targetBody.angularVelocity, 18f);
+                targetBody.AddTorque(
+                    flipAxis * torqueImpulse,
+                    ForceMode.VelocityChange);
+            targetBody.angularVelocity = Vector3.ClampMagnitude(
+                targetBody.angularVelocity,
+                18f);
             debugLastMissileImpactDelta = boundedDelta;
             MissileImpactEvent?.Invoke(boundedDelta);
+            impactRecoveryStartedAt = Time.time;
+            impactRecoveryDuration = Mathf.Max(.05f, recoveryDuration);
             impactRecoveryUntil = Mathf.Max(
                 impactRecoveryUntil,
-                Time.time + Mathf.Max(.05f, recoveryDuration));
+                impactRecoveryStartedAt + impactRecoveryDuration);
             debugImpactRecovery = true;
 
-            // Give a grounded car a short airborne window only when the explosion
-            // actually contains an upward component. The Rigidbody remains fully
-            // physical; this only prevents the drive controller from cancelling it.
             if (vertical > .1f)
             {
                 launchedUntil = Mathf.Max(
                     launchedUntil,
-                    Time.time + Mathf.Min(.35f, Mathf.Max(.05f, recoveryDuration) * .5f));
+                    Time.time + Mathf.Min(
+                        .35f,
+                        Mathf.Max(.05f, recoveryDuration) * .5f));
                 grounded = false;
             }
             stuntDuration = 0f;
@@ -911,6 +1020,18 @@ namespace PoseKart.Vehicle
             else if (Time.time < oilSlipUntil)
             {
                 steering = Mathf.Clamp(steering + Mathf.Sin(Time.time * 13f) * .75f, -1f, 1f);
+            }
+
+            if (!bananaStunned && Time.time < impactRecoveryUntil)
+            {
+                float recoveryProgress = Mathf.Clamp01(
+                    (Time.time - impactRecoveryStartedAt) /
+                    Mathf.Max(.05f, impactRecoveryDuration));
+                float steeringRecovery = Mathf.SmoothStep(
+                    missileImpactSteeringMultiplier,
+                    1f,
+                    recoveryProgress);
+                steering *= steeringRecovery;
             }
 
             float throttle = controlEnabled
@@ -1390,7 +1511,7 @@ namespace PoseKart.Vehicle
                     if (victimDefense == null || !victimDefense.TryBlockMissileExplosion(point))
                     {
                         Vector3 away = Vector3.ProjectOnPlane(victim.transform.position - transform.position, Vector3.up).normalized;
-                        victim.ApplyMissileExplosionImpact(away * shockwavePush + Vector3.up * shockwaveLift, 0.6f, point, shockwaveTorque);
+                        victim.ApplyMissileExplosionImpact(away * shockwavePush + Vector3.up * shockwaveLift, 0.6f, point, shockwaveTorque, false);
                     }
                 }
                 debugLastCollisionSpeedLoss = 0f;
