@@ -38,6 +38,8 @@ namespace PoseKart.UI
         [SerializeField] private TMP_Text nitroModeTMP;
         [Tooltip("Creates the Perfect Timing zone and moving cursor over the existing Bar at runtime.")]
         [SerializeField] private bool autoCreateNitroTimingUI = true;
+        [SerializeField] private bool showPerfectTapCue = true;
+        [SerializeField] private bool showShockwaveCue = true;
 
         private float lastTimeRefresh = -1f;
         private int lastPosition = int.MinValue;
@@ -54,6 +56,10 @@ namespace PoseKart.UI
         private RectTransform nitroTimingOverlay;
         private RectTransform nitroPerfectZone;
         private RectTransform nitroTimingCursor;
+        private Text nitroPerfectTapCue;
+        private Text nitroShockwaveCue;
+        private PoseKartNitroMeterUI dedicatedNitroMeter;
+        private float nextDedicatedMeterResolveTime;
 
         // Bỏ kiểm tra countdownText khỏi IsConfigured
         public bool IsConfigured =>
@@ -185,6 +191,13 @@ namespace PoseKart.UI
             nitroTimingCursor = GetOrCreateUIRect(nitroTimingOverlay, "TimingCursor");
             EnsureTimingImage(nitroTimingCursor, Color.white);
             nitroTimingCursor.SetAsLastSibling();
+
+            nitroPerfectTapCue = GetOrCreateTimingCue(
+                nitroTimingOverlay, "PerfectTapCue", "TAP",
+                new Color(0.35f, 0.95f, 1f, 1f), 18f);
+            nitroShockwaveCue = GetOrCreateTimingCue(
+                nitroTimingOverlay, "ShockwaveCue", "SHOCKWAVE",
+                new Color(0.95f, 0.55f, 1f, 1f), 18f);
             nitroTimingOverlay.gameObject.SetActive(false);
         }
 
@@ -218,6 +231,35 @@ namespace PoseKart.UI
                 image.color = defaultColor;
             }
             image.raycastTarget = false;
+        }
+
+        private static Text GetOrCreateTimingCue(RectTransform parent, string objectName,
+            string value, Color color, float fontSize)
+        {
+            RectTransform rect = GetOrCreateUIRect(parent, objectName);
+            rect.anchorMin = new Vector2(0.5f, 1f);
+            rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(0f, -2f);
+            rect.sizeDelta = new Vector2(180f, 22f);
+
+            Text text = rect.GetComponent<Text>();
+            if (text == null)
+                text = rect.gameObject.AddComponent<Text>();
+
+            if (text.font == null)
+                text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.fontSize = Mathf.RoundToInt(fontSize);
+            text.fontStyle = FontStyle.Bold;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.raycastTarget = false;
+            text.text = value;
+            text.color = color;
+            rect.SetAsLastSibling();
+            text.gameObject.SetActive(false);
+            return text;
         }
 
         private void RefreshNitroMeter()
@@ -287,10 +329,28 @@ namespace PoseKart.UI
 
         private bool HasDedicatedNitroMeter()
         {
-            // The dedicated meter is a child of RaceHUD in the online scenes.
-            // Include inactive children so RaceHUD never creates/binds a second
-            // legacy bar during scene load or domain reload.
-            return GetComponentInChildren<PoseKartNitroMeterUI>(true) != null;
+            if (dedicatedNitroMeter != null)
+                return true;
+
+            // Do not perform a scene-wide search every frame while the player
+            // prefab and its HUD are still being spawned.
+            if (Application.isPlaying &&
+                Time.unscaledTime < nextDedicatedMeterResolveTime)
+            {
+                return false;
+            }
+
+            nextDedicatedMeterResolveTime = Application.isPlaying
+                ? Time.unscaledTime + 0.5f
+                : 0f;
+
+            // Search the loaded race UI, not only this RaceHUD object. Some
+            // scenes keep the dedicated meter under another Canvas/HUD root.
+            // This prevents the legacy RaceHUD path from creating a second
+            // visible meter during scene load or domain reload.
+            dedicatedNitroMeter = FindFirstObjectByType<PoseKartNitroMeterUI>(
+                FindObjectsInactive.Include);
+            return dedicatedNitroMeter != null;
         }
 
         private void RefreshNitroMode()
@@ -309,7 +369,7 @@ namespace PoseKart.UI
                     modeColor = new Color(1f, 0.85f, 0.15f, 1f);
                     break;
                 case CarController.NitroMode.Double:
-                    label = "DOUBLE NITRO";
+                    label = "EXPLOSIVE";
                     modeColor = new Color(1f, 0.45f, 0.05f, 1f);
                     break;
                 case CarController.NitroMode.Shockwave:
@@ -347,7 +407,13 @@ namespace PoseKart.UI
             if (nitroTimingOverlay.gameObject.activeSelf != active)
                 nitroTimingOverlay.gameObject.SetActive(active);
             if (!active)
+            {
+                if (nitroPerfectTapCue != null)
+                    nitroPerfectTapCue.gameObject.SetActive(false);
+                if (nitroShockwaveCue != null)
+                    nitroShockwaveCue.gameObject.SetActive(false);
                 return;
+            }
 
             float start = nitroPlayerCar.NitroPerfectStart01;
             float end = nitroPlayerCar.NitroPerfectEnd01;
@@ -360,7 +426,32 @@ namespace PoseKart.UI
             nitroTimingCursor.anchorMin = new Vector2(progress, 0f);
             nitroTimingCursor.anchorMax = new Vector2(progress, 1f);
             nitroTimingCursor.anchoredPosition = Vector2.zero;
-            nitroTimingCursor.sizeDelta = new Vector2(4f, 0f);
+            nitroTimingCursor.sizeDelta = new Vector2(6f, 0f);
+
+            bool shockwaveReady = showShockwaveCue &&
+                nitroPlayerCar.IsShockwaveTimingNow;
+            bool perfectReady = showPerfectTapCue && !shockwaveReady &&
+                nitroPlayerCar.IsPerfectTimingNow;
+            if (nitroPerfectTapCue != null)
+            {
+                nitroPerfectTapCue.gameObject.SetActive(perfectReady);
+                if (perfectReady)
+                {
+                    float pulse = 0.65f + 0.35f *
+                        (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 12f));
+                    nitroPerfectTapCue.color = new Color(0.35f, 0.95f, 1f, pulse);
+                }
+            }
+            if (nitroShockwaveCue != null)
+            {
+                nitroShockwaveCue.gameObject.SetActive(shockwaveReady);
+                if (shockwaveReady)
+                {
+                    float pulse = 0.7f + 0.3f *
+                        (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 16f));
+                    nitroShockwaveCue.color = new Color(0.95f, 0.55f, 1f, pulse);
+                }
+            }
         }
 
         private void SetNitroPercentage(float fill01)

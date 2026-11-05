@@ -100,6 +100,7 @@ namespace PoseKart.UI
         private TMP_Text handStatus;
         private TMP_Text handDetails;
         private PoseKartMinimap minimap;
+        private PoseKartRaceInteractionFeed interactionFeed;
         private KartItemInventory playerInventory;
         private PoseKart.Input.LocalPoseTracker poseTracker;
         private PoseKart.Input.PoseKartHandUdpReceiver handReceiver;
@@ -136,7 +137,7 @@ namespace PoseKart.UI
             layoutReady = false;
             runtimeBindAttempted = false;
 #if UNITY_EDITOR
-            // Auto-create only when there is no saved HUD. Do not reset edited UI.
+            // Bind or create additive HUD pieces without resetting the saved UI.
             QueueEditorLayout();
 #endif
         }
@@ -189,7 +190,7 @@ namespace PoseKart.UI
             if (!Application.isPlaying)
             {
 #if UNITY_EDITOR
-                if (buildLayoutInEditMode && transform.Find("ArcadeHUD_Root") == null)
+                if (buildLayoutInEditMode && !layoutReady)
                     QueueEditorLayout();
 #endif
                 return;
@@ -208,8 +209,7 @@ namespace PoseKart.UI
         private void QueueEditorLayout()
         {
             if (Application.isPlaying || UnityEditor.EditorApplication.isPlayingOrWillChangePlaymode ||
-                !buildLayoutInEditMode || !isActiveAndEnabled || editorBuildQueued ||
-                transform.Find("ArcadeHUD_Root") != null) return;
+                !buildLayoutInEditMode || !isActiveAndEnabled || editorBuildQueued) return;
             editorBuildQueued = true;
             UnityEditor.EditorApplication.delayCall += BuildEditorLayoutDelayed;
         }
@@ -218,9 +218,17 @@ namespace PoseKart.UI
         {
             editorBuildQueued = false;
             if (this == null || Application.isPlaying || UnityEditor.EditorApplication.isPlayingOrWillChangePlaymode ||
-                !buildLayoutInEditMode || !isActiveAndEnabled || building || !gameObject.scene.IsValid() ||
-                transform.Find("ArcadeHUD_Root") != null) return;
+                !buildLayoutInEditMode || !isActiveAndEnabled || building || !gameObject.scene.IsValid()) return;
             EnsureReferences();
+            if (transform.Find("ArcadeHUD_Root") != null)
+            {
+                // Bind the saved HUD without rebuilding it. This also lets
+                // additive HUD components, such as the interaction feed, be
+                // added to an existing scene layout in Edit Mode.
+                if (TryBindExistingLayout())
+                    layoutReady = true;
+                return;
+            }
             EnsureLayout();
         }
 #endif
@@ -510,6 +518,7 @@ namespace PoseKart.UI
                 }
 
                 CreateMinimapFrame(root);
+                EnsureInteractionFeed(root);
                 BuildItemHud(root);
                 BuildHandPanel(root);
                 if (Application.isPlaying) SetActive(rouletteRoot, false);
@@ -575,6 +584,7 @@ namespace PoseKart.UI
             nitroCallout = FindComponent<TMP_Text>(root, "Race Callouts/Nitro Callout/Nitro Callout Text");
 
             minimap = root.GetComponentInChildren<PoseKartMinimap>(true);
+            EnsureInteractionFeed((RectTransform)root);
 
             // Preserve whichever graphics exist instead of rebuilding the entire
             // interface just because the user renamed or removed one child.
@@ -680,6 +690,34 @@ namespace PoseKart.UI
             mapRect.offsetMax = new Vector2(-10f, -10f);
             mapRect.localScale = Vector3.one;
             minimap.transform.SetAsLastSibling();
+        }
+
+        private void EnsureInteractionFeed(RectTransform root)
+        {
+            if (root == null)
+                return;
+
+            bool created = false;
+
+            if (interactionFeed == null)
+                interactionFeed = root.GetComponentInChildren<PoseKartRaceInteractionFeed>(true);
+
+            if (interactionFeed == null)
+            {
+                GameObject feedObject = GetOrCreate("Race Interaction Feed", root);
+                interactionFeed = feedObject.GetComponent<PoseKartRaceInteractionFeed>();
+                if (interactionFeed == null)
+                {
+                    interactionFeed = feedObject.AddComponent<PoseKartRaceInteractionFeed>();
+                    created = true;
+                }
+            }
+
+            if (!interactionFeed.gameObject.activeSelf)
+                interactionFeed.gameObject.SetActive(true);
+
+            if (created)
+                MarkEditorDirty();
         }
 
         private void BuildItemHud(RectTransform root)

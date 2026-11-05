@@ -83,6 +83,13 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
     public float boostShake = 0.025f;
     public float shakeFrequency = 27f;
 
+    [Header("Shockwave Impact Presentation")]
+    [Tooltip("Short camera-only impact hold. It never changes Time.timeScale or physics.")]
+    [SerializeField, Min(0f)] private float shockwaveHitStopFeel = 0.045f;
+    [SerializeField, Range(0f, 12f)] private float shockwaveFovPunch = 4.5f;
+    [SerializeField, Min(0.01f)] private float shockwaveFovRecovery = 0.24f;
+    [SerializeField, Range(0f, 1f)] private float shockwaveShakeMultiplier = 0.35f;
+
     [Header("NEW - Nitro Camera Punch")]
     [Tooltip("Extra FOV immediately after Nitro ignition.")]
     [Range(0f, 12f)]
@@ -202,6 +209,9 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
     private float shakeRemaining;
     private float shakeDuration;
     private float shakeStrength;
+    private float shockwaveFovKick;
+    private float shockwaveFovHoldUntil;
+    private float shockwaveFovEndTime;
 
     private void Awake()
     {
@@ -226,11 +236,25 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
         if (Keyboard.current != null &&
     Keyboard.current.cKey.wasPressedThisFrame)
         {
-            firstPersonView = !firstPersonView;
-
-            if (firstPersonView)
-                firstPersonBlend = 0f;
+                ToggleFirstPersonView();
         }
+    }
+
+    /// <summary>
+    /// Toggles the existing chase/first-person camera state. Returns false when
+    /// the camera is not currently owned by a local player or the intro has not
+    /// handed camera control back yet.
+    /// </summary>
+    public bool ToggleFirstPersonView()
+    {
+        if (!localOwnerInputEnabled || !introHandedOff || firstPersonAnchor == null)
+            return false;
+
+        firstPersonView = !firstPersonView;
+        if (firstPersonView)
+            firstPersonBlend = 0f;
+
+        return true;
     }
 
     public void SetLocalOwner(bool isLocalOwner)
@@ -292,6 +316,9 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
         shakeRemaining = 0f;
         shakeDuration = 0f;
         shakeStrength = 0f;
+        shockwaveFovKick = 0f;
+        shockwaveFovHoldUntil = 0f;
+        shockwaveFovEndTime = 0f;
     }
 
     private void LateUpdate()
@@ -303,6 +330,8 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
 
         if (dt <= 0f)
             return;
+
+        UpdateShockwavePresentation();
 
         if (cam == null)
             cam = GetComponent<Camera>();
@@ -777,6 +806,7 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
         );
 
         desiredFov += nitroFovPunch * nitroKick;
+        desiredFov += shockwaveFovKick;
 
         if (isStuntActive)
             desiredFov += stuntFovBoost;
@@ -853,6 +883,7 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
 
         float desiredFov = firstPersonFov
             + (nitroActive ? firstPersonNitroFovPunch : 0f);
+        desiredFov += shockwaveFovKick;
         desiredFov = Mathf.Clamp(desiredFov, 35f, 105f);
 
         if (cam != null)
@@ -913,6 +944,62 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
         );
     }
 
+    /// <summary>
+    /// Presentation-only Shockwave hit feedback. The short "hit-stop" feel is
+    /// a camera/FOV hold driven by unscaled time; simulation, input and NGO
+    /// continue running normally.
+    /// </summary>
+    public void PlayShockwaveImpact(float intensity)
+    {
+        intensity = Mathf.Clamp01(intensity);
+        if (intensity <= 0f)
+            return;
+
+        float now = Time.unscaledTime;
+        shockwaveFovKick = Mathf.Max(
+            shockwaveFovKick,
+            shockwaveFovPunch * intensity);
+        shockwaveFovHoldUntil = Mathf.Max(
+            shockwaveFovHoldUntil,
+            now + shockwaveHitStopFeel);
+        shockwaveFovEndTime = Mathf.Max(
+            shockwaveFovEndTime,
+            now + shockwaveHitStopFeel + shockwaveFovRecovery);
+
+        TriggerShake(
+            intensity * shockwaveShakeMultiplier,
+            Mathf.Lerp(0.12f, 0.28f, intensity));
+    }
+
+    private void UpdateShockwavePresentation()
+    {
+        if (shockwaveFovKick <= 0f)
+            return;
+
+        float now = Time.unscaledTime;
+        if (now <= shockwaveFovHoldUntil)
+            return;
+
+        if (now >= shockwaveFovEndTime)
+        {
+            shockwaveFovKick = 0f;
+            return;
+        }
+
+        float duration = Mathf.Max(
+            0.01f,
+            shockwaveFovEndTime - shockwaveFovHoldUntil);
+        float t = Mathf.Clamp01(
+            (now - shockwaveFovHoldUntil) / duration);
+        shockwaveFovKick = Mathf.Lerp(
+            shockwaveFovKick,
+            0f,
+            1f - Mathf.Exp(-12f * Time.unscaledDeltaTime));
+
+        if (t >= 0.99f)
+            shockwaveFovKick = 0f;
+    }
+
     private void OnDisable()
     {
         if (cam != null && baseFov > 0f)
@@ -921,6 +1008,9 @@ public sealed class PoseKartCinematicCamera : MonoBehaviour
         initialized = false;
         firstPersonView = false;
         firstPersonBlend = 1f;
+        shockwaveFovKick = 0f;
+        shockwaveFovHoldUntil = 0f;
+        shockwaveFovEndTime = 0f;
     }
 
     // ====================================================================

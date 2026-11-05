@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Unity.Netcode;
 
 namespace PoseKart.Vehicle
 {
@@ -10,10 +11,14 @@ namespace PoseKart.Vehicle
         [SerializeField] private Rigidbody targetBody;
         [Header("Automatic Recovery")]
         [SerializeField] private bool autoResetWhenFallen = true;
-        [Tooltip("A vehicle that is airborne, upside down, or off the valid road for this long is returned to its last safe road position.")]
-        [SerializeField, Range(5f, 10f)] private float offTrackResetDelay = 6f;
-        [Tooltip("Optional hard lower bound. It still uses the same recovery delay instead of teleporting immediately.")]
+        [Tooltip("A grounded vehicle that is upside down or off the valid road for this long is returned to its last safe road position.")]
+        [SerializeField, Range(5f, 20f)] private float offTrackResetDelay = 6f;
+        [Tooltip("A vehicle below this height starts the separate fallen timer. It is never reset immediately.")]
         [SerializeField] private float fallenHeight = -8f;
+        [Tooltip("How long a vehicle may remain below fallenHeight before the recovery reset is allowed.")]
+        [SerializeField, Range(0.5f, 10f)] private float fallenRecoveryDelay = 2.5f;
+        [Tooltip("Failsafe for a non-stunt vehicle that remains airborne too long. Valid stunt airtime is not cut by this timer.")]
+        [SerializeField, Range(8f, 30f)] private float airborneFailsafeDelay = 14f;
         [SerializeField] private float groundProbeDistance = 3f;
 
         [Header("Runtime Debug (Read Only)")]
@@ -30,7 +35,16 @@ namespace PoseKart.Vehicle
         private Snapshot lastSafe;
         private PoseKart.AI.RacingLine racingLine;
         private float offTrackSince = -1f;
+        private float fallenSince = -1f;
+        private float airborneSince = -1f;
+        private NetworkObject networkObject;
         private struct Snapshot { public Vector3 position; public Quaternion rotation; public float time; }
+
+        private bool HasPhysicsAuthority =>
+            networkObject == null || !networkObject.IsSpawned || networkObject.IsOwner;
+
+        public Vector3 LastSafePosition => lastSafe.position != Vector3.zero ? lastSafe.position : spawnPosition;
+        public Quaternion LastSafeRotation => lastSafe.rotation;
 
         private void Reset()
         {
@@ -48,10 +62,14 @@ namespace PoseKart.Vehicle
             racingLine=FindFirstObjectByType<PoseKart.AI.RacingLine>();
             spawnRotation = targetBody.rotation;
             lastSafe=new Snapshot{position=spawnPosition,rotation=spawnRotation,time=Time.time};
+            networkObject = GetComponent<NetworkObject>();
         }
 
         private void Update()
         {
+            if (!HasPhysicsAuthority)
+                return;
+
             Keyboard keyboard = Keyboard.current;
             var racer=GetComponent<PoseKart.Race.RaceParticipant>();
             bool resetPressed = (racer==null||racer.IsPlayer)&&keyboard != null && keyboard.rKey.wasPressedThisFrame;
@@ -63,48 +81,120 @@ namespace PoseKart.Vehicle
 
         private void FixedUpdate()
         {
-            if(targetBody==null||Time.time<nextSnapshotTime)return;
-            nextSnapshotTime=Time.time+.1f;
-            CarController controller=GetComponent<CarController>();
+            if (!HasPhysicsAuthority || targetBody == null || Time.time < nextSnapshotTime)
+                return;
+
+            nextSnapshotTime = Time.time + .1f;
+            CarController controller = GetComponent<CarController>();
+            PoseKart.Stunts.PoseKartStuntController stunt =
+                GetComponent<PoseKart.Stunts.PoseKartStuntController>();
             bool grounded = controller == null || controller.IsGrounded;
-            bool upright = Vector3.Dot(transform.up,Vector3.up) >= .65f;
+            bool stuntPresentationActive = stunt != null && stunt.IsStuntActive;
+            bool belowFallenHeight = targetBody.position.y < fallenHeight;
+
+            if (belowFallenHeight)
+            {
+                if (fallenSince < 0f)
+                    fallenSince = Time.time;
+
+                offTrackSince = -1f;
+                if (autoResetWhenFallen &&
+                    Time.time - fallenSince >= Mathf.Max(0.5f, fallenRecoveryDelay))
+                {
+                    ResetVehicle();
+                    return;
+                }
+            }
+            else
+            {
+                fallenSince = -1f;
+            }
+
+            // Airborne time is not off-track time. Keep the last safe snapshot while
+            // the kart is in the air or finishing its visual stunt landing.
+            if (!grounded || stuntPresentationActive)
+            {
+                if (airborneSince < 0f)
+                    airborneSince = Time.time;
+
+                offTrackSince = -1f;
+
+                // A valid stunt may take longer than a normal jump. Only apply the
+                // airborne failsafe when the kart is no longer in a stunt state.
+                if (autoResetWhenFallen && !stuntPresentationActive &&
+                    Time.time - airborneSince >= Mathf.Max(8f, airborneFailsafeDelay))
+                {
+                    ResetVehicle();
+                    return;
+                }
+
+                UpdateRecoveryDebug();
+                return;
+            }
+
+            airborneSince = -1f;
+            fallenSince = -1f;
+
+            bool upright = Vector3.Dot(transform.up, Vector3.up) >= .65f;
             RaycastHit hit = default;
-            bool onTrack = grounded && upright && TryGetRoadHit(out hit);
-            bool requiresRecovery = !onTrack || targetBody.position.y < fallenHeight;
+            bool onTrack = upright && TryGetRoadHit(out hit);
 
             if (onTrack)
             {
                 // Terrain beside the course must never replace the last on-track recovery point.
-                if (targetBody.linearVelocity.sqrMagnitude >= 1f)
+                if (targetBody.linearVelocity.sqrMagnitude >= 1f && !belowFallenHeight)
                 {
-                    var line=racingLine;
-                    Quaternion heading=targetBody.rotation;
-                    if(line!=null&&line.IsConfigured)
+                    var line = racingLine;
+                    Quaternion heading = targetBody.rotation;
+                    if (line != null && line.IsConfigured)
                     {
-                        int next=line.FindStartingWaypoint(hit.point);
-                        Vector3 forward=line.GetPosition(next)-line.GetPosition((next-1+line.Count)%line.Count);
-                        Vector3 projectedForward=Vector3.ProjectOnPlane(forward,hit.normal);
+                        int next = line.FindStartingWaypoint(hit.point);
+                        Vector3 forward = line.GetPosition(next) -
+                            line.GetPosition((next - 1 + line.Count) % line.Count);
+                        Vector3 projectedForward = Vector3.ProjectOnPlane(forward, hit.normal);
                         if (projectedForward.sqrMagnitude > 0.001f)
-                            heading=Quaternion.LookRotation(projectedForward.normalized,hit.normal);
+                            heading = Quaternion.LookRotation(projectedForward.normalized, hit.normal);
                     }
-                    lastSafe=new Snapshot{position=targetBody.position,rotation=heading,time=Time.time};
+                    lastSafe = new Snapshot
+                    {
+                        position = targetBody.position,
+                        rotation = heading,
+                        time = Time.time
+                    };
                 }
 
                 offTrackSince = -1f;
             }
-            else if (autoResetWhenFallen && requiresRecovery)
+            else if (autoResetWhenFallen)
             {
                 if (offTrackSince < 0f)
                     offTrackSince = Time.time;
 
-                float delay = Mathf.Clamp(offTrackResetDelay, 5f, 10f);
+                float delay = Mathf.Clamp(offTrackResetDelay, 5f, 20f);
                 if (Time.time - offTrackSince >= delay)
+                {
                     ResetVehicle();
+                    return;
+                }
             }
 
-            debugOffTrackSeconds = offTrackSince < 0f ? 0f : Mathf.Max(0f, Time.time - offTrackSince);
+            UpdateRecoveryDebug();
+        }
+
+        private void UpdateRecoveryDebug()
+        {
+            float groundedRecoveryTime = offTrackSince >= 0f
+                ? Time.time - offTrackSince
+                : 0f;
+            float fallenRecoveryTime = fallenSince >= 0f
+                ? Time.time - fallenSince
+                : 0f;
+
+            debugOffTrackSeconds = Mathf.Max(0f,
+                Mathf.Max(groundedRecoveryTime, fallenRecoveryTime));
             debugLastSafeSnapshotAge = Mathf.Max(0f, Time.time - lastSafe.time);
-            debugAutomaticResetArmed = autoResetWhenFallen && offTrackSince >= 0f;
+            debugAutomaticResetArmed = autoResetWhenFallen &&
+                (offTrackSince >= 0f || fallenSince >= 0f);
         }
 
         private bool TryGetRoadHit(out RaycastHit hit)
@@ -178,6 +268,8 @@ namespace PoseKart.Vehicle
                 time = Time.time
             };
             offTrackSince = -1f;
+            fallenSince = -1f;
+            airborneSince = -1f;
             debugOffTrackSeconds = 0f;
             debugAutomaticResetArmed = false;
             nextSnapshotTime = Time.time + 0.3f;
@@ -185,9 +277,14 @@ namespace PoseKart.Vehicle
 
         public void ResetVehicle()
         {
+            if (!HasPhysicsAuthority || targetBody == null)
+                return;
+
             GetComponent<CarController>()?.CancelAirAction();
             Snapshot rewind=lastSafe;
             offTrackSince = -1f;
+            fallenSince = -1f;
+            airborneSince = -1f;
             debugOffTrackSeconds = 0f;
             debugAutomaticResetArmed = false;
             targetBody.linearVelocity = Vector3.zero;
@@ -197,6 +294,14 @@ namespace PoseKart.Vehicle
             lastSafe=rewind;nextSnapshotTime=Time.time+.3f;
             targetBody.Sleep();
             targetBody.WakeUp();
+        }
+
+        private void OnValidate()
+        {
+            offTrackResetDelay = Mathf.Clamp(offTrackResetDelay, 5f, 20f);
+            fallenRecoveryDelay = Mathf.Max(0.5f, fallenRecoveryDelay);
+            airborneFailsafeDelay = Mathf.Max(8f, airborneFailsafeDelay);
+            groundProbeDistance = Mathf.Max(0.5f, groundProbeDistance);
         }
     }
 }

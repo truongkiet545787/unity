@@ -1,6 +1,7 @@
 using Cinemachine;
 using PoseKart.Vehicle;
 using TMPro;
+using Unity.Netcode;
 using UnityEngine;
 
 namespace PoseKart.Race
@@ -10,7 +11,7 @@ namespace PoseKart.Race
     /// Rigidbody movement for consistent FixedUpdate motion.
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
-    public sealed class HomingKartMissile : MonoBehaviour
+    public sealed class HomingKartMissile : NetworkBehaviour
     {
         private float spawnGraceUntil;
         private const float SpawnGracePeriod = 0.08f;
@@ -22,7 +23,7 @@ namespace PoseKart.Race
 
         private CarController owner;
         private CarController target;
-        public CarController Target => target;
+        public CarController Target => target != null ? target : ResolveNetworkTarget();
         public CarController Owner => owner;
         public bool IsSpent => spent;
         private Rigidbody body;
@@ -56,6 +57,17 @@ namespace PoseKart.Race
         private bool groundFireAffectsRacers = true;
         private bool configured;
         private bool spent;
+        private NetworkObjectReference configuredTargetReference;
+        private bool hasConfiguredTargetReference;
+
+        // Server publishes the selected racer so every client can present the
+        // same lock-on marker. This is presentation state only; the Server
+        // still owns homing, collision, damage, and despawn.
+        private readonly NetworkVariable<NetworkObjectReference> networkTarget =
+            new NetworkVariable<NetworkObjectReference>(
+                default,
+                NetworkVariableReadPermission.Everyone,
+                NetworkVariableWritePermission.Server);
 
         // Avoid allocating RaycastHit arrays every physics tick.
         private readonly RaycastHit[] hitBuffer = new RaycastHit[32];
@@ -173,6 +185,21 @@ namespace PoseKart.Race
             spawnGraceUntil = Time.time + SpawnGracePeriod;
             owner = source;
             target = destination;
+            hasConfiguredTargetReference = false;
+            configuredTargetReference = default;
+
+            if (destination != null)
+            {
+                NetworkObject targetObject =
+                    destination.GetComponentInParent<NetworkObject>();
+                if (targetObject != null && targetObject.IsSpawned)
+                {
+                    configuredTargetReference = new NetworkObjectReference(targetObject);
+                    hasConfiguredTargetReference = true;
+                    if (IsSpawned && IsServer)
+                        networkTarget.Value = configuredTargetReference;
+                }
+            }
             born = Time.time;
             spent = false;
             configured = true;
@@ -214,6 +241,29 @@ namespace PoseKart.Race
             body.interpolation = RigidbodyInterpolation.Interpolate;
         }
 
+        public override void OnNetworkSpawn()
+        {
+            base.OnNetworkSpawn();
+
+            if (IsServer && hasConfiguredTargetReference)
+                networkTarget.Value = configuredTargetReference;
+        }
+
+        private CarController ResolveNetworkTarget()
+        {
+            if (!PoseKartNetworkItemBridge.IsOnlineRace ||
+                !IsSpawned ||
+                !networkTarget.Value.TryGet(out NetworkObject targetObject) ||
+                targetObject == null)
+            {
+                return null;
+            }
+
+            target = targetObject.GetComponent<CarController>() ??
+                targetObject.GetComponentInChildren<CarController>(true);
+            return target;
+        }
+
         private void FixedUpdate()
         {
             bool spawnGraceActive = Time.time < spawnGraceUntil;
@@ -247,6 +297,11 @@ namespace PoseKart.Race
             // NẾU CÓ MỤC TIÊU: Kích hoạt chế độ bám đuổi (Homing)
             bool isTargetValid = target != null && target.TargetBody != null &&
                 (PoseKartNetworkItemBridge.IsOnlineRace ? target.gameObject.activeInHierarchy : target.isActiveAndEnabled);
+            if (isTargetValid && !IsEligibleRacer(target))
+            {
+                target = null;
+                isTargetValid = false;
+            }
             if (isTargetValid)
             {
                 RaceParticipant participant = target.GetComponent<RaceParticipant>();
@@ -349,6 +404,11 @@ namespace PoseKart.Race
                 // Bỏ qua va chạm với người bắn
                 if (hitCar == owner ||
                     (owner != null && owner.TargetBody != null && hitCollider.attachedRigidbody == owner.TargetBody))
+                    continue;
+
+                // A wrecked/recovering kart is temporarily intangible. Let the
+                // missile continue instead of detonating on its protected body.
+                if (hitCar != null && !IsEligibleRacer(hitCar))
                     continue;
 
                 Explode(hitBuffer[i].point, hitCar);
@@ -456,6 +516,9 @@ namespace PoseKart.Race
 
             CarController hitCar = ResolveCar(other);
             if (hitCar == owner)
+                return;
+
+            if (hitCar != null && !IsEligibleRacer(hitCar))
                 return;
 
             // Trigger-based scenery and custom missile prefabs still use the same
@@ -688,7 +751,11 @@ namespace PoseKart.Race
                 var bridge = car.GetComponent<PoseKartNetworkItemBridge>();
                 if (bridge != null)
                 {
-                    bridge.ServerApplyMissileHit(point, deltaVelocity, impactTorqueStrength);
+                    bridge.ServerApplyMissileHit(
+                        point,
+                        deltaVelocity,
+                        impactTorqueStrength,
+                        owner);
                     return;
                 }
             }
@@ -696,6 +763,14 @@ namespace PoseKart.Race
             KartItemDefense defense = car.GetComponent<KartItemDefense>();
             if (defense != null && defense.TryBlockMissileExplosion(point))
                 return;
+
+            PoseKartWreckController wreck = car.GetComponent<PoseKartWreckController>();
+            if (wreck != null)
+            {
+                wreck.TriggerMissileWreck(point, deltaVelocity, impactTorqueStrength);
+                return;
+            }
+
             car.ApplyMissileExplosionImpact(
                 deltaVelocity,
                 knockbackRecoveryDuration,
@@ -731,7 +806,13 @@ namespace PoseKart.Race
                 return false;
 
             RaceParticipant participant = car.GetComponent<RaceParticipant>();
-            return participant == null || !participant.Finished;
+            if (participant != null && participant.Finished)
+                return false;
+
+            PoseKartWreckController wreck =
+                car.GetComponent<PoseKartWreckController>() ??
+                car.GetComponentInChildren<PoseKartWreckController>();
+            return wreck == null || !wreck.IsGameplayProtected;
         }
 
         private bool ContainsCar(CarController car, int count)

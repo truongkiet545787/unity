@@ -12,8 +12,15 @@ public class KartCollisionFX : MonoBehaviour
     [Range(0f, 1f)]
     public float verticalAngleThreshold = 0.4f;
 
+    [Tooltip("Đẩy tia lửa vào phía trong Collider để tránh hiệu ứng nằm trên lớp vỏ Collider. Tăng nếu Collider lớn hơn mesh visual.")]
+    [Range(0f, 0.3f)]
+    public float contactSurfaceInset = 0.08f;
+
     void OnCollisionEnter(Collision collision)
     {
+        if (sparkPrefab == null || collision == null)
+            return;
+
         // 1. Kiểm tra lực va chạm xem đủ mạnh chưa
         if (collision.relativeVelocity.magnitude < collisionForceThreshold) return;
 
@@ -28,7 +35,13 @@ public class KartCollisionFX : MonoBehaviour
             // Chỉ tạo tia lửa nếu va chạm đến từ BỀ NGANG
             if (verticalImpact < verticalAngleThreshold)
             {
-                GameObject sparks = Instantiate(sparkPrefab, contact.point, Quaternion.LookRotation(contact.normal));
+                Vector3 sparkPosition = contact.point -
+                    contact.normal * Mathf.Max(0f, contactSurfaceInset);
+
+                GameObject sparks = Instantiate(
+                    sparkPrefab,
+                    sparkPosition,
+                    Quaternion.LookRotation(contact.normal));
                 Destroy(sparks, 1.5f);
 
                 // Tạo 1 vệt tia lửa cho đợt va chạm này là đủ, thoát vòng lặp

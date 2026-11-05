@@ -10,6 +10,11 @@ public class LookAtCamera : MonoBehaviour
     }
     void Update()
     {
+        if (_cam == null)
+            _cam = Camera.main;
+        if (_cam == null)
+            return;
+
         transform.forward = _cam.transform.position - transform.position;
     }
 }

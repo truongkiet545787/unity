@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using PoseKart.Multiplayer;
 using PoseKart.Vehicle;
 using Unity.Netcode;
 using UnityEngine;
@@ -25,6 +26,9 @@ namespace PoseKart.Race
         private KartItemInventory inventory;
         private KartItemDefense defense;
         private RaceParticipant participant;
+        private PoseKartRocketStart rocketStart;
+        private PoseKartWreckController wreck;
+        private PoseKartShockwaveVfx shockwaveVfx;
         private bool useRequestPending;
         private float useRequestPendingSince;
         private uint nextUseRequestId;
@@ -32,8 +36,18 @@ namespace PoseKart.Race
         private bool pickupRequestPending;
         private int pickupRequestPendingIndex = -1;
         private float pickupRequestPendingSince;
+        private bool nitroPickupRequestPending;
+        private int nitroPickupRequestPendingIndex = -1;
+        private float nitroPickupRequestPendingSince;
+        private float nextShockwavePresentationTime = float.NegativeInfinity;
+        private ulong lastShockwavePresentationVictim = ulong.MaxValue;
+        private static readonly Dictionary<ulong, float> vehicleCollisionCooldowns =
+            new Dictionary<ulong, float>();
+        private static ulong nextRaceInteractionEventId;
 
         private const float RequestRetryDelay = 1.5f;
+        private const float ShockwavePresentationContactDistance = 8f;
+        private const float VehicleCollisionPresentationDistance = 10f;
 
         public bool UseRequestPending =>
             useRequestPending &&
@@ -51,6 +65,20 @@ namespace PoseKart.Race
             );
 
         public bool IsNetworkShieldActive => networkShieldActive.Value;
+
+        // Unlike CarController.CurrentNitroMode on a remote clone, this state
+        // is written by the owning human or the Server-owned AI and is safe for
+        // authoritative Shockwave immunity checks.
+        private readonly NetworkVariable<byte> networkNitroMode =
+            new NetworkVariable<byte>(
+                (byte)CarController.NitroMode.None,
+                NetworkVariableReadPermission.Everyone,
+                NetworkVariableWritePermission.Server);
+
+        public bool IsAuthoritativeShockwaveActive =>
+            IsOnlineRace && IsSpawned
+                ? networkNitroMode.Value == (byte)CarController.NitroMode.Shockwave
+                : car != null && car.IsShockwaveActive;
 
         // ============================================================
         // ONLINE STATE
@@ -99,24 +127,108 @@ namespace PoseKart.Race
             return IsHumanNetworkPlayer() && !IsOwner;
         }
 
+        private static string ResolveRacerName(CarController racer)
+        {
+            if (racer == null)
+                return "Unknown";
+
+            RaceParticipant racerParticipant =
+                racer.GetComponent<RaceParticipant>() ??
+                racer.GetComponentInParent<RaceParticipant>();
+
+            if (racerParticipant != null &&
+                !string.IsNullOrWhiteSpace(racerParticipant.RacerName))
+            {
+                return racerParticipant.RacerName.Trim();
+            }
+
+            NetworkObject racerObject =
+                racer.GetComponentInParent<NetworkObject>();
+            return racerObject != null && racerObject.IsPlayerObject
+                ? "Player"
+                : "AI";
+        }
+
+        private void ServerBroadcastRaceInteraction(
+            PoseKart.UI.PoseKartRaceInteractionFeed.InteractionKind kind,
+            CarController attacker,
+            CarController victim)
+        {
+            if (!IsServer || !IsSpawned)
+                return;
+
+            ulong eventId = ++nextRaceInteractionEventId;
+            if (eventId == 0)
+                eventId = ++nextRaceInteractionEventId;
+
+            SyncRaceInteractionRpc(
+                eventId,
+                (int)kind,
+                ResolveRacerName(attacker),
+                ResolveRacerName(victim));
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void SyncRaceInteractionRpc(
+            ulong eventId,
+            int kind,
+            string source,
+            string target)
+        {
+            PoseKart.UI.PoseKartRaceInteractionFeed.ReceiveServerEvent(
+                eventId,
+                kind,
+                source,
+                target);
+        }
+
         // ============================================================
         // UNITY / NGO LIFECYCLE
         // ============================================================
 
         private void Awake()
         {
-            car = GetComponent<CarController>();
+            ResolveGameplayReferences();
+        }
+
+        private void ResolveGameplayReferences()
+        {
+            car = GetComponent<CarController>() ??
+                GetComponentInChildren<CarController>(true) ??
+                GetComponentInParent<CarController>();
             inventory = GetComponent<KartItemInventory>();
             defense = GetComponent<KartItemDefense>();
             participant = GetComponent<RaceParticipant>();
+            rocketStart = GetComponent<PoseKartRocketStart>();
+            wreck = GetComponent<PoseKartWreckController>();
+            if (wreck == null)
+                wreck = gameObject.AddComponent<PoseKartWreckController>();
+
+            shockwaveVfx = GetComponent<PoseKartShockwaveVfx>();
+            if (shockwaveVfx == null)
+                shockwaveVfx = gameObject.AddComponent<PoseKartShockwaveVfx>();
         }
 
         public override void OnNetworkSpawn()
         {
             base.OnNetworkSpawn();
 
+            // The network player can finish wiring its visual/vehicle child
+            // after this bridge's Awake. Resolve again before owner RPCs can
+            // deliver a confirmed Nitro pickup.
+            ResolveGameplayReferences();
+
             networkShieldActive.OnValueChanged +=
                 OnShieldActiveStateChanged;
+            networkNitroMode.OnValueChanged +=
+                OnNetworkNitroModeChanged;
+            if (car != null)
+            {
+                car.NitroModeChanged += OnCarNitroModeChanged;
+                if (IsServer)
+                    networkNitroMode.Value = (byte)car.CurrentNitroMode;
+            }
+            ApplyNetworkNitroPresentation(networkNitroMode.Value);
 
             // Mọi peer phải có cùng deterministic pickup index.
             KartItemPickup.InitializeAllPickups();
@@ -130,12 +242,206 @@ namespace PoseKart.Race
             }
         }
 
+        // ============================================================
+        // ROCKET START AUTHORITY
+        // ============================================================
+
+        /// <summary>
+        /// Called once by the local human or the Server-owned AI when it
+        /// begins holding acceleration during the shared countdown. No tier,
+        /// timing or boost values are accepted from the client.
+        /// </summary>
+        public void RequestRocketStartInput()
+        {
+            if (rocketStart == null)
+                rocketStart = GetComponent<PoseKartRocketStart>();
+
+            if (rocketStart == null || !IsSpawned)
+                return;
+
+            if (IsServer)
+            {
+                AcceptRocketStartInputOnServer();
+            }
+            else if (IsOwner && IsHumanNetworkPlayer())
+            {
+                RequestRocketStartInputServerRpc();
+            }
+        }
+
+        [Rpc(SendTo.Server)]
+        private void RequestRocketStartInputServerRpc(
+            RpcParams rpcParams = default)
+        {
+            if (!IsServer ||
+                !IsSpawned ||
+                !IsHumanNetworkPlayer() ||
+                rpcParams.Receive.SenderClientId != OwnerClientId)
+            {
+                return;
+            }
+
+            if (rocketStart == null)
+                rocketStart = GetComponent<PoseKartRocketStart>();
+
+            AcceptRocketStartInputOnServer();
+        }
+
+        private void AcceptRocketStartInputOnServer()
+        {
+            if (!IsServer || rocketStart == null)
+                return;
+
+            if (!rocketStart.RegisterAuthoritativeInput(GetServerClockTime()))
+                return;
+
+            rocketStart.SetPreparingVisual(true);
+            SyncRocketStartPreparationClientRpc(true);
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void SyncRocketStartPreparationClientRpc(bool active)
+        {
+            if (rocketStart == null)
+                rocketStart = GetComponent<PoseKartRocketStart>();
+
+            rocketStart?.SetPreparingVisual(active);
+        }
+
+        public void ServerPublishRocketStartResult(
+            RocketStartQuality quality,
+            float impulse,
+            float duration)
+        {
+            if (!IsServer || !IsSpawned)
+                return;
+
+            SyncRocketStartResultClientRpc(
+                (int)quality,
+                Mathf.Max(0f, impulse),
+                Mathf.Max(0f, duration));
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void SyncRocketStartResultClientRpc(
+            int qualityValue,
+            float impulse,
+            float duration)
+        {
+            if (rocketStart == null)
+                rocketStart = GetComponent<PoseKartRocketStart>();
+
+            if (rocketStart == null)
+                return;
+
+            RocketStartQuality quality = (RocketStartQuality)Mathf.Clamp(
+                qualityValue,
+                (int)RocketStartQuality.None,
+                (int)RocketStartQuality.NoBoost);
+
+            // Server applies gameplay for AI and the Host owner. A remote
+            // human's actual Rigidbody boost is applied only on that owner's
+            // client. Other peers receive presentation only.
+            bool applyGameplay = IsServer
+                ? (!IsHumanNetworkPlayer() || IsOwner)
+                : (IsHumanNetworkPlayer() && IsOwner);
+
+            rocketStart.ApplyReplicatedResult(
+                quality,
+                impulse,
+                duration,
+                applyGameplay);
+        }
+
+        private double GetServerClockTime()
+        {
+            if (NetworkManager != null && NetworkManager.IsListening)
+                return NetworkManager.ServerTime.Time;
+
+            return Time.timeAsDouble;
+        }
+
         public override void OnNetworkDespawn()
         {
             networkShieldActive.OnValueChanged -=
                 OnShieldActiveStateChanged;
+            networkNitroMode.OnValueChanged -=
+                OnNetworkNitroModeChanged;
+            if (car != null)
+            {
+                car.NitroModeChanged -= OnCarNitroModeChanged;
+                car.ClearRemoteNitroPresentation();
+            }
 
             base.OnNetworkDespawn();
+        }
+
+        private void OnCarNitroModeChanged(CarController.NitroMode mode)
+        {
+            if (!IsOnlineRace || !IsSpawned)
+                return;
+
+            byte modeValue = (byte)mode;
+            if (IsServer)
+            {
+                networkNitroMode.Value = modeValue;
+            }
+            else if (IsOwner && IsHumanNetworkPlayer())
+            {
+                ReportNitroModeServerRpc(modeValue);
+            }
+        }
+
+        private void OnNetworkNitroModeChanged(
+            byte previousMode,
+            byte newMode)
+        {
+            ApplyNetworkNitroPresentation(newMode);
+        }
+
+        private void ApplyNetworkNitroPresentation(byte modeValue)
+        {
+            if (car == null)
+                car = GetComponent<CarController>();
+            if (car == null)
+                return;
+
+            bool localGameplayAuthority = IsHumanNetworkPlayer()
+                ? IsOwner
+                : IsServer;
+            if (localGameplayAuthority)
+            {
+                car.ClearRemoteNitroPresentation();
+                return;
+            }
+
+            CarController.NitroMode mode = (CarController.NitroMode)Mathf.Clamp(
+                modeValue,
+                (byte)CarController.NitroMode.None,
+                (byte)CarController.NitroMode.Perfect);
+            car.ApplyRemoteNitroPresentation(
+                mode == CarController.NitroMode.None ? 0f : 1f,
+                mode);
+        }
+
+        [Rpc(SendTo.Server)]
+        private void ReportNitroModeServerRpc(
+            byte modeValue,
+            RpcParams rpcParams = default)
+        {
+            if (!IsServer ||
+                !IsSpawned ||
+                !IsHumanNetworkPlayer() ||
+                rpcParams.Receive.SenderClientId != OwnerClientId)
+            {
+                return;
+            }
+
+            modeValue = (byte)Mathf.Clamp(
+                modeValue,
+                (byte)CarController.NitroMode.None,
+                (byte)CarController.NitroMode.Perfect);
+            networkNitroMode.Value = modeValue;
         }
 
         private void OnShieldActiveStateChanged(
@@ -205,6 +511,34 @@ namespace PoseKart.Race
             }
         }
 
+        public void HandleNitroPickupTrigger(int pickupIndex)
+        {
+            if (!IsOnlineRace ||
+                (participant != null && participant.Finished) ||
+                (!IsOwner && !IsServer))
+            {
+                return;
+            }
+
+            if (IsServer)
+            {
+                ServerProcessNitroPickup(pickupIndex);
+                return;
+            }
+
+            if (nitroPickupRequestPending &&
+                nitroPickupRequestPendingIndex == pickupIndex &&
+                Time.unscaledTime - nitroPickupRequestPendingSince < RequestRetryDelay)
+            {
+                return;
+            }
+
+            nitroPickupRequestPending = true;
+            nitroPickupRequestPendingIndex = pickupIndex;
+            nitroPickupRequestPendingSince = Time.unscaledTime;
+            RequestNitroPickupServerRpc(pickupIndex);
+        }
+
         [Rpc(SendTo.Server)]
         private void RequestPickupServerRpc(
             int pickupIndex,
@@ -224,6 +558,24 @@ namespace PoseKart.Race
             }
 
             ServerProcessPickup(pickupIndex);
+        }
+
+        [Rpc(SendTo.Server)]
+        private void RequestNitroPickupServerRpc(
+            int pickupIndex,
+            RpcParams rpcParams = default)
+        {
+            if (rpcParams.Receive.SenderClientId != OwnerClientId)
+            {
+                Debug.LogWarning(
+                    $"[ItemBridge] Reject Nitro pickup RPC: " +
+                    $"sender={rpcParams.Receive.SenderClientId}, " +
+                    $"owner={OwnerClientId}",
+                    this);
+                return;
+            }
+
+            ServerProcessNitroPickup(pickupIndex);
         }
         private FlashImage localHitFlash;
 
@@ -331,6 +683,77 @@ namespace PoseKart.Race
             );
         }
 
+        private void ServerProcessNitroPickup(int pickupIndex)
+        {
+            if (!IsServer)
+                return;
+
+            if (car == null)
+                ResolveGameplayReferences();
+
+            PoseKartNitroPickup.RefreshAllPickups();
+            IReadOnlyList<PoseKartNitroPickup> pickups =
+                PoseKartNitroPickup.AllPickups;
+
+            if (pickupIndex < 0 || pickupIndex >= pickups.Count)
+                return;
+
+            PoseKartNitroPickup pickup = pickups[pickupIndex];
+            if (pickup == null || !pickup.IsAvailable || car == null)
+                return;
+
+            if (participant == null)
+                participant = GetComponent<RaceParticipant>();
+            if (participant != null && participant.Finished)
+                return;
+
+            float distance = Vector3.Distance(
+                transform.position,
+                pickup.transform.position);
+            if (distance > 25f)
+                return;
+
+            float amount = pickup.NitroAmount;
+            bool isRemoteHumanOwner = IsHumanNetworkPlayer() &&
+                NetworkManager.Singleton != null &&
+                OwnerClientId != NetworkManager.ServerClientId;
+            PoseKartNetworkPlayerOwner ownerSync =
+                GetComponent<PoseKartNetworkPlayerOwner>() ??
+                GetComponentInParent<PoseKartNetworkPlayerOwner>();
+            bool hasCapacity = isRemoteHumanOwner
+                ? ownerSync != null &&
+                  ownerSync.ServerCanAcceptNitroPickup(amount)
+                : car.CanAcceptNitroPickup(amount);
+            if (!hasCapacity)
+                return;
+
+            // Remote human Nitro is still simulated by its owner. The Server
+            // confirms the pickup once, then tells that owner to add the charge.
+            if (isRemoteHumanOwner)
+            {
+                AwardNitroPickupClientRpc(amount);
+            }
+            else if (!car.AddNitroPickup(amount))
+            {
+                return;
+            }
+
+            Debug.Log(
+                $"[NITRO PICKUP] SERVER ACCEPT car={car.name} " +
+                $"index={pickupIndex} amount={amount:0.00} " +
+                $"normal={car.StoredNitro:0.00}",
+                this);
+
+            // The authoritative side owns the pickup consumption. The owner
+            // client only receives the confirmed charge for remote humans.
+            float respawnTime = pickup.RespawnSeconds;
+            pickup.ServerSetCollected();
+            // The Host is also the Server, so do its local presentation here.
+            // Remote Clients receive the same presentation through the RPC.
+            pickup.PlayCollectFeedback();
+            SyncNitroPickupCollectedRpc(pickupIndex, respawnTime);
+        }
+
         [Rpc(SendTo.Owner)]
         private void AwardItemClientRpc(int itemTypeInt)
         {
@@ -347,6 +770,32 @@ namespace PoseKart.Race
                     (KartItemPickup.ItemType)itemTypeInt
                 );
             }
+        }
+
+        [Rpc(SendTo.Owner)]
+        private void AwardNitroPickupClientRpc(float amount)
+        {
+            if (IsServer)
+                return;
+
+            if (car == null)
+                ResolveGameplayReferences();
+
+            if (car == null)
+            {
+                Debug.LogWarning(
+                    $"[NITRO PICKUP] OWNER REJECT car reference missing " +
+                    $"amount={amount:0.00}",
+                    this);
+                return;
+            }
+
+            bool applied = car.AddNitroPickup(amount);
+            Debug.Log(
+                $"[NITRO PICKUP] OWNER APPLY car={car.name} " +
+                $"amount={amount:0.00} applied={applied} " +
+                $"normal={car.StoredNitro:0.00}",
+                this);
         }
 
         [Rpc(SendTo.ClientsAndHost)]
@@ -372,6 +821,30 @@ namespace PoseKart.Race
             {
                 pickup.ClientSyncCollect(respawnDuration);
             }
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void SyncNitroPickupCollectedRpc(
+            int pickupIndex,
+            float respawnDuration)
+        {
+            // ServerSetCollected() already hides the pickup and plays the
+            // Host feedback. Do not play it twice on a Host.
+            if (IsServer)
+                return;
+
+            nitroPickupRequestPending = false;
+            nitroPickupRequestPendingIndex = -1;
+
+            PoseKartNitroPickup.RefreshAllPickups();
+            IReadOnlyList<PoseKartNitroPickup> pickups =
+                PoseKartNitroPickup.AllPickups;
+            if (pickupIndex < 0 || pickupIndex >= pickups.Count)
+                return;
+
+            PoseKartNitroPickup pickup = pickups[pickupIndex];
+            if (pickup != null)
+                pickup.ClientSyncCollect(respawnDuration);
         }
 
         // ============================================================
@@ -403,7 +876,11 @@ namespace PoseKart.Race
                 return false;
 
             if (car == null)
-                car = GetComponent<CarController>();
+            {
+                car = GetComponent<CarController>() ??
+                    GetComponentInChildren<CarController>(true) ??
+                    GetComponentInParent<CarController>();
+            }
 
             // Quyền lái được giữ ở owner. Kiểm tra control trên chính owner
             // trước khi gửi RPC để không cho dùng item trước GO / sau Finish.
@@ -859,6 +1336,13 @@ namespace PoseKart.Race
             // Replicate them only to clients so a Host does not hear doubles.
             if (!IsServer)
             {
+                // The Server already received KartItemDefense.OnShieldBlocked.
+                // Clients need the same point-accurate visual callback because
+                // their visual-only shield never consumes the gameplay hit.
+                defense?.PlayShieldImpactVisual(impactPoint);
+                GetComponent<PoseKartShieldGeneratorVisual>()?
+                    .HandleShieldBlocked(impactPoint);
+
                 KartItemDefense.PlayDeflectPingSoundAt(
                     impactPoint
                 );
@@ -898,6 +1382,609 @@ namespace PoseKart.Race
         }
 
         // ============================================================
+        // VEHICLE COLLISION PRESENTATION
+        // ============================================================
+
+        /// <summary>
+        /// Routes one meaningful vehicle-to-vehicle impact to the Server.
+        /// This is presentation-only; CarController keeps the physical
+        /// collision response on the existing Rigidbody authority.
+        /// </summary>
+        public void NotifyVehicleCollision(
+            CarController victim,
+            Vector3 impactPoint,
+            float normalImpactSpeed,
+            float intensity)
+        {
+            if (victim == null || car == null)
+                return;
+
+            NetworkObject victimObject =
+                victim.GetComponentInParent<NetworkObject>();
+
+            if (!IsOnlineRace)
+            {
+                PlayVehicleCollisionPresentation(
+                    GetComponentInParent<NetworkObject>(),
+                    victimObject,
+                    impactPoint,
+                    normalImpactSpeed,
+                    intensity);
+                return;
+            }
+
+            if (NetworkObject == null ||
+                !IsSpawned ||
+                victimObject == null ||
+                !victimObject.IsSpawned)
+            {
+                return;
+            }
+
+            if (IsServer)
+            {
+                ServerProcessVehicleCollision(
+                    victimObject,
+                    impactPoint,
+                    normalImpactSpeed,
+                    intensity);
+            }
+            else if (IsOwner && IsHumanNetworkPlayer())
+            {
+                RequestVehicleCollisionServerRpc(
+                    new NetworkObjectReference(victimObject),
+                    impactPoint,
+                    normalImpactSpeed,
+                    intensity);
+            }
+        }
+
+        [Rpc(SendTo.Server)]
+        private void RequestVehicleCollisionServerRpc(
+            NetworkObjectReference victimReference,
+            Vector3 impactPoint,
+            float normalImpactSpeed,
+            float intensity,
+            RpcParams rpcParams = default)
+        {
+            if (!IsServer ||
+                !IsSpawned ||
+                !IsHumanNetworkPlayer() ||
+                rpcParams.Receive.SenderClientId != OwnerClientId)
+            {
+                return;
+            }
+
+            if (!victimReference.TryGet(out NetworkObject victimObject))
+                return;
+
+            ServerProcessVehicleCollision(
+                victimObject,
+                impactPoint,
+                normalImpactSpeed,
+                intensity);
+        }
+
+        private void ServerProcessVehicleCollision(
+            NetworkObject victimObject,
+            Vector3 impactPoint,
+            float normalImpactSpeed,
+            float intensity)
+        {
+            if (!IsServer ||
+                !IsSpawned ||
+                victimObject == null ||
+                !victimObject.IsSpawned ||
+                victimObject == NetworkObject ||
+                !IsFinite(normalImpactSpeed) ||
+                car == null ||
+                normalImpactSpeed < car.CollisionPresentationMinimumSpeed)
+            {
+                return;
+            }
+
+            CarController victim =
+                victimObject.GetComponent<CarController>() ??
+                victimObject.GetComponentInChildren<CarController>();
+            if (victim == null || car == null)
+                return;
+
+            Vector3 attackerPosition = car.transform.position;
+            Vector3 victimPosition = victim.transform.position;
+            if ((victimPosition - attackerPosition).sqrMagnitude >
+                VehicleCollisionPresentationDistance *
+                VehicleCollisionPresentationDistance)
+            {
+                return;
+            }
+
+            if (!IsFinite(impactPoint) ||
+                (impactPoint - attackerPosition).sqrMagnitude > 64f)
+            {
+                impactPoint = Vector3.Lerp(
+                    attackerPosition,
+                    victimPosition,
+                    0.5f);
+            }
+
+            ulong firstId = NetworkObjectId < victimObject.NetworkObjectId
+                ? NetworkObjectId
+                : victimObject.NetworkObjectId;
+            ulong secondId = NetworkObjectId > victimObject.NetworkObjectId
+                ? NetworkObjectId
+                : victimObject.NetworkObjectId;
+            ulong pairKey = (firstId * 1099511628211UL) ^ secondId;
+            float now = Time.time;
+            if (vehicleCollisionCooldowns.TryGetValue(pairKey, out float nextAllowed) &&
+                now < nextAllowed)
+            {
+                return;
+            }
+
+            vehicleCollisionCooldowns[pairKey] = now +
+                Mathf.Max(0.05f, car.CollisionPresentationCooldown);
+            SyncVehicleCollisionImpactRpc(
+                new NetworkObjectReference(NetworkObject),
+                new NetworkObjectReference(victimObject),
+                impactPoint,
+                normalImpactSpeed,
+                Mathf.Clamp01(intensity));
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void SyncVehicleCollisionImpactRpc(
+            NetworkObjectReference attackerReference,
+            NetworkObjectReference victimReference,
+            Vector3 impactPoint,
+            float normalImpactSpeed,
+            float intensity)
+        {
+            if (!attackerReference.TryGet(out NetworkObject attackerObject) ||
+                !victimReference.TryGet(out NetworkObject victimObject))
+            {
+                return;
+            }
+
+            KartParticleEffect.Burst(
+                impactPoint,
+                new Color(1f, 0.55f, 0.16f, 1f),
+                Mathf.RoundToInt(Mathf.Lerp(12f, 28f, Mathf.Clamp01(intensity))));
+
+            bool localAttacker =
+                attackerObject.IsPlayerObject && attackerObject.IsOwner;
+            bool localVictim =
+                victimObject.IsPlayerObject && victimObject.IsOwner;
+            if (!localAttacker && !localVictim)
+                return;
+
+            CarController localCar = localVictim
+                ? victimObject.GetComponent<CarController>() ??
+                  victimObject.GetComponentInChildren<CarController>()
+                : attackerObject.GetComponent<CarController>() ??
+                  attackerObject.GetComponentInChildren<CarController>();
+            localCar?.GetComponent<PoseKartVehicleAudio>()?
+                .PlayNetworkCollisionImpact(normalImpactSpeed);
+
+            PoseKartShockwaveImpactPresentation.PlayLocal(
+                Mathf.Lerp(0.15f, 0.65f, Mathf.Clamp01(intensity)),
+                impactPoint);
+        }
+
+        private static void PlayVehicleCollisionPresentation(
+            NetworkObject attackerObject,
+            NetworkObject victimObject,
+            Vector3 impactPoint,
+            float normalImpactSpeed,
+            float intensity)
+        {
+            KartParticleEffect.Burst(
+                impactPoint,
+                new Color(1f, 0.55f, 0.16f, 1f),
+                Mathf.RoundToInt(Mathf.Lerp(12f, 28f, Mathf.Clamp01(intensity))));
+
+            if (victimObject != null && victimObject.IsPlayerObject && victimObject.IsOwner)
+            {
+                victimObject.GetComponent<PoseKartVehicleAudio>()?
+                    .PlayNetworkCollisionImpact(normalImpactSpeed);
+            }
+            else if (attackerObject != null &&
+                     attackerObject.IsPlayerObject && attackerObject.IsOwner)
+            {
+                attackerObject.GetComponent<PoseKartVehicleAudio>()?
+                    .PlayNetworkCollisionImpact(normalImpactSpeed);
+            }
+
+            PoseKartShockwaveImpactPresentation.PlayLocal(
+                Mathf.Lerp(0.15f, 0.65f, Mathf.Clamp01(intensity)),
+                impactPoint);
+        }
+
+        // ============================================================
+        // SHOCKWAVE IMPACT PRESENTATION
+        // ============================================================
+
+        /// <summary>
+        /// Called once by the existing Shockwave collision path. Online, the
+        /// Server validates the hit, consumes defense and routes the single
+        /// gameplay impulse to the victim authority before broadcasting
+        /// cosmetic presentation. Offline, this method performs the same
+        /// validation locally.
+        /// </summary>
+        public void NotifyShockwaveContact(
+            CarController victim,
+            Vector3 impactPoint,
+            float relativeSpeed)
+        {
+            if (victim == null || car == null ||
+                (!car.IsShockwaveActive && !IsAuthoritativeShockwaveActive))
+                return;
+
+            NetworkObject victimObject =
+                victim.GetComponentInParent<NetworkObject>();
+
+            if (!IsOnlineRace)
+            {
+                if (victim.IsShockwaveActive)
+                    return;
+
+                PoseKartWreckController offlineVictimWreck =
+                    victim.GetComponent<PoseKartWreckController>() ??
+                    victim.GetComponentInChildren<PoseKartWreckController>();
+                if (offlineVictimWreck != null &&
+                    offlineVictimWreck.IsGameplayProtected)
+                {
+                    return;
+                }
+
+                KartItemDefense offlineDefense =
+                    victim.GetComponent<KartItemDefense>();
+                if (offlineDefense != null &&
+                    offlineDefense.TryBlockMissileExplosion(impactPoint))
+                {
+                    return;
+                }
+
+                Vector3 offlineDelta = BuildShockwaveDelta(
+                    victim,
+                    impactPoint,
+                    relativeSpeed);
+                if (offlineDelta.sqrMagnitude < 0.0001f ||
+                    victim.TargetBody == null ||
+                    victim.TargetBody.isKinematic)
+                {
+                    return;
+                }
+
+                victim.ApplyMissileExplosionImpact(
+                    offlineDelta,
+                    0.6f,
+                    impactPoint,
+                    car.ShockwaveTorque);
+
+                // Offline has no network event to replicate, but should still
+                // receive the same local presentation.
+                PoseKartWreckController offlineWreck =
+                    victim.GetComponent<PoseKartWreckController>() ??
+                    victim.GetComponentInChildren<PoseKartWreckController>();
+                offlineWreck?.TriggerShockwaveDebrisVisual(
+                    impactPoint,
+                    offlineWreck.ShockwaveDebrisLifetime);
+                PoseKartShockwaveImpactPresentation.PlayLocal(0.55f, impactPoint);
+                return;
+            }
+
+            // An online kart that is already despawned must not create a late
+            // local effect or attempt to send an RPC.
+            if (NetworkObject == null ||
+                !IsSpawned ||
+                victimObject == null ||
+                !victimObject.IsSpawned)
+            {
+                return;
+            }
+
+            if (IsServer)
+            {
+                ServerProcessShockwaveContact(
+                    victimObject,
+                    impactPoint,
+                    relativeSpeed);
+            }
+            else if (IsOwner && IsHumanNetworkPlayer())
+            {
+                RequestShockwaveContactServerRpc(
+                    new NetworkObjectReference(victimObject),
+                    impactPoint,
+                    relativeSpeed);
+            }
+        }
+
+        [Rpc(SendTo.Server)]
+        private void RequestShockwaveContactServerRpc(
+            NetworkObjectReference victimReference,
+            Vector3 impactPoint,
+            float relativeSpeed,
+            RpcParams rpcParams = default)
+        {
+            if (!IsServer ||
+                !IsSpawned ||
+                rpcParams.Receive.SenderClientId != OwnerClientId)
+            {
+                return;
+            }
+
+            if (!victimReference.TryGet(out NetworkObject victimObject))
+                return;
+
+            ServerProcessShockwaveContact(
+                victimObject,
+                impactPoint,
+                relativeSpeed);
+        }
+
+        private void ServerProcessShockwaveContact(
+            NetworkObject victimObject,
+            Vector3 impactPoint,
+            float relativeSpeed)
+        {
+            if (!IsServer ||
+                !IsSpawned ||
+                victimObject == null ||
+                !victimObject.IsSpawned)
+            {
+                return;
+            }
+
+            if (car == null)
+                car = GetComponent<CarController>();
+
+            CarController victim =
+                victimObject.GetComponent<CarController>() ??
+                victimObject.GetComponentInChildren<CarController>();
+
+            if (car == null || victim == null || victim == car)
+                return;
+
+            PoseKartNetworkItemBridge victimBridge =
+                victimObject.GetComponent<PoseKartNetworkItemBridge>();
+            if (!IsAuthoritativeShockwaveActive ||
+                (victimBridge != null
+                    ? victimBridge.IsAuthoritativeShockwaveActive
+                    : victim.IsShockwaveActive))
+                return;
+
+            float minimumSpeed = car.ShockwaveMinimumImpactSpeed;
+            if (!IsFinite(relativeSpeed) || relativeSpeed < minimumSpeed)
+                return;
+
+            Vector3 attackerPosition = car.transform.position;
+            Vector3 victimPosition = victim.transform.position;
+            if ((victimPosition - attackerPosition).sqrMagnitude >
+                ShockwavePresentationContactDistance *
+                ShockwavePresentationContactDistance)
+            {
+                return;
+            }
+
+            // Shield consumption is authoritative here, immediately before
+            // the gameplay impulse, so a blocked contact cannot be presented
+            // as a successful Shockwave hit.
+            if (victimBridge != null &&
+                victimBridge.ServerTryBlockItem(impactPoint))
+                return;
+
+            if (victim.TargetBody == null || victim.TargetBody.isKinematic)
+                return;
+
+            PoseKartWreckController victimWreck =
+                victim.GetComponent<PoseKartWreckController>() ??
+                victim.GetComponentInChildren<PoseKartWreckController>();
+            if (victimWreck != null && victimWreck.IsGameplayProtected)
+                return;
+
+            ulong victimId = victimObject.NetworkObjectId;
+            float now = Time.time;
+            if (victimId == lastShockwavePresentationVictim &&
+                now < nextShockwavePresentationTime)
+            {
+                return;
+            }
+
+            lastShockwavePresentationVictim = victimId;
+            nextShockwavePresentationTime =
+                now + Mathf.Max(0.18f, car.ShockwaveHitCooldown);
+
+            if (!IsFinite(impactPoint) ||
+                (impactPoint - attackerPosition).sqrMagnitude > 64f)
+            {
+                impactPoint = Vector3.Lerp(
+                    attackerPosition,
+                    victimPosition,
+                    0.5f);
+            }
+
+            ServerBroadcastRaceInteraction(
+                PoseKart.UI.PoseKartRaceInteractionFeed.InteractionKind.ShockwaveHit,
+                car,
+                victim);
+
+            Vector3 deltaVelocity = BuildShockwaveDelta(
+                victim,
+                impactPoint,
+                relativeSpeed);
+            if (deltaVelocity.sqrMagnitude < 0.0001f)
+                return;
+
+            // Remote human Rigidbody physics belongs to its owner. AI and the
+            // Host player are simulated by this Server copy.
+            if (victimObject.IsPlayerObject && !victimObject.IsOwner)
+            {
+                if (victimBridge == null)
+                    return;
+
+                victimBridge.ApplyShockwaveImpactOwnerRpc(
+                    deltaVelocity,
+                    0.6f,
+                    impactPoint,
+                    car.ShockwaveTorque);
+            }
+            else
+            {
+                victim.ApplyMissileExplosionImpact(
+                    deltaVelocity,
+                    0.6f,
+                    impactPoint,
+                    car.ShockwaveTorque);
+            }
+
+            float intensity = Mathf.Lerp(
+                0.75f,
+                1f,
+                Mathf.InverseLerp(
+                    minimumSpeed,
+                    Mathf.Max(minimumSpeed + 0.1f, minimumSpeed * 2.5f),
+                    relativeSpeed));
+
+            SyncShockwaveImpactRpc(
+                new NetworkObjectReference(NetworkObject),
+                new NetworkObjectReference(victimObject),
+                impactPoint,
+                intensity,
+                relativeSpeed);
+        }
+
+        private Vector3 BuildShockwaveDelta(
+            CarController victim,
+            Vector3 impactPoint,
+            float relativeSpeed)
+        {
+            if (victim == null || car == null)
+                return Vector3.zero;
+
+            Vector3 source = victim.TargetBody != null
+                ? victim.TargetBody.worldCenterOfMass
+                : victim.transform.position;
+            Vector3 away = Vector3.ProjectOnPlane(
+                source - impactPoint,
+                Vector3.up);
+            if (away.sqrMagnitude < 0.0001f)
+            {
+                away = Vector3.ProjectOnPlane(
+                    victim.transform.position - car.transform.position,
+                    Vector3.up);
+            }
+            if (away.sqrMagnitude < 0.0001f)
+                away = Vector3.ProjectOnPlane(-car.transform.forward, Vector3.up);
+            if (away.sqrMagnitude < 0.0001f)
+                away = Vector3.right;
+            away.Normalize();
+
+            float strength = Mathf.InverseLerp(
+                car.ShockwaveMinimumImpactSpeed,
+                Mathf.Max(
+                    car.ShockwaveMinimumImpactSpeed + 0.1f,
+                    car.ShockwaveMinimumImpactSpeed * 2.5f),
+                Mathf.Max(0f, relativeSpeed));
+            strength = Mathf.Lerp(0.55f, 1f, strength);
+            return away * car.ShockwavePush * strength +
+                Vector3.up * car.ShockwaveLift * strength;
+        }
+
+        [Rpc(SendTo.Owner)]
+        private void ApplyShockwaveImpactOwnerRpc(
+            Vector3 deltaVelocity,
+            float recoveryDuration,
+            Vector3 impactPoint,
+            float torqueStrength)
+        {
+            if (car == null)
+                car = GetComponent<CarController>();
+
+            if (car == null ||
+                car.TargetBody == null ||
+                car.TargetBody.isKinematic ||
+                IsAuthoritativeShockwaveActive)
+            {
+                return;
+            }
+
+            car.ApplyMissileExplosionImpact(
+                deltaVelocity,
+                recoveryDuration,
+                impactPoint,
+                torqueStrength);
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void SyncShockwaveImpactRpc(
+            NetworkObjectReference attackerReference,
+            NetworkObjectReference victimReference,
+            Vector3 impactPoint,
+            float intensity,
+            float relativeSpeed)
+        {
+            if (!attackerReference.TryGet(out NetworkObject attackerObject) ||
+                !victimReference.TryGet(out NetworkObject victimObject))
+            {
+                return;
+            }
+
+            float localRoleMultiplier = 0.18f;
+            bool localPlayerInvolved = false;
+            if (victimObject.IsPlayerObject && victimObject.IsOwner)
+            {
+                localRoleMultiplier = 1f;
+                localPlayerInvolved = true;
+            }
+            else if (attackerObject.IsPlayerObject && attackerObject.IsOwner)
+            {
+                localRoleMultiplier = 0.55f;
+                localPlayerInvolved = true;
+            }
+
+            PoseKartWreckController victimWreck =
+                victimObject.GetComponent<PoseKartWreckController>() ??
+                victimObject.GetComponentInChildren<PoseKartWreckController>();
+            victimWreck?.TriggerShockwaveDebrisVisual(
+                impactPoint,
+                victimWreck.ShockwaveDebrisLifetime);
+
+            PoseKartShockwaveVfx victimShockwaveVfx =
+                victimObject.GetComponent<PoseKartShockwaveVfx>() ??
+                victimObject.GetComponentInChildren<PoseKartShockwaveVfx>();
+            victimShockwaveVfx?.PlayImpact(
+                impactPoint,
+                intensity);
+
+            if (localPlayerInvolved)
+            {
+                CarController localCar = victimObject.IsPlayerObject && victimObject.IsOwner
+                    ? victimObject.GetComponent<CarController>() ??
+                      victimObject.GetComponentInChildren<CarController>()
+                    : attackerObject.GetComponent<CarController>() ??
+                      attackerObject.GetComponentInChildren<CarController>();
+                localCar?.GetComponent<PoseKartVehicleAudio>()?
+                    .PlayNetworkCollisionImpact(relativeSpeed);
+
+                PoseKartShockwaveImpactPresentation.PlayLocal(
+                    Mathf.Clamp01(intensity) * localRoleMultiplier,
+                    impactPoint);
+            }
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x) &&
+                   IsFinite(value.y) &&
+                   IsFinite(value.z);
+        }
+
+        // ============================================================
         // MISSILE HIT
         // ============================================================
 
@@ -931,7 +2018,8 @@ namespace PoseKart.Race
         public void ServerApplyMissileHit(
             Vector3 point,
             Vector3 deltaVelocity,
-            float torqueStrength)
+            float torqueStrength,
+            CarController attacker = null)
         {
             if (!IsServer)
                 return;
@@ -951,8 +2039,46 @@ namespace PoseKart.Race
                 $"shockwave={(car != null && car.IsShockwaveActive)}",
                 this
             );
-            if (ServerTryBlockItem(point))
+            if (wreck != null && wreck.IsGameplayProtected)
                 return;
+
+            if (ServerTryBlockItem(point))
+            {
+                ServerBroadcastRaceInteraction(
+                    PoseKart.UI.PoseKartRaceInteractionFeed.InteractionKind.MissileBlocked,
+                    attacker,
+                    car);
+                return;
+            }
+
+            ServerBroadcastRaceInteraction(
+                PoseKart.UI.PoseKartRaceInteractionFeed.InteractionKind.MissileHit,
+                attacker,
+                car);
+
+            // Missile death consumes the currently held item on the
+            // authoritative inventory. The owner RPC clears its local HUD copy.
+            inventory?.ClearHeldItem();
+
+            if (wreck != null)
+            {
+                float wreckDelay = wreck.RespawnDelay;
+                SyncMissileWreckVisualClientRpc(point, wreckDelay);
+
+                if (IsRemoteHumanPlayer())
+                {
+                    ApplyMissileWreckPhysicsOwnerRpc(point, deltaVelocity, torqueStrength, wreckDelay);
+                }
+                else
+                {
+                    wreck.ExecuteOwnerWreckPhysics(point, deltaVelocity, torqueStrength, wreckDelay);
+                }
+                return;
+            }
+
+            // The Server decides whether the hit was valid. The smoke itself is
+            // cosmetic, so every peer spawns it on its local victim clone.
+            SpawnMissileVictimSmokeClientRpc(1.8f);
 
             if (IsRemoteHumanPlayer())
             {
@@ -972,6 +2098,64 @@ namespace PoseKart.Race
                 );
             }
 
+        }
+
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void SyncMissileWreckVisualClientRpc(Vector3 point, float delay)
+        {
+            if (wreck != null)
+            {
+                wreck.ExecuteWreckVisualAndDebris(point, delay);
+            }
+        }
+
+        [Rpc(SendTo.Owner)]
+        private void ApplyMissileWreckPhysicsOwnerRpc(
+            Vector3 point,
+            Vector3 deltaVelocity,
+            float torqueStrength,
+            float delay)
+        {
+            if (wreck != null)
+            {
+                wreck.ExecuteOwnerWreckPhysics(point, deltaVelocity, torqueStrength, delay);
+            }
+        }
+
+        [Rpc(SendTo.Server)]
+        public void OwnerReportWreckRestoredServerRpc()
+        {
+            if (!IsServer)
+                return;
+
+            ServerBroadcastWreckRestored();
+        }
+
+        public void ServerBroadcastWreckRestored()
+        {
+            if (!IsServer)
+                return;
+
+            SyncMissileWreckRestoredClientRpc();
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void SyncMissileWreckRestoredClientRpc()
+        {
+            if (wreck != null)
+            {
+                wreck.RestoreIntactVisualOnly();
+            }
+        }
+
+        [Rpc(SendTo.ClientsAndHost)]
+        private void SpawnMissileVictimSmokeClientRpc(float lifetime)
+        {
+            MissileVictimSmokeSpawner.SpawnForVictim(
+                transform,
+                lifetime
+            );
         }
 
         private void ExecuteLocalMissileImpact(
@@ -1198,13 +2382,24 @@ namespace PoseKart.Race
         public void ServerApplyBananaHit(
             Vector3 groundPoint,
             Vector3 groundNormal,
-            float stunDuration)
+            float stunDuration,
+            CarController attacker = null)
         {
             if (!IsServer)
                 return;
 
+            if (wreck != null && wreck.IsGameplayProtected)
+            {
+                SyncBananaSlipVfxRpc(groundPoint, groundNormal, false);
+                return;
+            }
+
             if (ServerTryBlockItem(groundPoint))
             {
+                ServerBroadcastRaceInteraction(
+                    PoseKart.UI.PoseKartRaceInteractionFeed.InteractionKind.BananaBlocked,
+                    attacker,
+                    car);
                 SyncBananaSlipVfxRpc(
                     groundPoint,
                     groundNormal,
@@ -1213,6 +2408,11 @@ namespace PoseKart.Race
 
                 return;
             }
+
+            ServerBroadcastRaceInteraction(
+                PoseKart.UI.PoseKartRaceInteractionFeed.InteractionKind.BananaHit,
+                attacker,
+                car);
 
             // FIX QUAN TRỌNG:
             // Không dùng participant.IsPlayer ở đây.
@@ -1348,13 +2548,24 @@ namespace PoseKart.Race
             Vector3 impactPoint,
             float blindDuration,
             float aiSteeringWobble,
-            float aiThrottleMultiplier)
+            float aiThrottleMultiplier,
+            CarController attacker = null)
         {
             if (!IsServer)
                 return;
 
+            if (wreck != null && wreck.IsGameplayProtected)
+            {
+                SyncInkImpactVfxRpc(impactPoint, false);
+                return;
+            }
+
             if (ServerTryBlockItem(impactPoint))
             {
+                ServerBroadcastRaceInteraction(
+                    PoseKart.UI.PoseKartRaceInteractionFeed.InteractionKind.InkBlocked,
+                    attacker,
+                    car);
                 SyncInkImpactVfxRpc(
                     impactPoint,
                     false
@@ -1362,6 +2573,11 @@ namespace PoseKart.Race
 
                 return;
             }
+
+            ServerBroadcastRaceInteraction(
+                PoseKart.UI.PoseKartRaceInteractionFeed.InteractionKind.InkHit,
+                attacker,
+                car);
 
             // FIX:
             // Human/AI phải phân biệt bằng NetworkObject,

@@ -125,6 +125,14 @@ namespace PoseKart.Race
             CarController car = other.GetComponentInParent<CarController>();
             if (car == null || !car.isActiveAndEnabled || car.TargetBody == null) return;
 
+            PoseKartWreckController wreck =
+                car.GetComponent<PoseKartWreckController>();
+            if (wreck != null && wreck.IsGameplayProtected)
+            {
+                burningCars.Remove(car);
+                return;
+            }
+
             // Apply burn stumble & deceleration
             if (!burningCars.Contains(car))
             {
@@ -146,6 +154,11 @@ namespace PoseKart.Race
         private void ApplyFireBurn(CarController car)
         {
             if (car == null || car.TargetBody == null) return;
+
+            PoseKartWreckController wreck =
+                car.GetComponent<PoseKartWreckController>();
+            if (wreck != null && wreck.IsGameplayProtected)
+                return;
 
             // Check if car has an active shield
             KartItemDefense defense = car.GetComponent<KartItemDefense>();

@@ -9,6 +9,8 @@ public class Shield : MonoBehaviour
     [SerializeField] float _DisplacementMagnitude;
     [SerializeField] float _LerpSpeed;
     [SerializeField] float _DisolveSpeed;
+    [Tooltip("Chỉ bật cho SampleScene của asset. PoseKart điều khiển Shield qua API runtime.")]
+    [SerializeField] bool _enableDemoInput;
     bool _shieldOn;
     Coroutine _disolveCoroutine;
     // Start is called before the first frame update
@@ -20,6 +22,13 @@ public class Shield : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        // The original asset listens to mouse/F for its demo scene. Do not let
+        // that input path run inside PoseKart, especially with the Input System.
+        if (!_enableDemoInput)
+        {
+            return;
+        }
+
         if (Input.GetMouseButtonDown(0))
         {
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
@@ -37,6 +46,12 @@ public class Shield : MonoBehaviour
 
     public void HitShield(Vector3 hitPos)
     {
+        EnsureRenderer();
+        if (_renderer == null)
+        {
+            return;
+        }
+
         _renderer.material.SetVector("_HitPos", hitPos);
         StopAllCoroutines();
         StartCoroutine(Coroutine_HitDisplacement());
@@ -44,21 +59,60 @@ public class Shield : MonoBehaviour
 
     public void OpenCloseShield()
     {
-        float target = 1;
-        if (_shieldOn)
+        SetShieldVisible(!_shieldOn, true);
+    }
+
+    /// <summary>
+    /// Runtime-safe API used by PoseKart's authoritative shield visual flow.
+    /// This keeps the sample asset's dissolve animation without relying on its
+    /// mouse/F demo controls.
+    /// </summary>
+    public void SetShieldVisible(bool visible, bool animate)
+    {
+        EnsureRenderer();
+        if (_renderer == null)
         {
-            target = 0;
+            return;
         }
-        _shieldOn = !_shieldOn;
+
+        _shieldOn = visible;
         if (_disolveCoroutine != null)
         {
             StopCoroutine(_disolveCoroutine);
         }
+
+        float target = visible ? 1f : 0f;
+        if (!animate || !_renderer.material.HasProperty("_Disolve"))
+        {
+            if (_renderer.material.HasProperty("_Disolve"))
+            {
+                _renderer.material.SetFloat("_Disolve", target);
+            }
+            _disolveCoroutine = null;
+            return;
+        }
+
         _disolveCoroutine = StartCoroutine(Coroutine_DisolveShield(target));
+    }
+
+    public bool IsShieldVisible => _shieldOn;
+
+    private void EnsureRenderer()
+    {
+        if (_renderer == null)
+        {
+            _renderer = GetComponent<Renderer>();
+        }
     }
 
     IEnumerator Coroutine_HitDisplacement()
     {
+        EnsureRenderer();
+        if (_renderer == null || !_renderer.material.HasProperty("_DisplacementStrength"))
+        {
+            yield break;
+        }
+
         float lerp = 0;
         while (lerp < 1)
         {
@@ -70,6 +124,12 @@ public class Shield : MonoBehaviour
 
     IEnumerator Coroutine_DisolveShield(float target)
     {
+        EnsureRenderer();
+        if (_renderer == null || !_renderer.material.HasProperty("_Disolve"))
+        {
+            yield break;
+        }
+
         float start = _renderer.material.GetFloat("_Disolve");
         float lerp = 0;
         while (lerp < 1)

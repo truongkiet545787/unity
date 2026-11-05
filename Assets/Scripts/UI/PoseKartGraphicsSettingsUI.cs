@@ -5,6 +5,11 @@ using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
+#if UNITY_EDITOR
+using UnityEditor;
+using UnityEditor.SceneManagement;
+#endif
+
 namespace PoseKart.UI
 {
     /// <summary>
@@ -12,6 +17,7 @@ namespace PoseKart.UI
     /// The panel is created once and uses PlayerPrefs so the same settings are
     /// applied after switching to the lobby or race scene.
     /// </summary>
+    [ExecuteAlways]
     [DisallowMultipleComponent]
     public sealed class PoseKartGraphicsSettingsUI : MonoBehaviour
     {
@@ -30,6 +36,7 @@ namespace PoseKart.UI
         private TMP_Text bloomValue;
         private TMP_Text shadowValue;
         private TMP_FontAsset sharedFont;
+        private bool listenersBound;
 
         public static void AttachToCanvas(Canvas targetCanvas)
         {
@@ -48,7 +55,8 @@ namespace PoseKart.UI
         private void Awake()
         {
             canvas = GetComponent<Canvas>();
-            PoseKartGraphicsSettingsRuntime.Ensure();
+            if (Application.isPlaying)
+                PoseKartGraphicsSettingsRuntime.Ensure();
         }
 
         private void Start()
@@ -75,7 +83,11 @@ namespace PoseKart.UI
             {
                 panel = existingRoot.Find(PanelName)?.gameObject;
                 if (panel != null)
+                {
+                    ResolveSceneReferences(existingRoot);
+                    BindListeners();
                     return;
+                }
             }
 
             TMP_Text sample = FindFirstObjectByType<TMP_Text>();
@@ -89,7 +101,6 @@ namespace PoseKart.UI
             SetAnchored(openButton.GetComponent<RectTransform>(),
                 new Vector2(0f, 0f), new Vector2(0f, 0f),
                 new Vector2(150f, 70f), new Vector2(240f, 90f));
-            openButton.onClick.AddListener(OpenPanel);
 
             panel = CreateObject(PanelName, root.transform);
             RectTransform panelRect = panel.GetComponent<RectTransform>();
@@ -124,19 +135,81 @@ namespace PoseKart.UI
             shadowValue = CreateOption(panel.transform, "Shadow Quality", -445f,
                 out shadowButton);
 
+            Button close = CreateButton(panel.transform, "CLOSE", new Vector2(180f, 54f));
+            SetAnchored(close.GetComponent<RectTransform>(),
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(0f, 42f), new Vector2(180f, 54f));
+
+            BindListeners();
+
+            RefreshLabels();
+            panel.SetActive(false);
+        }
+
+        private void ResolveSceneReferences(Transform root)
+        {
+            if (root == null)
+                return;
+
+            openButton = root.Find("GRAPHICSButton")?.GetComponent<Button>();
+
+            Transform panelTransform = root.Find(PanelName);
+            if (panelTransform == null)
+                return;
+
+            panel = panelTransform.gameObject;
+
+            // Scene-authored panels created by the first version used the generic
+            // name "Button" for value buttons. Keep the binding stable by using
+            // their deliberate order inside the panel instead of their names.
+            Button[] settingButtons = panelTransform.GetComponentsInChildren<Button>(true);
+            if (settingButtons.Length >= 5)
+            {
+                motionBlurButton = settingButtons[0];
+                postProcessingButton = settingButtons[1];
+                bloomButton = settingButtons[2];
+                shadowButton = settingButtons[3];
+
+#if UNITY_EDITOR
+                if (!Application.isPlaying)
+                {
+                    motionBlurButton.gameObject.name = "MotionBlurButton";
+                    postProcessingButton.gameObject.name = "PostProcessingButton";
+                    bloomButton.gameObject.name = "BloomButton";
+                    shadowButton.gameObject.name = "ShadowQualityButton";
+                }
+#endif
+            }
+
+            motionBlurValue = GetButtonText(motionBlurButton);
+            postProcessingValue = GetButtonText(postProcessingButton);
+            bloomValue = GetButtonText(bloomButton);
+            shadowValue = GetButtonText(shadowButton);
+        }
+
+        private static TMP_Text GetButtonText(Button button)
+        {
+            return button != null ? button.GetComponentInChildren<TMP_Text>(true) : null;
+        }
+
+        private void BindListeners()
+        {
+            if (listenersBound || openButton == null || motionBlurButton == null ||
+                postProcessingButton == null || bloomButton == null || shadowButton == null)
+                return;
+
+            openButton.onClick.AddListener(OpenPanel);
             motionBlurButton.onClick.AddListener(CycleMotionBlur);
             postProcessingButton.onClick.AddListener(CyclePostProcessing);
             bloomButton.onClick.AddListener(CycleBloom);
             shadowButton.onClick.AddListener(CycleShadows);
 
-            Button close = CreateButton(panel.transform, "CLOSE", new Vector2(180f, 54f));
-            SetAnchored(close.GetComponent<RectTransform>(),
-                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(0f, 42f), new Vector2(180f, 54f));
-            close.onClick.AddListener(ClosePanel);
+            Button close = panel != null
+                ? panel.transform.Find("CLOSEButton")?.GetComponent<Button>()
+                : null;
+            close?.onClick.AddListener(ClosePanel);
 
-            RefreshLabels();
-            panel.SetActive(false);
+            listenersBound = true;
         }
 
         private TMP_Text CreateOption(Transform parent, string label, float y,
@@ -234,6 +307,34 @@ namespace PoseKart.UI
             panel.transform.SetAsLastSibling();
             RefreshLabels();
         }
+
+#if UNITY_EDITOR
+        [MenuItem("PoseKart/Build Graphics Settings UI In Scene")]
+        private static void BuildGraphicsSettingsUIInScene()
+        {
+            Canvas targetCanvas = Object.FindFirstObjectByType<Canvas>();
+            if (targetCanvas == null)
+            {
+                Debug.LogWarning("[PoseKart] No Canvas found in the active scene.");
+                return;
+            }
+
+            PoseKartGraphicsSettingsUI ui =
+                targetCanvas.GetComponent<PoseKartGraphicsSettingsUI>();
+            if (ui == null)
+                ui = targetCanvas.gameObject.AddComponent<PoseKartGraphicsSettingsUI>();
+
+            ui.canvas = targetCanvas;
+            ui.BuildPanelIfNeeded();
+            if (ui.panel != null)
+                ui.panel.SetActive(false);
+
+            EditorSceneManager.MarkSceneDirty(targetCanvas.gameObject.scene);
+            EditorSceneManager.SaveScene(targetCanvas.gameObject.scene);
+            Selection.activeGameObject = targetCanvas.gameObject;
+            Debug.Log("[PoseKart] Graphics Settings UI is now saved in the active scene.");
+        }
+#endif
 
         private void ClosePanel()
         {

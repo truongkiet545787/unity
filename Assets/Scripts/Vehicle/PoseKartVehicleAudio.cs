@@ -1,6 +1,7 @@
 using PoseKart.Input;
 using PoseKart.Audio;
 using PoseKart.Race;
+using Unity.Netcode;
 using UnityEngine;
 
 namespace PoseKart.Vehicle
@@ -943,14 +944,34 @@ namespace PoseKart.Vehicle
 
         private void OnCollisionEnter(Collision collision)
         {
-            if (collisionSource == null || Time.time - lastCrashTime < crashCooldown || collision == null) return;
+            if (!HasGameplayAuthority() || collision == null) return;
             if (IsSoftGroundContact(collision)) return;
-            float impactSpeed = collision.relativeVelocity.magnitude;
             float normalImpact = 0f;
             for (int i = 0; i < collision.contactCount; i++)
                 normalImpact = Mathf.Max(normalImpact, Mathf.Abs(Vector3.Dot(collision.relativeVelocity, collision.GetContact(i).normal)));
-            impactSpeed = Mathf.Max(impactSpeed, normalImpact);
-            if (impactSpeed < minImpactSpeed) return;
+            if (normalImpact < minImpactSpeed) return;
+            PlayCollisionImpact(normalImpact);
+        }
+
+        /// <summary>
+        /// Plays the same collision clip selection for a victim owner that did
+        /// not receive the original physics callback. The bridge calls this
+        /// once per confirmed impact; the local cooldown prevents duplicates.
+        /// </summary>
+        public void PlayNetworkCollisionImpact(float normalImpactSpeed)
+        {
+            PlayCollisionImpact(normalImpactSpeed);
+        }
+
+        private void PlayCollisionImpact(float impactSpeed)
+        {
+            if (collisionSource == null ||
+                Time.time - lastCrashTime < crashCooldown ||
+                impactSpeed < minImpactSpeed)
+            {
+                return;
+            }
+
             AudioClip clip = impactSpeed >= heavyImpactSpeed ? collisionHeavyClip
                 : impactSpeed >= mediumImpactSpeed ? collisionMediumClip : collisionLightClip;
             if (clip == null && collisionClips != null && collisionClips.Length > 0)
@@ -959,6 +980,21 @@ namespace PoseKart.Vehicle
             float volume = collisionVolume * Mathf.InverseLerp(minImpactSpeed, Mathf.Max(minImpactSpeed + 0.1f, heavyImpactSpeed), impactSpeed);
             PlayOneShot(collisionSource, clip, Mathf.Clamp01(volume), 0.92f, 1.08f);
             lastCrashTime = Time.time;
+        }
+
+        private bool HasGameplayAuthority()
+        {
+            NetworkObject networkObject = GetComponentInParent<NetworkObject>();
+            NetworkManager manager = NetworkManager.Singleton;
+            if (networkObject == null || !networkObject.IsSpawned ||
+                manager == null || !manager.IsListening)
+            {
+                return true;
+            }
+
+            return networkObject.IsPlayerObject
+                ? networkObject.IsOwner
+                : manager.IsServer;
         }
 
         private bool IsSoftGroundContact(Collision collision)

@@ -1538,14 +1538,17 @@ namespace PoseKart.Race
                 );
 
 
+                // Keep the existing shared GO timestamp, but expose the
+                // countdown state even when the visual countdown is skipped.
+                // Rocket Start uses this state to collect acceleration holds.
+                state = RaceState.Countdown;
+
                 // =============================================
                 // NETWORK COUNTDOWN
                 // =============================================
 
                 if (!skipCountdown)
                 {
-                    state = RaceState.Countdown;
-
                     int lastCount =
                         -1;
 
@@ -1713,11 +1716,12 @@ namespace PoseKart.Race
             // OFFLINE - GIỮ NGUYÊN FLOW CŨ
             // =====================================================
 
+            // This remains true for the short skip-countdown path so
+            // Rocket Start can use the same race event and timing rules.
+            state = RaceState.Countdown;
+
             if (!skipCountdown)
             {
-                state =
-                    RaceState.Countdown;
-
                 targetGoTime =
                     Time.time +
                     countdownFrom *

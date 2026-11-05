@@ -77,7 +77,7 @@ private float missileTargetAngle = 180f;
         [SerializeField] private bool missileGroundFireAffectsRacers = true;
 
         [Header("Ink Shot")]
-        [Tooltip("Dedicated prefab for ink cannon ball projectile. If unassigned, loads from Resources/CannonBall_Ink or falls back to procedural.")]
+        [Tooltip("Dedicated prefab for ink cannon ball projectile. If unassigned, loads from Resources/OFFICAL_INK or falls back to procedural.")]
         [SerializeField] private GameObject inkProjectilePrefab;
         [Tooltip("Forward target acquisition; the shot is retained when no racer is in the cone.")]
         [SerializeField, Min(1f)] private float inkTargetRange = 95f;
@@ -244,7 +244,7 @@ private float missileTargetAngle = 180f;
                     }
                 }
 
-                sharedInkPrefab = Resources.Load<GameObject>("CannonBall_Ink");
+                sharedInkPrefab = Resources.Load<GameObject>("OFFICAL_INK");
                 return sharedInkPrefab;
             }
         }

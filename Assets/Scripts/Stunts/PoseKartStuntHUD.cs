@@ -1,4 +1,7 @@
 using System.Collections;
+using PoseKart.Race;
+using PoseKart.UI;
+using PoseKart.Vehicle;
 using TMPro;
 using UnityEngine;
 
@@ -62,21 +65,12 @@ namespace PoseKart.Stunts
         {
             if (playerStuntController == null)
             {
-                // Tìm PoseKartStuntController trên xe người chơi
-                var allControllers = FindObjectsByType<PoseKartStuntController>(FindObjectsSortMode.None);
-                for (int i = 0; i < allControllers.Length; i++)
+                RaceManager raceManager = FindFirstObjectByType<RaceManager>();
+                CarController localCar = PoseKartLocalPlayerResolver.FindLocalCar(raceManager);
+                if (localCar != null)
                 {
-                    if (allControllers[i].CompareTag("Player") ||
-                        allControllers[i].gameObject.name.IndexOf("Player", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        playerStuntController = allControllers[i];
-                        break;
-                    }
-                }
-
-                if (playerStuntController == null && allControllers.Length > 0)
-                {
-                    playerStuntController = allControllers[0];
+                    playerStuntController = localCar.GetComponent<PoseKartStuntController>() ??
+                        localCar.GetComponentInParent<PoseKartStuntController>();
                 }
             }
 
@@ -214,7 +208,9 @@ namespace PoseKart.Stunts
 
                 if (comboText != null)
                 {
-                    comboText.text = "PERFECT LANDING!";
+                    comboText.text = playerStuntController != null && playerStuntController.ComboCount > 1
+                        ? $"<color=#FFCC00>COMBO x{playerStuntController.ComboCount}</color>"
+                        : "PERFECT LANDING!";
                     comboText.color = cleanLandingColor;
                 }
 

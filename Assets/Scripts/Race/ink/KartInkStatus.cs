@@ -29,6 +29,11 @@ namespace PoseKart.Race
             if (victim == null || !victim.isActiveAndEnabled || !victim.ControlEnabled)
                 return false;
 
+            PoseKartWreckController wreck =
+                victim.GetComponent<PoseKartWreckController>();
+            if (wreck != null && wreck.IsGameplayProtected)
+                return false;
+
             RaceParticipant racer = victim.GetComponent<RaceParticipant>();
             if (racer != null && racer.Finished)
                 return false;

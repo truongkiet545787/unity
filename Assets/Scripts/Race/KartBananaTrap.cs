@@ -410,7 +410,11 @@ namespace PoseKart.Race
                 var bridge = car.GetComponent<PoseKartNetworkItemBridge>();
                 if (bridge != null)
                 {
-                    bridge.ServerApplyBananaHit(groundPoint, groundNormal, stunDuration);
+                    bridge.ServerApplyBananaHit(
+                        groundPoint,
+                        groundNormal,
+                        stunDuration,
+                        owner);
                 }
                 if (sensor != null) sensor.enabled = false;
                 if (Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsServer)

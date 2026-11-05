@@ -5,15 +5,18 @@ namespace PoseKart.Vehicle
     public sealed class KartDriveEffects : MonoBehaviour
     {
         private CarController car;
+        private NitroJetEffect nitroJet;
         private ParticleSystem dust,nitro;
         private float nextDust,nextFlame;
         private bool wasGrounded;
         private void Start()
         {
             car=GetComponent<CarController>();
-            if(GetComponent<NitroJetEffect>()==null)gameObject.AddComponent<NitroJetEffect>();
+            nitroJet=GetComponent<NitroJetEffect>();
+            if(nitroJet==null)nitroJet=gameObject.AddComponent<NitroJetEffect>();
             dust=KartParticleEffect.Create("Tire dust",transform,new Color(.69f,.52f,.29f,.6f),.65f,.35f);
-            nitro=KartParticleEffect.Create("Nitro exhaust",transform,new Color(.12f,.8f,1f,1f),.45f,.65f);
+            if (nitroJet == null || !nitroJet.HasCustomNitroVfx)
+                nitro=KartParticleEffect.Create("Nitro exhaust",transform,new Color(.12f,.8f,1f,1f),.45f,.65f);
         }
         private void Update()
         {
@@ -36,7 +39,7 @@ namespace PoseKart.Vehicle
                     }
                 }
             }
-            if (car.IsVisualNitroBoosting && Time.time >= nextFlame)
+            if (nitro != null && car.IsVisualNitroBoosting && Time.time >= nextFlame)
             {
                 nextFlame = Time.time + .018f;
                 var emission = new ParticleSystem.EmitParams { position = transform.position - transform.forward * 1.25f + transform.up * .35f, velocity = -transform.forward * 14f + car.TargetBody.linearVelocity * .15f };

@@ -76,6 +76,14 @@ namespace PoseKart.AI
         [Tooltip("Cho phép Drift để vừa ép góc cua gắt vừa nạp Nitro cực nhanh.")]
         [SerializeField] private bool enableDriftCornering = false;
 
+        [Header("AI Driving Variety & Ramp Stunts")]
+        [Tooltip("Tỷ lệ AI được chọn profile chủ động drift.")]
+        [SerializeField, Range(0f, 1f)] private float majorityDriftChance = 0.78f;
+        [Tooltip("Tỷ lệ AI giữ drift khi tiếp cận ramp thường để tạo Flat Spin và tích Nitro.")]
+        [SerializeField, Range(0f, 1f)] private float rampStuntChance = 0.85f;
+        [Tooltip("Tỷ lệ AI dùng Perfect/ Shockwave Nitro.")]
+        [SerializeField, Range(0f, 1f)] private float advancedNitroChance = 0.72f;
+
         [Header("Track-Boundary Protection (4-Layer Safety)")]
         [Tooltip("Hệ thống bảo vệ biên đường đua 4 lớp ngăn chặn việc lao ra ngoài hoặc rơi vực.")]
         [SerializeField] private bool enableTrackBoundaryProtection = true;
@@ -181,6 +189,8 @@ namespace PoseKart.AI
         private float obstacleAvoidHoldTimer;
         private float obstacleAvoidDirection;
         private bool rampContextActive;
+        private bool prefersRampStunt;
+        private float behaviorRoll;
 
         // Ramp & Aerial Awareness
         private PoseKart.Stunts.PoseKartStuntController stuntController;
@@ -246,6 +256,12 @@ namespace PoseKart.AI
                     );
             }
 
+            // Network AI names are assigned during OnNetworkSpawn. Reapply
+            // the deterministic profile after that binding so every AI gets
+            // its own stable driving style instead of sharing the prefab
+            // default profile.
+            ApplyVarietyProfile();
+
             Debug.Log(
                 $"[AIRacerBrain] Network runtime bound | " +
                 $"Line={(racingLine != null)} | " +
@@ -276,9 +292,10 @@ namespace PoseKart.AI
             minimumCornerSpeedFactor = 0.45f;
             brakeSpeedMargin = 1.5f;
 
-            // Không tự cắt apex/drift: RacingLine là nguồn điều hướng chính.
+            // Vẫn bám RacingLine làm nguồn điều hướng chính, nhưng cho phép AI
+            // dùng drift có kiểm soát ở các cua đủ gắt.
             enableApexCutting = false;
-            enableDriftCornering = false;
+            enableDriftCornering = true;
 
             // Boundary chỉ làm lưới an toàn, không tranh tay lái với racing line.
             enableTrackBoundaryProtection = true;
@@ -299,8 +316,9 @@ namespace PoseKart.AI
             nitroTacticalThreshold = 0.28f;
             unlimitedDemonNitro = false;
 
-            // Tắt các hệ thống dễ làm xe rời racing line.
-            enableSlipstreamAndOvertake = false;
+            // Cho phép AI chủ động núp gió và chọn làn vượt. Các điều kiện
+            // boundary/corner ở FixedUpdate vẫn giữ quyền ưu tiên an toàn.
+            enableSlipstreamAndOvertake = true;
             slipstreamMinDistance = 3f;
             slipstreamMaxDistance = 18f;
             slipstreamAngleTolerance = 20f;
@@ -328,6 +346,59 @@ namespace PoseKart.AI
             spinRecoveryAngleThreshold = 60f;
 
             avoidanceBias = Mathf.Clamp(seedOffset * 0.15f, -0.25f, 0.25f);
+            ApplyVarietyProfile();
+        }
+
+        private void ApplyVarietyProfile()
+        {
+            string seedName = participant != null &&
+                              !string.IsNullOrWhiteSpace(participant.RacerName)
+                ? participant.RacerName
+                : name;
+
+            int hash = StableHash(seedName);
+            behaviorRoll = Hash01(hash);
+            float skillRoll = Hash01(hash + 17);
+            float laneRoll = Hash01(hash + 31);
+            float nitroRoll = Hash01(hash + 47);
+
+            // Vary pace and corner confidence without granting an unfair
+            // speed multiplier or changing CarController physics.
+            skill = Mathf.Lerp(0.72f, 0.98f, skillRoll);
+            targetSpeedMultiplier = Mathf.Lerp(0.91f, 1.04f, skillRoll);
+            cornerCaution = Mathf.Lerp(1.20f, 0.94f, skillRoll);
+            steeringResponse = Mathf.Lerp(6.8f, 9.2f, skillRoll);
+            lookAheadMultiplier = Mathf.Lerp(0.90f, 1.12f, skillRoll);
+            avoidanceBias = Mathf.Lerp(-0.28f, 0.28f, laneRoll);
+
+            enableDriftCornering = behaviorRoll <= majorityDriftChance;
+            prefersRampStunt = Hash01(hash + 67) <= rampStuntChance;
+
+            bool advancedNitro = nitroRoll <= advancedNitroChance;
+            enablePerfectNitro = advancedNitro;
+            enableTripleNitro = advancedNitro && Hash01(hash + 83) > 0.55f;
+            nitroTacticalThreshold = Mathf.Lerp(0.22f, 0.38f, 1f - skillRoll);
+        }
+
+        private static int StableHash(string value)
+        {
+            unchecked
+            {
+                int hash = 17;
+                for (int i = 0; i < value.Length; i++)
+                    hash = hash * 31 + value[i];
+                return hash;
+            }
+        }
+
+        private static float Hash01(int value)
+        {
+            unchecked
+            {
+                uint state = (uint)value;
+                state = state * 1664525u + 1013904223u;
+                return (state & 0x00FFFFFFu) / 16777215f;
+            }
         }
 
         private void Awake()
@@ -734,12 +805,16 @@ namespace PoseKart.AI
             UpdateRuthlessNitro(speed, cornerSeverity, smoothedSteering, throttle, brake, onRamp);
 
             // 16. DRIFT
+            bool cornerDriftIntent = speed > 10.5f
+                                     && cautionSeverity > 0.38f
+                                     && Mathf.Abs(smoothedSteering) > 0.32f;
+            bool rampDriftIntent = onRamp &&
+                                   !isRampAirborne &&
+                                   prefersRampStunt &&
+                                   speed > 7f;
             bool wantsDrift = enableDriftCornering
                               && carController.IsGrounded
-                              && !onRamp
-                              && speed > 10.5f
-                              && cautionSeverity > 0.38f
-                              && Mathf.Abs(smoothedSteering) > 0.32f
+                              && (cornerDriftIntent || rampDriftIntent)
                               && brake <= 0.01f
                               && !isReversing
                               && !boundaryEmergency

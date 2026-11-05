@@ -15,6 +15,13 @@ public class MagnifyingObject : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        if (_renderer == null)
+            _renderer = GetComponent<Renderer>();
+        if (_cam == null)
+            _cam = Camera.main;
+        if (_renderer == null || _cam == null)
+            return;
+
         Vector3 screenPoint = _cam.WorldToScreenPoint(transform.position);
         screenPoint.x = screenPoint.x / Screen.width;
         screenPoint.y = screenPoint.y / Screen.height;

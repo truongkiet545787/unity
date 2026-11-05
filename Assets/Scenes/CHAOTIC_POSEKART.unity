@@ -18678,6 +18678,9 @@ MonoBehaviour:
   shieldBlockClip: {fileID: 8300000, guid: bb6cdd13aeb95f743847b1cd460889bc, type: 3}
   shieldExpireClip: {fileID: 8300000, guid: 7639682497ab39d48a99fe3831385a1f, type: 3}
   effectVolume: 0.75
+  countdown3Clip: {fileID: 0}
+  countdown2Clip: {fileID: 0}
+  countdown1Clip: {fileID: 0}
   countdownBeepClip: {fileID: 0}
   countdownGoClip: {fileID: 0}
   countdownVolume: 0.85
@@ -25876,6 +25879,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &502858977
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -25922,21 +25926,25 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
-  nitroTimingDuration: 0.9
-  perfectTimingStartSeconds: 0.35
-  perfectTimingEndSeconds: 0.58
-  shockwaveTimingEndSeconds: 0.85
+  perfectTimingStartSeconds: 0.2
+  perfectTimingEndSeconds: 0.75
+  quickDoubleTapWindow: 0.45
+  shockwaveMinimumImpactSpeed: 3
+  shockwaveHitCooldown: 0.4
+  shockwavePush: 6
+  shockwaveLift: 3
+  shockwaveTorque: 5
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 502858980}
   inputProviderSource: {fileID: 502858979}
@@ -25945,7 +25953,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -25974,6 +25982,7 @@ MonoBehaviour:
   maximumGroundedUpwardSpeed: 0.75
   centerOfMassOffset: {x: 0, y: -0.45, z: 0}
   lockPitchAndRoll: 1
+  enableLowStepAssistForAI: 0
   enableAirControl: 1
   airYawStrength: 8
   airPitchControl: 0
@@ -25984,6 +25993,10 @@ MonoBehaviour:
   airLateralAssistStrength: 1.5
   controlEnabled: 1
   brakeAllowedWhenControlDisabled: 0
+  missileImpactCooldown: 0.18
+  maximumMissileImpactVelocityChange: 7.5
+  maximumMissileImpactAngularSpeed: 10
+  missileImpactSteeringMultiplier: 0.55
   minimumImpactSpeed: 2
   collisionSpeedLossMultiplier: 0.55
   maximumCollisionSpeedLoss: 14
@@ -26077,6 +26090,7 @@ MonoBehaviour:
   participant: {fileID: 0}
   inventory: {fileID: 0}
   raceManager: {fileID: 0}
+  forceStableLanePreset: 1
   skill: 0.96
   targetSpeedMultiplier: 1.09
   cornerCaution: 0.88
@@ -26100,6 +26114,11 @@ MonoBehaviour:
   boundaryProbeRadius: 0.6
   emergencyBrakeSensitivity: 0.85
   cliffDropThreshold: 2.5
+  effectiveTrackHalfWidth: 3.6
+  centerAssistStart: 0.8
+  centerAssistStrength: 0.3
+  edgeSpeedFactor: 0.65
+  boundaryPredictionSeconds: 0.18
   enablePerfectNitro: 1
   enableTripleNitro: 1
   nitroTacticalThreshold: 0.22
@@ -26274,6 +26293,9 @@ MonoBehaviour:
   shockwaveNitroClip: {fileID: 8300000, guid: c83e957eee08c9a45bbccc43d31e26e3, type: 3}
   nitroVolume: 0.7
   nitroEngineBoost: 0.2
+  aiNitroVolumeMultiplier: 0.22
+  aiNitroMinDistance: 2.5
+  aiNitroMaxDistance: 28
   tireSkidClip: {fileID: 8300000, guid: add261ea134526d43a0492f08ae18ed4, type: 3}
   brakeSkidClip: {fileID: 8300000, guid: dd6e91ccb28bfa840ab2eb56fca1f730, type: 3}
   windRushClip: {fileID: 8300000, guid: fa3bbe3862c4df94e9c8c0679582dde0, type: 3}
@@ -26456,6 +26478,7 @@ MonoBehaviour:
   missileTargetAngle: 75
   missileSpeed: 70
   missileTrackingStrength: 13
+  missileMaximumTurnDegreesPerSecond: 210
   missileTargetPrediction: 1
   missileMaximumPredictionTime: 1.25
   missileShotsPerPickup: 1
@@ -26463,9 +26486,14 @@ MonoBehaviour:
   missileImpactExplosionPrefab: {fileID: 560014183069458990, guid: 621e45f610d611746802ad828f66b094, type: 3}
   missileImpactExplosionLifetime: 7
   missileExplosionRadius: 8
+  missileDeviationAmplitude: 0.45
+  missileDeviationFrequency: 12
+  missileTerminalGuidanceDistance: 24
   missileMaximumHorizontalKnockback: 10
   missileMaximumUpwardKnockback: 10
   missileImpactTorque: 12
+  missileDirectHitForceMultiplier: 1.2
+  missileNearbyForceMultiplier: 0.85
   missileMinimumEffectiveDistance: 1
   missileExplosionFalloff:
     serializedVersion: 2
@@ -38199,11 +38227,10 @@ MonoBehaviour:
   rowSeparation: 5.5
   backRowStagger: 0.45
   startingHeightOffset: 0.06
-  frontLeftRacer: {fileID: 1294341836}
-  frontRightRacer: {fileID: 1889706916}
-  backLeftRacer: {fileID: 1626331772}
-  backRightRacer: {fileID: 502858976}
   clearVelocitiesOnGridPlacement: 1
+  onlineExpectedRacers: 8
+  onlineRosterTimeoutSeconds: 10
+  onlineRuntimeRace: 0
   state: 0
   raceTimeSeconds: 0
   countdownDisplay: 
@@ -39963,10 +39990,10 @@ RectTransform:
   - {fileID: 929623641}
   - {fileID: 1773006785}
   - {fileID: 1442740860}
-  - {fileID: 986224117}
   - {fileID: 68316091}
   - {fileID: 1423484938}
   - {fileID: 938674472}
+  - {fileID: 986224117}
   m_Father: {fileID: 1110057059}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -40630,87 +40657,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 683564553}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!1 &683688342
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 683688343}
-  - component: {fileID: 683688344}
-  m_Layer: 0
-  m_Name: NitroBarGraphic
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!224 &683688343
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 683688342}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 1028301317}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
-  m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &683688344
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 683688342}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5afa03ec19ba4f14b575ef4bc163517c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PoseKart.UI.NitroBarGraphic
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 0
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  targetCar: {fileID: 0}
-  autoSyncWithCar: 1
-  fillAmount: 0
-  slantWidth: 16
-  edgeHighlightWidth: 8
-  trackColor: {r: 0.06, g: 0.075, b: 0.1, a: 0.9}
-  fillStartColor: {r: 0.85, g: 0.663, b: 0.067999996, a: 1}
-  fillEndColor: {r: 1, g: 0.78, b: 0.08, a: 1}
-  highlightColor: {r: 0.96, g: 0.99, b: 1, a: 1}
-  singleStart: {r: 1, g: 0.58, b: 0, a: 1}
-  singleEnd: {r: 1, g: 0.92, b: 0.05, a: 1}
-  singleHighlight: {r: 1, g: 1, b: 0.85, a: 1}
-  doubleStart: {r: 0.92, g: 0.18, b: 0, a: 1}
-  doubleEnd: {r: 1, g: 0.52, b: 0.02, a: 1}
-  doubleHighlight: {r: 1, g: 0.85, b: 0.6, a: 1}
-  perfectStart: {r: 0, g: 0.48, b: 0.98, a: 1}
-  perfectEnd: {r: 0.05, g: 0.92, b: 1, a: 1}
-  perfectHighlight: {r: 0.75, g: 1, b: 1, a: 1}
-  shockwaveStart: {r: 0.48, g: 0, b: 0.92, a: 1}
-  shockwaveEnd: {r: 1, g: 0.08, b: 0.82, a: 1}
-  shockwaveHighlight: {r: 1, g: 0.82, b: 1, a: 1}
-  idleStart: {r: 0.95, g: 0.65, b: 0.05, a: 1}
-  idleEnd: {r: 1, g: 0.85, b: 0.12, a: 1}
-  redSectionStart: {r: 0.08, g: 0.82, b: 1, a: 1}
-  redSectionEnd: {r: 0.35, g: 1, b: 1, a: 1}
 --- !u!1 &687235676
 GameObject:
   m_ObjectHideFlags: 0
@@ -41028,7 +40974,14 @@ MonoBehaviour:
   launcherModel: {fileID: 820838144}
   muzzlePoint: {fileID: 732078008}
   missilePrefab: {fileID: 6891914729606440152, guid: 7fd6b00a993ab564089ff487807c5969, type: 3}
+  missileMuzzleVfxPrefab: {fileID: 0}
+  targetScale: {x: 0.07, y: 0.07, z: 0.07}
+  inkLauncherPrefab: {fileID: 0}
+  inkLauncherModel: {fileID: 0}
+  inkMuzzlePoint: {fileID: 0}
   inkPrefab: {fileID: 8905972668254025887, guid: d815923e1d1b54b438f4a1aa9c0dd464, type: 3}
+  inkMuzzleVfxPrefab: {fileID: 0}
+  inkTargetScale: {x: 1.6, y: 1.6, z: 1.6}
   deployDuration: 0.35
   autoFireTimeout: 3.5
   enableDebugTestKey: 0
@@ -46187,85 +46140,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 902382934}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!1 &907305331
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 907305332}
-  - component: {fileID: 907305334}
-  - component: {fileID: 907305333}
-  m_Layer: 0
-  m_Name: Percentage
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 0
---- !u!224 &907305332
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 907305331}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 970158151}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 1, y: 1}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -12, y: -21}
-  m_SizeDelta: {x: 76, y: 25}
-  m_Pivot: {x: 1, y: 0.5}
---- !u!114 &907305333
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 907305331}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
-  m_Material: {fileID: 0}
-  m_Color: {r: 0.96, g: 0.99, b: 1, a: 1}
-  m_RaycastTarget: 0
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-    m_FontSize: 15
-    m_FontStyle: 1
-    m_BestFit: 0
-    m_MinSize: 10
-    m_MaxSize: 40
-    m_Alignment: 5
-    m_AlignByGeometry: 0
-    m_RichText: 1
-    m_HorizontalOverflow: 1
-    m_VerticalOverflow: 1
-    m_LineSpacing: 1
-  m_Text: 000%
---- !u!222 &907305334
-CanvasRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 907305331}
-  m_CullTransparentMesh: 1
 --- !u!1001 &907573296
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -47670,81 +47544,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 959228275}
   m_CullTransparentMesh: 1
---- !u!1 &960285194
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 960285195}
-  - component: {fileID: 960285197}
-  - component: {fileID: 960285196}
-  m_Layer: 0
-  m_Name: Fill
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!224 &960285195
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 960285194}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 1028301317}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 4, y: 0}
-  m_SizeDelta: {x: -8, y: -8}
-  m_Pivot: {x: 0, y: 0.5}
---- !u!114 &960285196
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 960285194}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 0.78, b: 0.08, a: 1}
-  m_RaycastTarget: 0
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 3
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 0
-  m_FillAmount: 0
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
---- !u!222 &960285197
-CanvasRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 960285194}
-  m_CullTransparentMesh: 1
 --- !u!1 &960431637
 GameObject:
   m_ObjectHideFlags: 0
@@ -47852,84 +47651,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 5f2bc166e68df974bb952c4ec5c43454, type: 3}
---- !u!1 &970158150
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 970158151}
-  - component: {fileID: 970158153}
-  - component: {fileID: 970158152}
-  m_Layer: 0
-  m_Name: NitroMeterUI
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!224 &970158151
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 970158150}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 1028301317}
-  - {fileID: 1117307060}
-  - {fileID: 907305332}
-  m_Father: {fileID: 986224117}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 1}
-  m_AnchorMax: {x: 0.5, y: 1}
-  m_AnchoredPosition: {x: 0, y: -42}
-  m_SizeDelta: {x: 640, y: 56}
-  m_Pivot: {x: 0.5, y: 1}
---- !u!114 &970158152
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 970158150}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 0}
-  m_RaycastTarget: 0
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
---- !u!222 &970158153
-CanvasRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 970158150}
-  m_CullTransparentMesh: 1
 --- !u!1 &984979743
 GameObject:
   m_ObjectHideFlags: 0
@@ -48054,7 +47775,6 @@ RectTransform:
   - {fileID: 338531261}
   - {fileID: 432272248}
   - {fileID: 1175436368}
-  - {fileID: 970158151}
   m_Father: {fileID: 658634748}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 1}
@@ -48113,7 +47833,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.UI.NitroMeterBinder
   raceManager: {fileID: 600730432}
-  playerCar: {fileID: 1294341832}
+  playerCar: {fileID: 0}
   anchoredPosition: {x: 0, y: -42}
   size: {x: 640, y: 56}
   showPercentage: 0
@@ -48802,83 +48522,6 @@ CanvasRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1024873813}
-  m_CullTransparentMesh: 1
---- !u!1 &1028301316
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1028301317}
-  - component: {fileID: 1028301319}
-  - component: {fileID: 1028301318}
-  m_Layer: 0
-  m_Name: Bar
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!224 &1028301317
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1028301316}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 683688343}
-  - {fileID: 960285195}
-  m_Father: {fileID: 970158151}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 640, y: 42}
-  m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &1028301318
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1028301316}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 0.06, g: 0.075, b: 0.1, a: 0.9}
-  m_RaycastTarget: 0
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
---- !u!222 &1028301319
-CanvasRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1028301316}
   m_CullTransparentMesh: 1
 --- !u!1 &1035420126
 GameObject:
@@ -49678,7 +49321,7 @@ CanvasGroup:
   m_GameObject: {fileID: 1073045376}
   m_Enabled: 1
   m_Alpha: 1
-  m_Interactable: 1
+  m_Interactable: 0
   m_BlocksRaycasts: 0
   m_IgnoreParentGroups: 0
 --- !u!114 &1073045379
@@ -50237,85 +49880,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 334522020}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1117307059
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1117307060}
-  - component: {fileID: 1117307062}
-  - component: {fileID: 1117307061}
-  m_Layer: 0
-  m_Name: Label
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 0
---- !u!224 &1117307060
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1117307059}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 970158151}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 48, y: -21}
-  m_SizeDelta: {x: -108, y: 25}
-  m_Pivot: {x: 0, y: 0.5}
---- !u!114 &1117307061
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1117307059}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
-  m_Material: {fileID: 0}
-  m_Color: {r: 0.96, g: 0.99, b: 1, a: 1}
-  m_RaycastTarget: 0
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_FontData:
-    m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-    m_FontSize: 16
-    m_FontStyle: 1
-    m_BestFit: 0
-    m_MinSize: 10
-    m_MaxSize: 40
-    m_Alignment: 3
-    m_AlignByGeometry: 0
-    m_RichText: 1
-    m_HorizontalOverflow: 1
-    m_VerticalOverflow: 1
-    m_LineSpacing: 1
-  m_Text: NITRO
---- !u!222 &1117307062
-CanvasRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1117307059}
-  m_CullTransparentMesh: 1
 --- !u!1 &1121488390
 GameObject:
   m_ObjectHideFlags: 0
@@ -68123,21 +67687,25 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
-  nitroTimingDuration: 0.9
-  perfectTimingStartSeconds: 0.35
-  perfectTimingEndSeconds: 0.58
-  shockwaveTimingEndSeconds: 0.85
+  perfectTimingStartSeconds: 0.2
+  perfectTimingEndSeconds: 0.75
+  quickDoubleTapWindow: 0.45
+  shockwaveMinimumImpactSpeed: 3
+  shockwaveHitCooldown: 0.4
+  shockwavePush: 6
+  shockwaveLift: 3
+  shockwaveTorque: 5
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 1294341834}
   inputProviderSource: {fileID: 1294341833}
@@ -68146,7 +67714,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -68175,6 +67743,7 @@ MonoBehaviour:
   maximumGroundedUpwardSpeed: 0.75
   centerOfMassOffset: {x: 0, y: -0.45, z: 0}
   lockPitchAndRoll: 1
+  enableLowStepAssistForAI: 0
   enableAirControl: 1
   airYawStrength: 8
   airPitchControl: 0
@@ -68185,6 +67754,10 @@ MonoBehaviour:
   airLateralAssistStrength: 1.5
   controlEnabled: 1
   brakeAllowedWhenControlDisabled: 0
+  missileImpactCooldown: 0.18
+  maximumMissileImpactVelocityChange: 7.5
+  maximumMissileImpactAngularSpeed: 10
+  missileImpactSteeringMultiplier: 0.55
   minimumImpactSpeed: 2
   collisionSpeedLossMultiplier: 0.55
   maximumCollisionSpeedLoss: 14
@@ -68301,6 +67874,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &1294341837
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -68313,6 +67887,111 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f17f3ac8f3d362c4295df1bf6308570d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.UI.PoseKartVehiclePaint
+  colors:
+  - displayName: Racing Red
+    color: {r: 0.9, g: 0.03, b: 0.02, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Jet Black
+    color: {r: 0.01, g: 0.01, b: 0.015, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Pearl White
+    color: {r: 0.95, g: 0.95, b: 1, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Electric Blue
+    color: {r: 0.02, g: 0.35, b: 1, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Neon Green
+    color: {r: 0.1, g: 1, b: 0.15, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Solar Yellow
+    color: {r: 1, g: 0.75, b: 0.02, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Royal Purple
+    color: {r: 0.35, g: 0.05, b: 0.65, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
+  - displayName: Sunset Orange
+    color: {r: 1, g: 0.28, b: 0.03, a: 1}
+    modelMaterials:
+    - modelName: Rally
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Sport
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    - modelName: Buggy
+      bodyMaterial: {fileID: 0}
+      wheelMaterial: {fileID: 0}
+    material: {fileID: 0}
   vehicleModels:
   - {fileID: 185512310956680539}
   - {fileID: 2075015789942869843}
@@ -68393,6 +68072,9 @@ MonoBehaviour:
   shockwaveNitroClip: {fileID: 8300000, guid: c83e957eee08c9a45bbccc43d31e26e3, type: 3}
   nitroVolume: 0.7
   nitroEngineBoost: 0.2
+  aiNitroVolumeMultiplier: 0.22
+  aiNitroMinDistance: 2.5
+  aiNitroMaxDistance: 28
   tireSkidClip: {fileID: 8300000, guid: add261ea134526d43a0492f08ae18ed4, type: 3}
   brakeSkidClip: {fileID: 8300000, guid: dd6e91ccb28bfa840ab2eb56fca1f730, type: 3}
   windRushClip: {fileID: 8300000, guid: fa3bbe3862c4df94e9c8c0679582dde0, type: 3}
@@ -68525,6 +68207,7 @@ MonoBehaviour:
   missileTargetAngle: 75
   missileSpeed: 70
   missileTrackingStrength: 13
+  missileMaximumTurnDegreesPerSecond: 210
   missileTargetPrediction: 1
   missileMaximumPredictionTime: 1.25
   missileShotsPerPickup: 1
@@ -68532,9 +68215,14 @@ MonoBehaviour:
   missileImpactExplosionPrefab: {fileID: 560014183069458990, guid: 621e45f610d611746802ad828f66b094, type: 3}
   missileImpactExplosionLifetime: 7
   missileExplosionRadius: 8
+  missileDeviationAmplitude: 0.45
+  missileDeviationFrequency: 12
+  missileTerminalGuidanceDistance: 24
   missileMaximumHorizontalKnockback: 10
   missileMaximumUpwardKnockback: 10
   missileImpactTorque: 12
+  missileDirectHitForceMultiplier: 1.2
+  missileNearbyForceMultiplier: 0.85
   missileMinimumEffectiveDistance: 1
   missileExplosionFalloff:
     serializedVersion: 2
@@ -72091,7 +71779,14 @@ MonoBehaviour:
   launcherModel: {fileID: 1660140704}
   muzzlePoint: {fileID: 456625977}
   missilePrefab: {fileID: 6891914729606440152, guid: 7fd6b00a993ab564089ff487807c5969, type: 3}
+  missileMuzzleVfxPrefab: {fileID: 0}
+  targetScale: {x: 0.07, y: 0.07, z: 0.07}
+  inkLauncherPrefab: {fileID: 0}
+  inkLauncherModel: {fileID: 0}
+  inkMuzzlePoint: {fileID: 0}
   inkPrefab: {fileID: 8905972668254025887, guid: d815923e1d1b54b438f4a1aa9c0dd464, type: 3}
+  inkMuzzleVfxPrefab: {fileID: 0}
+  inkTargetScale: {x: 1.6, y: 1.6, z: 1.6}
   deployDuration: 0.35
   autoFireTimeout: 3
   enableDebugTestKey: 0
@@ -73885,7 +73580,14 @@ MonoBehaviour:
   launcherModel: {fileID: 0}
   muzzlePoint: {fileID: 0}
   missilePrefab: {fileID: 0}
+  missileMuzzleVfxPrefab: {fileID: 0}
+  targetScale: {x: 0.7, y: 0.7, z: 0.7}
+  inkLauncherPrefab: {fileID: 0}
+  inkLauncherModel: {fileID: 0}
+  inkMuzzlePoint: {fileID: 0}
   inkPrefab: {fileID: 8905972668254025887, guid: d815923e1d1b54b438f4a1aa9c0dd464, type: 3}
+  inkMuzzleVfxPrefab: {fileID: 0}
+  inkTargetScale: {x: 1.6, y: 1.6, z: 1.6}
   deployDuration: 0.35
   autoFireTimeout: 3.5
   enableDebugTestKey: 0
@@ -76363,6 +76065,7 @@ MonoBehaviour:
   participant: {fileID: 0}
   inventory: {fileID: 0}
   raceManager: {fileID: 0}
+  forceStableLanePreset: 1
   skill: 0.88
   targetSpeedMultiplier: 1.03
   cornerCaution: 1
@@ -76386,6 +76089,11 @@ MonoBehaviour:
   boundaryProbeRadius: 0.6
   emergencyBrakeSensitivity: 0.85
   cliffDropThreshold: 2.5
+  effectiveTrackHalfWidth: 3.6
+  centerAssistStart: 0.8
+  centerAssistStrength: 0.3
+  edgeSpeedFactor: 0.65
+  boundaryPredictionSeconds: 0.18
   enablePerfectNitro: 1
   enableTripleNitro: 1
   nitroTacticalThreshold: 0.22
@@ -76471,21 +76179,25 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
-  nitroTimingDuration: 0.9
-  perfectTimingStartSeconds: 0.35
-  perfectTimingEndSeconds: 0.58
-  shockwaveTimingEndSeconds: 0.85
+  perfectTimingStartSeconds: 0.2
+  perfectTimingEndSeconds: 0.75
+  quickDoubleTapWindow: 0.45
+  shockwaveMinimumImpactSpeed: 3
+  shockwaveHitCooldown: 0.4
+  shockwavePush: 6
+  shockwaveLift: 3
+  shockwaveTorque: 5
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 1626331770}
   inputProviderSource: {fileID: 1626331769}
@@ -76494,7 +76206,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -76523,6 +76235,7 @@ MonoBehaviour:
   maximumGroundedUpwardSpeed: 0.75
   centerOfMassOffset: {x: 0, y: -0.45, z: 0}
   lockPitchAndRoll: 1
+  enableLowStepAssistForAI: 0
   enableAirControl: 1
   airYawStrength: 8
   airPitchControl: 0
@@ -76533,6 +76246,10 @@ MonoBehaviour:
   airLateralAssistStrength: 1.5
   controlEnabled: 1
   brakeAllowedWhenControlDisabled: 0
+  missileImpactCooldown: 0.18
+  maximumMissileImpactVelocityChange: 7.5
+  maximumMissileImpactAngularSpeed: 10
+  missileImpactSteeringMultiplier: 0.55
   minimumImpactSpeed: 2
   collisionSpeedLossMultiplier: 0.55
   maximumCollisionSpeedLoss: 14
@@ -76649,6 +76366,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &1626331773
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -76744,6 +76462,9 @@ MonoBehaviour:
   shockwaveNitroClip: {fileID: 8300000, guid: c83e957eee08c9a45bbccc43d31e26e3, type: 3}
   nitroVolume: 0.7
   nitroEngineBoost: 0.2
+  aiNitroVolumeMultiplier: 0.22
+  aiNitroMinDistance: 2.5
+  aiNitroMaxDistance: 28
   tireSkidClip: {fileID: 8300000, guid: add261ea134526d43a0492f08ae18ed4, type: 3}
   brakeSkidClip: {fileID: 8300000, guid: dd6e91ccb28bfa840ab2eb56fca1f730, type: 3}
   windRushClip: {fileID: 8300000, guid: fa3bbe3862c4df94e9c8c0679582dde0, type: 3}
@@ -76926,6 +76647,7 @@ MonoBehaviour:
   missileTargetAngle: 75
   missileSpeed: 70
   missileTrackingStrength: 13
+  missileMaximumTurnDegreesPerSecond: 210
   missileTargetPrediction: 1
   missileMaximumPredictionTime: 1.25
   missileShotsPerPickup: 1
@@ -76933,9 +76655,14 @@ MonoBehaviour:
   missileImpactExplosionPrefab: {fileID: 560014183069458990, guid: 621e45f610d611746802ad828f66b094, type: 3}
   missileImpactExplosionLifetime: 7
   missileExplosionRadius: 8
+  missileDeviationAmplitude: 0.45
+  missileDeviationFrequency: 12
+  missileTerminalGuidanceDistance: 24
   missileMaximumHorizontalKnockback: 10
   missileMaximumUpwardKnockback: 10
   missileImpactTorque: 12
+  missileDirectHitForceMultiplier: 1.2
+  missileNearbyForceMultiplier: 0.85
   missileMinimumEffectiveDistance: 1
   missileExplosionFalloff:
     serializedVersion: 2
@@ -77281,6 +77008,19 @@ MonoBehaviour:
   gridShotDuration: 1.35
   rearShotDuration: 1
   chaseBlendDuration: 1.1
+  heroShotCamera: {fileID: 0}
+  gridShotCamera: {fileID: 0}
+  rearShotCamera: {fileID: 0}
+  useManualShotOverrides: 0
+  heroShotPositionOffset: {x: -2.6, y: 1.1, z: 3.6}
+  heroShotRotationEuler: {x: 15, y: 180, z: 0}
+  heroShotFov: 50
+  gridShotPositionOffset: {x: 4.8, y: 5.2, z: -7.8}
+  gridShotRotationEuler: {x: 25, y: 145, z: 0}
+  gridShotFov: 59
+  rearShotPositionOffset: {x: 1.6, y: 1.45, z: -3.1}
+  rearShotRotationEuler: {x: 12, y: 0, z: 0}
+  rearShotFov: 58
 --- !u!114 &1633993472
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -77293,6 +77033,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5e64ba3a242c99b438c19a8b86c99616, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKartCinematicCamera
+  raceVolume: {fileID: 0}
+  nitroMotionBlur: 0.14
+  motionBlurResponse: 8
   flashGroup: {fileID: 0}
   flashIntensity: 0.85
   flashInDuration: 0.065
@@ -77301,6 +77044,11 @@ MonoBehaviour:
   transitionAudio: {fileID: 0}
   whooshClip: {fileID: 0}
   targetRigidbody: {fileID: 1294341834}
+  firstPersonAnchor: {fileID: 0}
+  viewToggleKey: 99
+  viewTransitionSpeed: 12
+  firstPersonFov: 72
+  firstPersonNitroFovPunch: 3
   distance: 4.2
   height: 2.25
   lookHeight: 0.95
@@ -79767,7 +79515,14 @@ MonoBehaviour:
   launcherModel: {fileID: 0}
   muzzlePoint: {fileID: 0}
   missilePrefab: {fileID: 0}
+  missileMuzzleVfxPrefab: {fileID: 0}
+  targetScale: {x: 0.7, y: 0.7, z: 0.7}
+  inkLauncherPrefab: {fileID: 0}
+  inkLauncherModel: {fileID: 0}
+  inkMuzzlePoint: {fileID: 0}
   inkPrefab: {fileID: 8905972668254025887, guid: d815923e1d1b54b438f4a1aa9c0dd464, type: 3}
+  inkMuzzleVfxPrefab: {fileID: 0}
+  inkTargetScale: {x: 1.6, y: 1.6, z: 1.6}
   deployDuration: 0.35
   autoFireTimeout: 3.5
   enableDebugTestKey: 0
@@ -85678,7 +85433,14 @@ MonoBehaviour:
   launcherModel: {fileID: 820838144}
   muzzlePoint: {fileID: 732078008}
   missilePrefab: {fileID: 6891914729606440152, guid: 7fd6b00a993ab564089ff487807c5969, type: 3}
+  missileMuzzleVfxPrefab: {fileID: 0}
+  targetScale: {x: 0.07, y: 0.07, z: 0.07}
+  inkLauncherPrefab: {fileID: 0}
+  inkLauncherModel: {fileID: 0}
+  inkMuzzlePoint: {fileID: 0}
   inkPrefab: {fileID: 8905972668254025887, guid: d815923e1d1b54b438f4a1aa9c0dd464, type: 3}
+  inkMuzzleVfxPrefab: {fileID: 0}
+  inkTargetScale: {x: 1.6, y: 1.6, z: 1.6}
   deployDuration: 0.35
   autoFireTimeout: 3
   enableDebugTestKey: 0
@@ -101068,8 +100830,8 @@ CanvasGroup:
   m_GameObject: {fileID: 1803750360}
   m_Enabled: 1
   m_Alpha: 0
-  m_Interactable: 1
-  m_BlocksRaycasts: 1
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
   m_IgnoreParentGroups: 0
 --- !u!1 &1806204477
 GameObject:
@@ -107025,6 +106787,7 @@ MonoBehaviour:
   participant: {fileID: 0}
   inventory: {fileID: 0}
   raceManager: {fileID: 0}
+  forceStableLanePreset: 1
   skill: 0.78
   targetSpeedMultiplier: 0.98
   cornerCaution: 1.1
@@ -107048,6 +106811,11 @@ MonoBehaviour:
   boundaryProbeRadius: 0.6
   emergencyBrakeSensitivity: 0.85
   cliffDropThreshold: 2.5
+  effectiveTrackHalfWidth: 3.6
+  centerAssistStart: 0.8
+  centerAssistStrength: 0.3
+  edgeSpeedFactor: 0.65
+  boundaryPredictionSeconds: 0.18
   enablePerfectNitro: 1
   enableTripleNitro: 1
   nitroTacticalThreshold: 0.22
@@ -107133,21 +106901,25 @@ MonoBehaviour:
   minimumLandingThrottleScale: 0.12
   singleNitroDrain: 0.38
   doubleNitroDrain: 0.65
-  tripleNitroDrain: 0.95
+  shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
-  nitroTimingDuration: 0.9
-  perfectTimingStartSeconds: 0.35
-  perfectTimingEndSeconds: 0.58
-  shockwaveTimingEndSeconds: 0.85
+  perfectTimingStartSeconds: 0.2
+  perfectTimingEndSeconds: 0.75
+  quickDoubleTapWindow: 0.45
+  shockwaveMinimumImpactSpeed: 3
+  shockwaveHitCooldown: 0.4
+  shockwavePush: 6
+  shockwaveLift: 3
+  shockwaveTorque: 5
   nitroPressCooldown: 0.12
   singleNitroAccelerationMultiplier: 1.35
   doubleNitroAccelerationMultiplier: 1.55
-  tripleNitroAccelerationMultiplier: 1.9
+  shockwaveNitroAccelerationMultiplier: 1.9
   perfectNitroAccelerationMultiplier: 1.7
   nitroAirAcceleration: 3
   singleNitroImpulse: 2
   doubleNitroImpulse: 1.5
-  tripleNitroImpulse: 2
+  shockwaveNitroImpulse: 2
   perfectNitroImpulse: 2
   targetBody: {fileID: 1889706914}
   inputProviderSource: {fileID: 1889706913}
@@ -107156,7 +106928,7 @@ MonoBehaviour:
   itemBoostMaxSpeedKmh: 130
   singleNitroMaxSpeedKmh: 145
   doubleNitroMaxSpeedKmh: 160
-  tripleNitroMaxSpeedKmh: 175
+  shockwaveNitroMaxSpeedKmh: 175
   perfectNitroMaxSpeedKmh: 185
   boostSpeedLimitRelease: 11
   maxReverseSpeed: 9
@@ -107185,6 +106957,7 @@ MonoBehaviour:
   maximumGroundedUpwardSpeed: 0.75
   centerOfMassOffset: {x: 0, y: -0.45, z: 0}
   lockPitchAndRoll: 1
+  enableLowStepAssistForAI: 0
   enableAirControl: 1
   airYawStrength: 8
   airPitchControl: 0
@@ -107195,6 +106968,10 @@ MonoBehaviour:
   airLateralAssistStrength: 1.5
   controlEnabled: 1
   brakeAllowedWhenControlDisabled: 0
+  missileImpactCooldown: 0.18
+  maximumMissileImpactVelocityChange: 7.5
+  maximumMissileImpactAngularSpeed: 10
+  missileImpactSteeringMultiplier: 0.55
   minimumImpactSpeed: 2
   collisionSpeedLossMultiplier: 0.55
   maximumCollisionSpeedLoss: 14
@@ -107311,6 +107088,7 @@ MonoBehaviour:
   finished: 0
   finishOrder: 0
   finishTime: 0
+  finishedPresenceDelay: 1.25
 --- !u!114 &1889706917
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -107406,6 +107184,9 @@ MonoBehaviour:
   shockwaveNitroClip: {fileID: 8300000, guid: c83e957eee08c9a45bbccc43d31e26e3, type: 3}
   nitroVolume: 0.7
   nitroEngineBoost: 0.2
+  aiNitroVolumeMultiplier: 0.22
+  aiNitroMinDistance: 2.5
+  aiNitroMaxDistance: 28
   tireSkidClip: {fileID: 8300000, guid: add261ea134526d43a0492f08ae18ed4, type: 3}
   brakeSkidClip: {fileID: 8300000, guid: dd6e91ccb28bfa840ab2eb56fca1f730, type: 3}
   windRushClip: {fileID: 8300000, guid: fa3bbe3862c4df94e9c8c0679582dde0, type: 3}
@@ -107588,6 +107369,7 @@ MonoBehaviour:
   missileTargetAngle: 75
   missileSpeed: 70
   missileTrackingStrength: 13
+  missileMaximumTurnDegreesPerSecond: 210
   missileTargetPrediction: 1
   missileMaximumPredictionTime: 1.25
   missileShotsPerPickup: 1
@@ -107595,9 +107377,14 @@ MonoBehaviour:
   missileImpactExplosionPrefab: {fileID: 560014183069458990, guid: 621e45f610d611746802ad828f66b094, type: 3}
   missileImpactExplosionLifetime: 7
   missileExplosionRadius: 8
+  missileDeviationAmplitude: 0.45
+  missileDeviationFrequency: 12
+  missileTerminalGuidanceDistance: 24
   missileMaximumHorizontalKnockback: 10
   missileMaximumUpwardKnockback: 10
   missileImpactTorque: 12
+  missileDirectHitForceMultiplier: 1.2
+  missileNearbyForceMultiplier: 0.85
   missileMinimumEffectiveDistance: 1
   missileExplosionFalloff:
     serializedVersion: 2
@@ -117665,6 +117452,7 @@ MonoBehaviour:
   participant: {fileID: 0}
   inventory: {fileID: 0}
   raceManager: {fileID: 0}
+  forceStableLanePreset: 1
   skill: 0.78
   targetSpeedMultiplier: 0.98
   cornerCaution: 1.1
@@ -117688,6 +117476,11 @@ MonoBehaviour:
   boundaryProbeRadius: 0.6
   emergencyBrakeSensitivity: 0.85
   cliffDropThreshold: 2.5
+  effectiveTrackHalfWidth: 3.6
+  centerAssistStart: 0.8
+  centerAssistStrength: 0.3
+  edgeSpeedFactor: 0.65
+  boundaryPredictionSeconds: 0.18
   enablePerfectNitro: 1
   enableTripleNitro: 1
   nitroTacticalThreshold: 0.22
@@ -117757,7 +117550,14 @@ MonoBehaviour:
   launcherModel: {fileID: 221522918776728038, guid: f747a07dd7f923e489fa29a508654e23, type: 3}
   muzzlePoint: {fileID: 456625977}
   missilePrefab: {fileID: 6891914729606440152, guid: 7fd6b00a993ab564089ff487807c5969, type: 3}
+  missileMuzzleVfxPrefab: {fileID: 0}
+  targetScale: {x: 0.7, y: 0.7, z: 0.7}
+  inkLauncherPrefab: {fileID: 0}
+  inkLauncherModel: {fileID: 0}
+  inkMuzzlePoint: {fileID: 0}
   inkPrefab: {fileID: 8905972668254025887, guid: d815923e1d1b54b438f4a1aa9c0dd464, type: 3}
+  inkMuzzleVfxPrefab: {fileID: 0}
+  inkTargetScale: {x: 1.6, y: 1.6, z: 1.6}
   deployDuration: 0.35
   autoFireTimeout: 3.5
   enableDebugTestKey: 0
@@ -118974,31 +118774,10 @@ MonoBehaviour:
   editorPreviewMode: 0
   raceManager: {fileID: 600730432}
   vehicleSelectScene: PoseKart_VehicleSelect
-  useCustomUI: 1
-  customFinishRoot: {fileID: 1773006784}
-  customFinishGroup: {fileID: 1803750362}
-  customFinishRect: {fileID: 1803750361}
-  customFinishText: {fileID: 0}
-  customLegacyFinishText: {fileID: 815504947}
-  customResultsGroup: {fileID: 1073045378}
-  customResultsRect: {fileID: 1073045377}
-  customResultHeading: {fileID: 0}
-  customLegacyResultHeading: {fileID: 734342448}
-  customPositionText: {fileID: 0}
-  customLegacyPositionText: {fileID: 1478164348}
-  customPositionCaption: {fileID: 0}
-  customLegacyPositionCaption: {fileID: 1325565997}
-  customTimeText: {fileID: 0}
-  customLegacyTimeText: {fileID: 1404629912}
-  customLapsText: {fileID: 0}
-  customLegacyLapsText: {fileID: 572049259}
-  customResultHint: {fileID: 0}
-  customLegacyResultHint: {fileID: 605446948}
-  customPlayAgainButton: {fileID: 722732969}
-  customSelectVehicleButton: {fileID: 2064625907}
   finishDuration: 1.15
   resultsRevealDuration: 0.5
   buttonUnlockDelay: 0.25
+  onlineLobbyScene: PoseKart_OnlineLobby
 --- !u!114 &2187654323
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -119011,10 +118790,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6d4f0b2e9c7a4d1e8f3b5a6c0d2e7148, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.UI.PoseKartAIRacePositionLabels
+  labelFont: {fileID: 0}
   raceManager: {fileID: 600730432}
   targetCamera: {fileID: 1633993465}
   labelHeight: 2.4
   labelScale: 0.02
+  labelScaleMultiplier: 0.55
+  labelFontSize: 2.5
   visibilityDistance: 80
   fadeDistance: 55
   firstPlaceColor: {r: 1, g: 0.8445153, b: 0, a: 1}

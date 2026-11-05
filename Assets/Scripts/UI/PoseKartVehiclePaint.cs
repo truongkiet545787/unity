@@ -56,6 +56,12 @@ namespace PoseKart.UI
         private readonly Dictionary<Renderer, Material[]> originalMaterials = new Dictionary<Renderer, Material[]>();
         private int vehicleIndex, colorIndex;
         public int VehicleCount => vehicleModels == null ? 0 : vehicleModels.Length;
+        public int CurrentVehicleIndex => vehicleIndex;
+        public GameObject ActiveVehicleModel =>
+            vehicleModels != null && vehicleIndex >= 0 && vehicleIndex < vehicleModels.Length
+                ? vehicleModels[vehicleIndex]
+                : null;
+        public Color CurrentColor => GetColor(colorIndex);
         public int ColorCount
         {
             get

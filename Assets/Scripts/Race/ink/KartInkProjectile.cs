@@ -60,7 +60,7 @@ namespace PoseKart.Race
 
             if (customPrefab == null)
             {
-                customPrefab = Resources.Load<GameObject>("CannonBall_Ink");
+                customPrefab = Resources.Load<GameObject>("OFFICAL_INK");
             }
 
             Vector3 origin;
@@ -309,11 +309,16 @@ namespace PoseKart.Race
             // Arc apex height tossed up into the sky
             arcApexHeight = Mathf.Clamp(initialDistance * 0.35f + 5.5f, 6.5f, 24f);
 
-            // Initial look direction pointing up into the sky
-            Vector3 launchHeading = (lastKnownTargetPoint - startPoint);
-            launchHeading.y = 0f;
-            Vector3 upwardDir = (launchHeading.normalized + Vector3.up * 1.75f).normalized;
-            transform.rotation = Quaternion.LookRotation(upwardDir);
+            // Keep the projectile nose aligned with the actual launch direction.
+            // The previous artificial upward bias made the Ink visual point into
+            // the sky on its first frame even though the shot was aimed forward.
+            Vector3 launchHeading = lastKnownTargetPoint - startPoint;
+            if (launchHeading.sqrMagnitude > 0.0001f)
+            {
+                transform.rotation = Quaternion.LookRotation(
+                    launchHeading.normalized,
+                    Vector3.up);
+            }
 
             if (!hasCustomVisual)
             {
@@ -516,7 +521,8 @@ namespace PoseKart.Race
                                 impactPoint,
                                 blindDuration,
                                 aiSteeringWobble,
-                                aiThrottleMultiplier
+                                aiThrottleMultiplier,
+                                owner
                             );
                         }
                     }

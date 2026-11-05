@@ -5735,6 +5735,9 @@ MonoBehaviour:
   pulseSpeed: 10
   fadeInDuration: 0.2
   fadeOutDuration: 0.3
+  impactDisplacementDuration: 0.38
+  impactDisplacementMagnitude: 0.4
+  impactDissolveAmount: 0.12
 --- !u!1 &167820394484154582
 GameObject:
   m_ObjectHideFlags: 0
@@ -11115,6 +11118,7 @@ GameObject:
   - component: {fileID: 8565165436766126301}
   - component: {fileID: 1549170280177827714}
   - component: {fileID: 7814929499459428674}
+  - component: {fileID: 910000000000000002}
   - component: {fileID: 1370724733055913068}
   - component: {fileID: 1386537754863522217}
   - component: {fileID: 6278401348507609831}
@@ -11138,6 +11142,9 @@ GameObject:
   - component: {fileID: -4668410133945306625}
   - component: {fileID: -3387920169736589811}
   - component: {fileID: 1782871823906093046}
+  - component: {fileID: 1605622888170370458}
+  - component: {fileID: 7529432762206425617}
+  - component: {fileID: 900000000000000002}
   m_Layer: 0
   m_Name: PoseKart_NetworkAI
   m_TagString: Untagged
@@ -11298,9 +11305,9 @@ MonoBehaviour:
   doubleNitroDrain: 0.65
   shockwaveNitroDrain: 0.95
   perfectNitroDrain: 0.52
-  perfectTimingStartSeconds: 0.35
-  perfectTimingEndSeconds: 0.58
-  quickDoubleTapWindow: 0.3
+  perfectTimingStartSeconds: 0.2
+  perfectTimingEndSeconds: 0.75
+  quickDoubleTapWindow: 0.45
   shockwaveMinimumImpactSpeed: 3
   shockwaveHitCooldown: 0.4
   shockwavePush: 6
@@ -11398,6 +11405,45 @@ MonoBehaviour:
   debugAirYawRate: 0
   debugImpactRecovery: 0
   debugLastMissileImpactDelta: {x: 0, y: 0, z: 0}
+--- !u!114 &910000000000000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 446420761356964782}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f0b0f4d8f0e4d5a9e718a0d4bf4c6a1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.PoseKartMultiRaySuspension
+  frontAxle: {fileID: 666481356103260993}
+  rearAxle: {fileID: 3381052000845058286}
+  wheelTrackHalfWidth: 0.62
+  raysPerWheel: 3
+  sampleHalfLength: 0.1
+  sampleHalfWidth: 0.11
+  rayStartHeight: 0.36
+  suspensionRestLength: 0.5
+  suspensionTravel: 0.24
+  maxGroundSlope: 65
+  groundLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  ignoreOtherVehicles: 1
+  springStrength: 22000
+  dampingStrength: 2600
+  maximumWheelForce: 6500
+  maximumTotalSuspensionForce: 14000
+  bumpBounceStrength: 0.32
+  minimumBounceCompression: 0.14
+  minimumCompressionSpeed: 0.75
+  wheelVisuals: []
+  wheelRadius: 0.38
+  updateWheelVisualPositions: 0
+  debugRays: 0
+  contactRayColor: {r: 0, g: 1, b: 0, a: 1}
+  noContactRayColor: {r: 1, g: 0, b: 0, a: 1}
 --- !u!114 &1370724733055913068
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11732,6 +11778,32 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!114 &900000000000000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 446420761356964782}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b5e7d4e8d5d4e8e9a1c7f4d2b6a3c10, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.PoseKartShockwaveVfx
+  enableModeVfx: 1
+  shockwaveColor: {r: 0.86, g: 0.12, b: 1, a: 1}
+  modeRingRadius: 1.35
+  modeRingPulseSpeed: 7
+  modeStreakLength: 1.35
+  modeRingAlpha: 0.28
+  modeStreakAlpha: 0.42
+  modeGlowIntensity: 0.8
+  impactDuration: 0.38
+  impactRingRadius: 2.2
+  impactRingWidth: 0.075
+  impactParticleCount: 20
+  impactParticleLifetime: 0.28
+  impactFlashIntensity: 3.5
 --- !u!114 &1561030431349027256
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11744,7 +11816,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1e5c7a9b3d4f48e6a2c0719d5b8f634a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Race.KartItemDefense
-  shieldVisualPrefab: {fileID: 2906116991436775253, guid: d0bd7482581e6624a9144adbff7de729, type: 3}
+  shieldVisualPrefab: {fileID: 5392714893169757064, guid: 7da9d8a98ab2d1545b63cf889d55c5eb, type: 3}
   shieldParticlePrefab: {fileID: 8791094062481959707, guid: ca9c23e8769d4e9499afe08f61700cb2, type: 3}
   shieldDuration: 5
   maximumBlockedHits: 1
@@ -11772,7 +11844,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKartHorn
   car: {fileID: 7814929499459428674}
-  isPlayer: 1
+  isPlayer: 0
   hornVolume: 0.7
   hornCooldown: 0.6
   playerTarget: {fileID: 0}
@@ -11873,8 +11945,8 @@ MonoBehaviour:
   bananaGroundProbeHeight: 1.5
   bananaGroundProbeDistance: 6
   bananaMaximumGroundSlope: 55
-  shieldVisualPrefab: {fileID: 2906116991436775253, guid: d0bd7482581e6624a9144adbff7de729, type: 3}
-  shieldParticlePrefab: {fileID: 4664064001268603187, guid: 9fcc22501e57cea4da28f94416766bc3, type: 3}
+  shieldVisualPrefab: {fileID: 5392714893169757064, guid: 7da9d8a98ab2d1545b63cf889d55c5eb, type: 3}
+  shieldParticlePrefab: {fileID: 6641937305276010553, guid: 874d55f4df4add14496a78e82a5cc262, type: 3}
   shieldDuration: 5.2
   maximumShieldBlockedHits: 1
   shieldColor: {r: 0.15, g: 0.85, b: 1, a: 0.22}
@@ -11947,11 +12019,13 @@ MonoBehaviour:
   launcherModel: {fileID: 6087414089976180978}
   muzzlePoint: {fileID: 1262258738393045955}
   missilePrefab: {fileID: 1461021674776565150}
+  missileMuzzleVfxPrefab: {fileID: 0}
   targetScale: {x: 0.9999999, y: 1, z: 0.9999999}
   inkLauncherPrefab: {fileID: 0}
   inkLauncherModel: {fileID: 3570828062962525498}
   inkMuzzlePoint: {fileID: 4314582010683200038}
   inkPrefab: {fileID: 963016054784489402, guid: 432462a12b17de641879b506cc77bdcb, type: 3}
+  inkMuzzleVfxPrefab: {fileID: 0}
   inkTargetScale: {x: 1.6, y: 1.6, z: 1.6}
   deployDuration: 0.35
   autoFireTimeout: 3.5
@@ -11970,12 +12044,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 730e866507cacca429b659cc9c7a720b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Vehicle.KartLandingEffects
-  visualBody: {fileID: 0}
-  maximumBodyCompression: 0.16
-  maximumNoseDipDegrees: 4.5
-  suspensionFrequency: 5
-  suspensionDamping: 8
-  suspensionAnimationDuration: 0.55
+  visualBody: {fileID: 7960747612491990418}
+  reboundStrength: 0.38
+  maximumBodyCompression: 0.12
+  maximumNoseDipDegrees: 4
+  suspensionFrequency: 4.5
+  suspensionDamping: 5.5
+  suspensionAnimationDuration: 0.65
   minimumAirborneSeconds: 0.22
   minimumLandingSpeed: 2.3
   mediumLandingSpeed: 4
@@ -12025,25 +12100,19 @@ MonoBehaviour:
   driftLeanAngle: 10
   counterSteerYawAngle: 8
   leanSmoothSpeed: 10
+  rocketStart: {fileID: 0}
+  rocketStartRearWheelSpinSpeed: 1450
   hopPunchHeight: 0.22
   hopDuration: 0.28
   hopVibrato: 5
   hopElasticity: 0.8
   modelReturnDuration: 0.45
   pinParticlesToWheels: 1
-  wheelParticles: {fileID: 3775874166387910894}
-  flashParticles: {fileID: 5978896271121337456}
+  wheelParticles: {fileID: 4389665177951722820}
+  flashParticles: {fileID: 5383961230551219448}
   primaryParticles:
-  - {fileID: 7833183076839991839}
-  - {fileID: 5840590969235471175}
-  - {fileID: 889478366579966784}
-  - {fileID: 1763985852490449897}
-  - {fileID: 1280268647553242812}
-  - {fileID: 4771118342391163330}
-  - {fileID: 8875832514511558366}
-  - {fileID: 5169182927861966314}
-  - {fileID: 5014465423576559044}
-  - {fileID: 4482961795260265119}
+  - {fileID: 1705821537168860899}
+  - {fileID: 4892946584991777593}
   secondaryParticles: []
   baseDriftColor: {r: 1, g: 0.92, b: 0.65, a: 0.9}
   turboColors:
@@ -12084,12 +12153,12 @@ MonoBehaviour:
   body: {fileID: 8565165436766126301}
   cinematicCamera: {fileID: 0}
   flatSpinDuration: 0.68
-  barrelRollDuration: 0.75
+  barrelRollDuration: 0.9
   flipDuration: 0.8
   flatSpinTakeoffWindow: 0.35
   corkscrewPitchAngle: 5
   enableAirLoft: 1
-  airLoftGravityCompensation: 0.35
+  airLoftGravityCompensation: 0.08
   landingAlignDuration: 0.14
   cleanLandingAngleThreshold: 45
   minimumAirTimeForJump: 0.55
@@ -12136,6 +12205,7 @@ MonoBehaviour:
   bananaTrapPrefab: {fileID: 7539509150586453392, guid: 71bf361406278cf4084142e890457045, type: 3}
   landingVfxPrefab: {fileID: 0}
   muzzleFlash: {fileID: 0}
+  muzzleVfxPrefab: {fileID: 0}
   launchAudioSource: {fileID: 0}
   deployClip: {fileID: 0}
   fireClip: {fileID: 0}
@@ -12163,7 +12233,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Race.PoseKartShieldGeneratorVisual
   shieldGeneratorPrefab: {fileID: 0}
-  forceShieldPrefab: {fileID: 2906116991436775253, guid: d0bd7482581e6624a9144adbff7de729, type: 3}
+  forceShieldPrefab: {fileID: 8370624712863927339, guid: 479ca233a1b472b4eb5edaa3241ffa4e, type: 3}
   generatorMountPoint: {fileID: 5522732306501001326}
   shieldCenterPoint: {fileID: 58126403798706163}
   generatorLocalOffset: {x: 0, y: 0, z: 0}
@@ -12190,7 +12260,7 @@ MonoBehaviour:
   shieldAudioSource: {fileID: 0}
   shieldLoopClip: {fileID: 0}
   activationVfxPrefab: {fileID: 0}
-  shieldImpactVfxPrefab: {fileID: 0}
+  shieldImpactVfxPrefab: {fileID: 5342180332479058797, guid: 79afdcad9ea93aa4689d42abecccb188, type: 3}
   expirationVfxPrefab: {fileID: 0}
   currentState: 0
   isGeneratorEquipped: 0
@@ -12328,6 +12398,100 @@ MonoBehaviour:
   slingshotTimer: 0
   currentLeadCar: {fileID: 0}
   currentDistanceToLead: 0
+--- !u!114 &1605622888170370458
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 446420761356964782}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5550f9d16e83ce4ba6244ef3a626561, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Race.PoseKartWreckController
+  wreckPrefab: {fileID: 0}
+  explosionVfxPrefab: {fileID: 1087034665551826729, guid: 8bbbb41a0749ed948b8e7c937a90b1d6, type: 3}
+  explosionAudio: {fileID: 0}
+  intactVisualRoot: {fileID: 0}
+  throwUpwardForce: 5.5
+  throwHorizontalForce: 9
+  flipTorqueForce: 20
+  maxLinearVelocity: 18
+  maxAngularVelocity: 12
+  maxDebrisPieces: 6
+  debrisLifetime: 3.5
+  shockwaveDebrisLifetime: 1.35
+  debrisExplosionForce: 15
+  debrisUpwardModifier: 1.2
+  respawnDelay: 2.2
+  recoveryVfxPrefab: {fileID: 0}
+  postRespawnInvulnerability: 1
+--- !u!114 &7529432762206425617
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 446420761356964782}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4805eb2abc6ef194dbae1316a934ec2f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PoseKart.Race.PoseKartRocketStart
+  carController: {fileID: 7814929499459428674}
+  raceManager: {fileID: 0}
+  handProvider: {fileID: 0}
+  udpReceiver: {fileID: 0}
+  cinematicCamera: {fileID: 0}
+  perfectWindow: 0.15
+  goodWindow: 0.4
+  penalizeEarlyHold: 1
+  perfectImpulse: 13.5
+  perfectDuration: 1.25
+  goodImpulse: 7.5
+  goodDuration: 0.95
+  enableAiRocketStart: 1
+  aiSkill: 0.55
+  aiTimingJitter: 0.05
+  exhaustParticles:
+  - {fileID: 7833183076839991839}
+  - {fileID: 5840590969235471175}
+  - {fileID: 889478366579966784}
+  - {fileID: 1763985852490449897}
+  - {fileID: 1280268647553242812}
+  - {fileID: 656213138870229295}
+  - {fileID: 4787980173657441160}
+  - {fileID: 4771118342391163330}
+  - {fileID: 8875832514511558366}
+  - {fileID: 5169182927861966314}
+  - {fileID: 5014465423576559044}
+  - {fileID: 4482961795260265119}
+  - {fileID: 6767084862557241462}
+  - {fileID: 3121636927024500655}
+  - {fileID: 3121636925722832772}
+  - {fileID: 7030778977864474496}
+  - {fileID: 8080144339271307111}
+  - {fileID: 537031592915051342}
+  - {fileID: 1705821537168860899}
+  - {fileID: 5901357124389765907}
+  - {fileID: 4892946584991777593}
+  - {fileID: 1149526904196436324}
+  rocketStartVfxPrefab: {fileID: 389821699222927281, guid: 856f1f18fb8861d4499813c38a5963ae, type: 3}
+  rocketStartVfxAnchor: {fileID: 0}
+  rocketStartVfxLifetime: 1.25
+  feedbackRoot: {fileID: 0}
+  feedbackText: {fileID: 0}
+  feedbackGroup: {fileID: 0}
+  feedbackDisplayDuration: 1.4
+  perfectStartClip: {fileID: 0}
+  goodStartClip: {fileID: 0}
+  stallClip: {fileID: 0}
+  launchAudioVolume: 0.9
+  quality: 0
+  heldTooEarly: 0
+  inputRegistered: 0
+  registeredTimeBeforeGo: -1
 --- !u!1 &450663417717213991
 GameObject:
   m_ObjectHideFlags: 0
@@ -68574,7 +68738,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &3775874166387910894
 Transform:
   m_ObjectHideFlags: 0
@@ -89117,11 +89281,13 @@ MonoBehaviour:
   launcherModel: {fileID: 1461021674776565150}
   muzzlePoint: {fileID: 1262258738393045955}
   missilePrefab: {fileID: 6891914729606440152, guid: 7fd6b00a993ab564089ff487807c5969, type: 3}
+  missileMuzzleVfxPrefab: {fileID: 0}
   targetScale: {x: 0.07, y: 0.07, z: 0.07}
   inkLauncherPrefab: {fileID: 0}
   inkLauncherModel: {fileID: 0}
   inkMuzzlePoint: {fileID: 0}
   inkPrefab: {fileID: 0}
+  inkMuzzleVfxPrefab: {fileID: 0}
   inkTargetScale: {x: 1, y: 1, z: 1}
   deployDuration: 0.35
   autoFireTimeout: 3

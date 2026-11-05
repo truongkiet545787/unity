@@ -2,13 +2,14 @@ using PoseKart.Race;
 using PoseKart.Vehicle;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Serialization;
 
 namespace PoseKart.UI
 {
     /// <summary>
     /// Asphalt 9-style trapezoid graphic for the Nitro HUD.
     /// Draws the dark slanted track, dynamic bi-linear gradient fill,
-    /// animated Cyan & Purple timing zones during Single Nitro,
+    /// an emphasized Perfect timing zone during Single Nitro,
     /// and an intense glowing flare tip synchronized with the vehicle's Nitro system.
     /// </summary>
     [DisallowMultipleComponent]
@@ -22,8 +23,18 @@ namespace PoseKart.UI
 
         [Header("Bar Geometry")]
         [SerializeField, Range(0f, 1f)] private float fillAmount;
+        [SerializeField, Range(0f, 1f)] private float trailingFillAmount;
         [SerializeField, Min(0f)] private float slantWidth = 16f;
         [SerializeField, Min(0f)] private float edgeHighlightWidth = 8f;
+        [SerializeField, Min(0f)] private float timingCursorWidth = 5f;
+        [SerializeField, Min(0f)] private float timingDividerWidth = 3f;
+        [SerializeField, Range(0f, 1f)] private float timingZoneAlpha = 0.92f;
+        [SerializeField, Range(0f, 1f)] private float timingGlowAlpha = 0.3f;
+        [SerializeField, Min(0f)] private float timingPulseSpeed = 12f;
+
+        [Header("Armed Nitro Stage Band")]
+        [Tooltip("Start of the large purple band while the existing CarController double-tap window can still activate Shockwave. This is visual placement only; it does not change timing.")]
+        [SerializeField, Range(0f, 1f)] private float shockwaveArmedBandStart01 = 0.72f;
 
         [Header("Active Colors (Runtime)")]
         [SerializeField] private Color trackColor = new Color(0.04f, 0.05f, 0.08f, 0.88f);
@@ -57,9 +68,11 @@ namespace PoseKart.UI
         [SerializeField] private Color idleEnd = new Color(1f, 0.85f, 0.12f, 1f);
 
         [Header("Perfect Nitro Timing Section")]
-        [Tooltip("Cyan section for the Perfect Nitro timing window")]
-        [SerializeField] private Color redSectionStart = new Color(0.08f, 0.82f, 1f, 1f);
-        [SerializeField] private Color redSectionEnd = new Color(0.35f, 1f, 1f, 1f);
+        [Tooltip("Blue/cyan section for the Perfect Nitro timing window")]
+        [FormerlySerializedAs("redSectionStart")]
+        [SerializeField] private Color perfectSectionStart = new Color(0.08f, 0.82f, 1f, 1f);
+        [FormerlySerializedAs("redSectionEnd")]
+        [SerializeField] private Color perfectSectionEnd = new Color(0.35f, 1f, 1f, 1f);
 
         private float nextCarResolveTime;
 
@@ -89,6 +102,20 @@ namespace PoseKart.UI
             set => autoSyncWithCar = value;
         }
 
+        public float TrailingFillAmount
+        {
+            get => trailingFillAmount;
+            set
+            {
+                float clamped = Mathf.Clamp01(value);
+                if (Mathf.Approximately(trailingFillAmount, clamped))
+                    return;
+
+                trailingFillAmount = clamped;
+                SetVerticesDirty();
+            }
+        }
+
         protected override void Awake()
         {
             base.Awake();
@@ -115,6 +142,7 @@ namespace PoseKart.UI
             if (targetCar != null && targetCar.isActiveAndEnabled)
             {
                 SetNitroMode(targetCar.CurrentNitroMode, targetCar.NitroFill01, targetCar.IsNitroBoosting);
+                TrailingFillAmount = targetCar.NitroFill01;
             }
         }
 
@@ -129,6 +157,7 @@ namespace PoseKart.UI
         public void SetNitroMode(CarController.NitroMode mode, float amount, bool isBoosting)
         {
             fillAmount = Mathf.Clamp01(amount);
+            trailingFillAmount = Mathf.Max(fillAmount, trailingFillAmount);
 
             if (isBoosting)
             {
@@ -184,6 +213,7 @@ namespace PoseKart.UI
         public void SetVisuals(float amount, Color track, Color fill, Color highlight)
         {
             fillAmount = Mathf.Clamp01(amount);
+            trailingFillAmount = fillAmount;
             trackColor = track;
             fillStartColor = Color.Lerp(fill, Color.black, 0.15f);
             fillEndColor = fill;
@@ -197,6 +227,7 @@ namespace PoseKart.UI
         public void SetVisuals(float amount, Color track, Color startColor, Color endColor, Color highlight)
         {
             fillAmount = Mathf.Clamp01(amount);
+            trailingFillAmount = fillAmount;
             trackColor = track;
             fillStartColor = startColor;
             fillEndColor = endColor;
@@ -218,13 +249,42 @@ namespace PoseKart.UI
             AddTrapezoid(vertexHelper, left, right, bottom, top, slant, trackColor);
 
             float amount = Mathf.Clamp01(fillAmount);
+            float trailingAmount = Mathf.Max(amount, Mathf.Clamp01(trailingFillAmount));
             bool isTimingActive = targetCar != null && targetCar.IsNitroTimingActive;
+            bool shockwaveArmed = isTimingActive &&
+                targetCar != null && targetCar.IsShockwaveTimingNow;
 
             if (amount <= 0.0001f || rect.width <= 0.001f)
                 return;
 
-            // 3. Main fuel fill (Yellow in Single, or Double, Perfect, Triple)
-            if (isTimingActive)
+            // When pickup/drift charge is smoothed, show a restrained trailing
+            // highlight for the real charge so the primary fill never feels
+            // disconnected from gameplay.
+            if (trailingAmount > amount + 0.0001f)
+            {
+                Color trailStart = Color.Lerp(fillStartColor, Color.white, 0.25f);
+                Color trailEnd = Color.Lerp(fillEndColor, Color.white, 0.35f);
+                trailStart.a *= 0.42f;
+                trailEnd.a *= 0.42f;
+                AddSlantedSlice(vertexHelper, amount, trailingAmount,
+                    left, right, bottom, top, slant, trailStart, trailEnd);
+            }
+
+            // 3. Main fuel fill. A full idle tank remains yellow. Once the
+            // existing CarController state arms the Shockwave double-tap window,
+            // the filled portion is split into yellow -> purple so the player
+            // gets a strong visual cue without changing gameplay timing.
+            if (shockwaveArmed)
+            {
+                float purpleStart = Mathf.Clamp01(shockwaveArmedBandStart01);
+                AddSlantedSlice(vertexHelper, 0f, Mathf.Min(amount, purpleStart),
+                    left, right, bottom, top, slant,
+                    fillStartColor, fillEndColor);
+                AddSlantedSlice(vertexHelper, purpleStart, amount,
+                    left, right, bottom, top, slant,
+                    shockwaveStart, shockwaveEnd);
+            }
+            else if (isTimingActive)
             {
                 float redMin = targetCar != null ? targetCar.PerfectZoneMin01 : 0.72f;
                 float redMax = targetCar != null ? targetCar.PerfectZoneMax01 : 0.86f;
@@ -251,37 +311,73 @@ namespace PoseKart.UI
 
             // Draw the Perfect section after the fuel so it remains visible
             // even when the current amount is above the timing window.
-            if (isTimingActive)
+            if (isTimingActive && !shockwaveArmed)
             {
                 float redMin = targetCar != null ? targetCar.PerfectZoneMin01 : 0.72f;
                 float redMax = targetCar != null ? targetCar.PerfectZoneMax01 : 0.86f;
+                bool isPerfect = targetCar != null && targetCar.IsPerfectTimingNow;
 
                 if (redMax > redMin)
                 {
-                    bool isPerfect = targetCar != null && targetCar.IsPerfectTimingNow;
-                    Color rStart = redSectionStart;
-                    Color rEnd = redSectionEnd;
+                    Color rStart = perfectSectionStart;
+                    Color rEnd = perfectSectionEnd;
+                    rStart.a *= timingZoneAlpha;
+                    rEnd.a *= timingZoneAlpha;
 
                     if (isPerfect)
                     {
-                        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 28f);
-                        rStart = Color.Lerp(rStart, Color.white, pulse * 0.7f);
-                        rEnd = Color.Lerp(rEnd, Color.white, pulse * 0.85f);
+                        float pulse = 0.5f + 0.5f *
+                            Mathf.Sin(Time.unscaledTime * timingPulseSpeed);
+                        rStart = Color.Lerp(rStart, Color.white, pulse * 0.75f);
+                        rEnd = Color.Lerp(rEnd, Color.white, pulse * 0.9f);
+                        rStart.a = Mathf.Lerp(rStart.a, 1f, pulse * timingGlowAlpha);
+                        rEnd.a = Mathf.Lerp(rEnd.a, 1f, pulse * timingGlowAlpha);
                     }
 
-                    AddSlantedSlice(vertexHelper, redMin, redMax,
+                    // Never draw a timing band beyond the actual filled amount.
+                    float visibleRedMax = Mathf.Min(redMax, amount);
+                    AddSlantedSlice(vertexHelper, redMin, visibleRedMax,
                         left, right, bottom, top, slant, rStart, rEnd);
 
-                    Color dividerCol = new Color(1f, 1f, 1f, isPerfect ? 1f : 0.9f);
-                    AddDividerLine(vertexHelper, redMin, left, right,
-                        bottom, top, slant, dividerCol, 2f);
-                    AddDividerLine(vertexHelper, redMax, left, right,
-                        bottom, top, slant, dividerCol, 2f);
+                    if (visibleRedMax > redMin)
+                    {
+                        Color dividerCol = new Color(1f, 1f, 1f, isPerfect ? 1f : 0.9f);
+                        AddDividerLine(vertexHelper, redMin, left, right,
+                            bottom, top, slant, dividerCol, timingDividerWidth);
+                        AddDividerLine(vertexHelper, visibleRedMax, left, right,
+                            bottom, top, slant, dividerCol, timingDividerWidth);
+                    }
                 }
 
                 // Keep the current fuel cursor above the timing overlay.
                 AddDividerLine(vertexHelper, amount, left, right,
-                    bottom, top, slant, Color.white, 3f);
+                    bottom, top, slant, Color.white, timingCursorWidth);
+
+                // A soft cyan halo makes the active timing cursor readable
+                // without changing any gameplay timing.
+                if (isPerfect)
+                {
+                    Color halo = perfectSectionEnd;
+                    halo.a = timingGlowAlpha;
+                    AddDividerLine(vertexHelper, amount, left, right,
+                        bottom, top, slant, halo, timingCursorWidth * 2.2f);
+                }
+            }
+            else if (shockwaveArmed)
+            {
+                float purpleStart = Mathf.Clamp01(shockwaveArmedBandStart01);
+                Color pulseColor = shockwaveEnd;
+                float pulse = 0.5f + 0.5f *
+                    Mathf.Sin(Time.unscaledTime * timingPulseSpeed);
+                pulseColor = Color.Lerp(pulseColor, Color.white, pulse * 0.65f);
+                pulseColor.a = Mathf.Lerp(0.75f, 1f, pulse);
+
+                AddDividerLine(vertexHelper, purpleStart,
+                    left, right, bottom, top, slant,
+                    pulseColor, timingDividerWidth * 1.25f);
+                AddDividerLine(vertexHelper, amount,
+                    left, right, bottom, top, slant,
+                    shockwaveHighlight, timingCursorWidth);
             }
 
             // 4. Intense glowing flare head at the leading edge

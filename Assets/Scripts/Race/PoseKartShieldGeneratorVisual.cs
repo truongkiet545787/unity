@@ -108,6 +108,7 @@ namespace PoseKart.Race
         // Instance GameObjects
         private GameObject generatorInstance;
         private GameObject forceShieldInstance;
+        private global::Shield legacyShield;
 
         // Cached Components
         private CarController car;
@@ -197,6 +198,7 @@ namespace PoseKart.Race
             {
                 forceShieldInstance.SetActive(false);
             }
+            legacyShield?.SetShieldVisible(false, false);
             currentState = ShieldVisualState.Hidden;
             isGeneratorEquipped = false;
             isShieldActive = false;
@@ -316,19 +318,52 @@ namespace PoseKart.Race
             // 4. Ensure Force Shield Instance
             if (forceShieldInstance == null && shieldCenterPoint != null)
             {
-                if (shieldCenterPoint.childCount > 0)
+                // An explicitly assigned prefab is authoritative. This is
+                // important when an older Shield child is still serialized
+                // under ShieldCenter: the old child must not silently win over
+                // the selected Bubble Shield visual.
+                if (forceShieldPrefab != null)
                 {
-                    forceShieldInstance = shieldCenterPoint.GetChild(0).gameObject;
-                }
-                else if (forceShieldPrefab != null)
-                {
+                    for (int i = 0; i < shieldCenterPoint.childCount; i++)
+                    {
+                        Transform child = shieldCenterPoint.GetChild(i);
+                        if (child == null)
+                            continue;
+
+                        global::Shield legacy =
+                            child.GetComponentInChildren<global::Shield>(true);
+                        if (child.name == "ForceShieldInstance" || legacy != null)
+                            child.gameObject.SetActive(false);
+                    }
+
                     forceShieldInstance = Instantiate(forceShieldPrefab, shieldCenterPoint);
                     forceShieldInstance.name = "ForceShieldInstance";
+                }
+                else
+                {
+                    // Backward-compatible fallback for prefabs that have no
+                    // explicit Force Shield reference yet.
+                    for (int i = 0; i < shieldCenterPoint.childCount; i++)
+                    {
+                        global::Shield candidate =
+                            shieldCenterPoint.GetChild(i)
+                                .GetComponentInChildren<global::Shield>(true);
+                        if (candidate != null)
+                        {
+                            forceShieldInstance = candidate.gameObject;
+                            break;
+                        }
+                    }
+
+                    if (forceShieldInstance == null && shieldCenterPoint.childCount > 0)
+                        forceShieldInstance = shieldCenterPoint.GetChild(0).gameObject;
                 }
             }
 
             if (forceShieldInstance != null)
             {
+                legacyShield = forceShieldInstance.GetComponentInChildren<global::Shield>(true);
+
                 forceShieldInstance.transform.localPosition = shieldLocalOffset;
                 forceShieldInstance.transform.localRotation = Quaternion.Euler(shieldLocalEuler);
 
@@ -342,14 +377,15 @@ namespace PoseKart.Race
                     rb.isKinematic = true;
                 }
 
-                // Ensure visual colliders do not block kart movement or driving
+                // This is a visual-only shield. Disable asset/demo colliders
+                // completely so they cannot intercept pickups, projectiles or
+                // vehicle triggers; KartItemDefense remains the only gameplay
+                // authority for Shield protection.
                 Collider[] cols = forceShieldInstance.GetComponentsInChildren<Collider>(true);
                 for (int i = 0; i < cols.Length; i++)
                 {
-                    if (cols[i] != null && !cols[i].isTrigger)
-                    {
-                        cols[i].isTrigger = true;
-                    }
+                    if (cols[i] != null)
+                        cols[i].enabled = false;
                 }
             }
 
@@ -718,6 +754,7 @@ namespace PoseKart.Race
 
             forceShieldInstance.SetActive(true);
             forceShieldInstance.transform.localScale = Vector3.zero;
+            legacyShield?.SetShieldVisible(true, true);
 
             if (anim != null)
             {
@@ -759,6 +796,13 @@ namespace PoseKart.Race
             // Impact Pulse Animation
             if (forceShieldInstance != null && forceShieldInstance.activeSelf)
             {
+                PoseKartShieldVisualAnimator shieldAnimator =
+                    forceShieldInstance.GetComponent<PoseKartShieldVisualAnimator>();
+                if (shieldAnimator != null)
+                    shieldAnimator.FlashImpact(impactPoint);
+
+                legacyShield?.HitShield(vfxPos);
+
                 if (activeImpactAnim != null)
                     StopCoroutine(activeImpactAnim);
                 activeImpactAnim = StartCoroutine(ImpactPulseCoroutine());
@@ -824,6 +868,7 @@ namespace PoseKart.Race
             // Collapse Force Shield
             if (forceShieldInstance != null && forceShieldInstance.activeSelf)
             {
+                legacyShield?.SetShieldVisible(false, true);
                 Vector3 startScale = forceShieldInstance.transform.localScale;
                 float elapsed = 0f;
                 while (elapsed < deactivationDuration)
@@ -861,6 +906,7 @@ namespace PoseKart.Race
 
             if (forceShieldInstance != null)
             {
+                legacyShield?.SetShieldVisible(false, false);
                 forceShieldInstance.transform.localScale = Vector3.zero;
                 forceShieldInstance.SetActive(false);
             }

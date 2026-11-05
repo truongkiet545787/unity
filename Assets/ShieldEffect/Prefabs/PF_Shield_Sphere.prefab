@@ -111,3 +111,6 @@ MonoBehaviour:
   pulseSpeed: 10
   fadeInDuration: 0.2
   fadeOutDuration: 0.3
+  impactDisplacementDuration: 0.38
+  impactDisplacementMagnitude: 0.4
+  impactDissolveAmount: 0.12

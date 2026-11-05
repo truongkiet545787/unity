@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using PoseKart.Race;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -9,6 +10,18 @@ namespace PoseKart.Multiplayer
     [DisallowMultipleComponent]
     public sealed class PoseKartOnlineRaceBootstrap : MonoBehaviour
     {
+        private static readonly string[] AiDisplayNames =
+        {
+            "AI Azure",
+            "AI Coral",
+            "AI Sunset",
+            "AI Neon",
+            "AI Ruby",
+            "AI Jade",
+            "AI Violet",
+            "AI Turbo"
+        };
+
         [Header("Network Player")]
         [SerializeField]
         private GameObject networkPlayerPrefab;
@@ -297,6 +310,17 @@ namespace PoseKart.Multiplayer
                 aiObject.name =
                     $"Network_AI_{i + 1}";
 
+                string aiDisplayName =
+                    GetAIDisplayName(i);
+
+                RaceParticipant aiParticipant =
+                    aiObject.GetComponent<RaceParticipant>();
+                aiParticipant?.SetRacerName(aiDisplayName);
+
+                PoseKartNetworkAI aiSync =
+                    aiObject.GetComponent<PoseKartNetworkAI>();
+                aiSync?.SetServerDisplayName(aiDisplayName);
+
 
                 NetworkObject netObject =
                     aiObject.GetComponent<NetworkObject>();
@@ -323,11 +347,21 @@ namespace PoseKart.Multiplayer
 
                 Debug.Log(
                     $"[OnlineRaceBootstrap] " +
-                    $"Spawned AI {i + 1} " +
+                    $"Spawned {aiDisplayName} " +
                     $"at Spawn_{spawnIndex + 1}",
                     aiObject
                 );
             }
+        }
+
+        private static string GetAIDisplayName(int index)
+        {
+            string baseName =
+                AiDisplayNames[index % AiDisplayNames.Length];
+            int cycle = index / AiDisplayNames.Length;
+            return cycle == 0
+                ? baseName
+                : $"{baseName} {cycle + 1}";
         }
 
         // =========================================================

@@ -1,10 +1,11 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace PoseKart.Stunts
 {
     /// <summary>
     /// Asphalt 8-style Stunt Ramp metadata and launch trigger.
-    /// Supports Normal Jump (with Drift-initiated Flat Spin), Barrel Roll ramps, and Special Flip ramps.
+    /// Supports Normal Jump (with Drift-initiated Flat Spin), Barrel Roll ramps, and Front/Back Flip ramps.
     /// Provides arcade launch assist, custom rotation speed/direction, and visual gizmos.
     /// </summary>
     [DisallowMultipleComponent]
@@ -12,7 +13,7 @@ namespace PoseKart.Stunts
     public sealed class PoseKartStuntRamp : MonoBehaviour
     {
         [Header("Ramp Classification")]
-        [Tooltip("Loại dốc: NormalRamp (Nhảy thường / Flat Spin khi Drift), BarrelRollRamp (Cuộn lốc xoáy), SpecialFlipRamp (Lộn nhào).")]
+        [Tooltip("Loại dốc: NormalRamp (Nhảy thường / Flat Spin khi Drift), BarrelRollRamp (Cuộn lốc xoáy), FlipRamp (Front/Back Flip).")]
         [SerializeField] private RampType rampType = RampType.NormalRamp;
 
         [Header("Activation & Dynamics")]
@@ -28,8 +29,9 @@ namespace PoseKart.Stunts
         [Tooltip("Chiều xoay: True là theo chiều kim đồng hồ, False là ngược chiều.")]
         [SerializeField] private bool clockwise = true;
 
-        [Tooltip("Loại lộn nhào (chỉ áp dụng nếu RampType là SpecialFlipRamp).")]
-        [SerializeField] private StuntType specialFlipType = StuntType.FrontFlip;
+        [Tooltip("Loại lộn nhào (chỉ áp dụng nếu RampType là FlipRamp).")]
+        [FormerlySerializedAs("specialFlipType")]
+        [SerializeField] private StuntType flipType = StuntType.FrontFlip;
 
         [Header("Arcade Launch Assist")]
         [Tooltip("Tác động xung lực trợ lực bay để tạo quỹ đạo bổng cao vút chuẩn Asphalt 8.")]
@@ -50,14 +52,29 @@ namespace PoseKart.Stunts
         public float ArmWindow => armWindow;
         public float RotationDuration => rotationDuration;
         public int RotationDirection => clockwise ? 1 : -1;
-        public StuntType SpecialFlipType => specialFlipType;
+        public StuntType FlipType => flipType;
         public bool ApplyLaunchImpulse => applyLaunchImpulse;
         public float UpwardVelocityChange => upwardVelocityChange;
         public float ForwardVelocityChange => forwardVelocityChange;
         public float RewardMultiplier => rewardMultiplier;
         public AudioClip TakeoffSound => takeoffSound;
 
+        private void Awake()
+        {
+            EnsureTriggerCollider();
+        }
+
+        private void OnValidate()
+        {
+            EnsureTriggerCollider();
+        }
+
         private void Reset()
+        {
+            EnsureTriggerCollider();
+        }
+
+        private void EnsureTriggerCollider()
         {
             Collider col = GetComponent<Collider>();
             if (col != null)
@@ -69,10 +86,10 @@ namespace PoseKart.Stunts
         private void OnTriggerEnter(Collider other)
         {
             PoseKartStuntController stunt = other.GetComponentInParent<PoseKartStuntController>();
-            if (stunt != null)
+            if (stunt != null && !stunt.IsNetworkPresentationOnly)
             {
-                stunt.TryArmFromRamp(this);
-                if (takeoffVfx != null)
+                bool armed = stunt.TryArmFromRamp(this);
+                if (armed && takeoffVfx != null)
                 {
                     takeoffVfx.Play(true);
                 }
@@ -87,7 +104,7 @@ namespace PoseKart.Stunts
                 case RampType.BarrelRollRamp:
                     gizmoColor = clockwise ? new Color(1f, 0.85f, 0f, 0.85f) : new Color(1f, 0.45f, 0f, 0.85f);
                     break;
-                case RampType.SpecialFlipRamp:
+                case RampType.FlipRamp:
                     gizmoColor = new Color(1f, 0.2f, 0.6f, 0.85f);
                     break;
                 default:

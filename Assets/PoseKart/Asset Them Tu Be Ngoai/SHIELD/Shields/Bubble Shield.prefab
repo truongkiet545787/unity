@@ -179,3 +179,4 @@ MonoBehaviour:
   _DisplacementMagnitude: 0.4
   _LerpSpeed: 2
   _DisolveSpeed: 1
+  _enableDemoInput: 0

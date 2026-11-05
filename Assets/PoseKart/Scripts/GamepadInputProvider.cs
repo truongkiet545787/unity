@@ -25,6 +25,10 @@ namespace PoseKart.Input
         [SerializeField] private GameObject pausePanel;
         [SerializeField] private bool managePauseLocally = true;
 
+        [Header("Utility Controls")]
+        [Tooltip("Vehicle reset is the controller equivalent of the keyboard R key.")]
+        [SerializeField] private CarResetController resetController;
+
         [Header("Camera Cycle")]
         [SerializeField] private UnityEngine.Camera[] gameplayCameras;
         [SerializeField] private int startingCameraIndex;
@@ -48,6 +52,7 @@ namespace PoseKart.Input
         {
             if (carController == null) carController = GetComponent<CarController>();
             if (itemInventory == null) itemInventory = GetComponent<KartItemInventory>();
+            if (resetController == null) resetController = GetComponent<CarResetController>();
 
             LoadSettings();
 
@@ -84,6 +89,10 @@ namespace PoseKart.Input
             if (pad.buttonNorth.wasPressedThisFrame)
                 CycleCamera();
 
+            // D-pad Down = Reset vehicle (keyboard R equivalent)
+            if (pad.dpad.down.wasPressedThisFrame && resetController != null)
+                resetController.ResetVehicle();
+
             // Start / Options = Pause
             if (pad.startButton.wasPressedThisFrame)
                 TogglePause();
@@ -111,6 +120,14 @@ namespace PoseKart.Input
 
         private void CycleCamera()
         {
+            // The current race camera owns the C-key first/third-person switch.
+            // Reuse that same path for Y/Triangle so there is only one camera
+            // state and no second Main Camera is created.
+            PoseKartCinematicCamera cinematicCamera =
+                FindFirstObjectByType<PoseKartCinematicCamera>();
+            if (cinematicCamera != null && cinematicCamera.ToggleFirstPersonView())
+                return;
+
             if (gameplayCameras == null || gameplayCameras.Length <= 1) return;
             activeCameraIndex = (activeCameraIndex + 1) % gameplayCameras.Length;
             ApplyCameraIndex(activeCameraIndex);

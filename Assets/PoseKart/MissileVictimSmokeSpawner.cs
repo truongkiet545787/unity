@@ -21,8 +21,25 @@ namespace PoseKart.Race
         [SerializeField, Min(0.1f)]
         private float smokeDuration = 1.8f;
 
-        public void Spawn(Transform victim)
+        public static void SpawnForVictim(Transform victim, float duration = -1f)
         {
+            if (victim == null)
+                return;
+
+            MissileVictimSmokeSpawner spawner =
+                victim.GetComponent<MissileVictimSmokeSpawner>();
+
+            if (spawner == null)
+                spawner = victim.gameObject.AddComponent<MissileVictimSmokeSpawner>();
+
+            spawner.Spawn(victim, duration);
+        }
+
+        public void Spawn(Transform victim, float duration = -1f)
+        {
+            if (smokePrefab == null)
+                smokePrefab = Resources.Load<GameObject>("Missile_Victim_Smoke");
+
             if (smokePrefab == null)
             {
                 Debug.LogWarning(
@@ -47,7 +64,9 @@ namespace PoseKart.Race
             if (controller == null)
                 controller = instance.AddComponent<MissileVictimSmoke>();
 
-            controller.AttachToVictim(victim, smokeDuration);
+            controller.AttachToVictim(
+                victim,
+                duration > 0f ? duration : smokeDuration);
         }
     }
 }

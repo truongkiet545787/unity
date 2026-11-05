@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using Unity.Netcode;
 
 namespace PoseKart.Vehicle
 {
@@ -16,6 +17,8 @@ namespace PoseKart.Vehicle
         [Header("Suspension Visual (optional but recommended)")]
         [Tooltip("Drag a mesh-only BODY/CHASSIS pivot. NEVER drag the Rigidbody root or a pivot containing wheel meshes/colliders.")]
         [SerializeField] private Transform visualBody;
+        [SerializeField, Range(0.1f, 0.6f)]
+        private float reboundStrength = 0.38f;
         [SerializeField, Range(0f, 0.35f)] private float maximumBodyCompression = 0.16f;
         [SerializeField, Range(0f, 12f)] private float maximumNoseDipDegrees = 4.5f;
         [SerializeField, Range(1f, 12f)] private float suspensionFrequency = 5f;
@@ -77,6 +80,22 @@ namespace PoseKart.Vehicle
         private Material generatedSparksMaterial;
         private Texture2D generatedDustTexture;
         private Texture2D generatedSparkTexture;
+
+        /// <summary>
+        /// Raised only after a real road contact passes the airborne, surface-normal
+        /// and impact-speed filters. Gameplay listeners must still check their own
+        /// state (for example, whether a stunt was active).
+        /// </summary>
+        public event Action<float> GenuineGameplayLandingConfirmed;
+
+        private bool HasGameplayAuthority
+        {
+            get
+            {
+                NetworkObject networkObject = GetComponent<NetworkObject>();
+                return networkObject == null || !networkObject.IsSpawned || networkObject.IsOwner;
+            }
+        }
 
         private void Awake()
         {
@@ -203,7 +222,12 @@ namespace PoseKart.Vehicle
             springStartTime = Time.time;
             springActive = true;
 
-            if (gameplay && enableLandingRecovery && impactSpeed >= mediumLandingSpeed)
+            if (gameplay && HasGameplayAuthority && impactSpeed >= minimumLandingSpeed)
+            {
+                GenuineGameplayLandingConfirmed?.Invoke(impactSpeed);
+            }
+
+            if (gameplay && enableLandingRecovery && HasGameplayAuthority && impactSpeed >= mediumLandingSpeed)
             {
                 // Light landings never interrupt driving. Medium/heavy landings briefly
                 // reduce horizontal momentum and ramp throttle back in.
@@ -397,7 +421,9 @@ namespace PoseKart.Vehicle
             float fade = 1f - Mathf.SmoothStep(0f, 1f,
                 t / Mathf.Max(0.1f, suspensionAnimationDuration));
             float oscillation = Mathf.Sin(t * suspensionFrequency * 2f * Mathf.PI);
-            float compression = oscillation >= 0f ? oscillation : oscillation * 0.28f;
+            float compression = oscillation >= 0f
+                ? oscillation
+                : oscillation * reboundStrength;
             float amount = springStrength * Mathf.Exp(-suspensionDamping * t) * fade * compression;
             lastPositionOffset = Vector3.down * (maximumBodyCompression * amount);
             lastRotationOffset = Quaternion.Euler(maximumNoseDipDegrees * amount, 0f, 0f);

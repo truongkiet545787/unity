@@ -1,19 +1,24 @@
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Unity.Netcode;
 using TMPro;
 using PoseKart.Vehicle;
 using PoseKart.Input;
 using PoseKart.UI;
+using PoseKart.AI;
 
 namespace PoseKart.Race
 {
     public enum RocketStartQuality
     {
         None = 0,
-        DisqualifiedEarly = 1,
+        TooEarly = 1,
+        DisqualifiedEarly = TooEarly,
         Good = 2,
-        Perfect = 3
+        Perfect = 3,
+        TooLate = 4,
+        NoBoost = 5
     }
 
     /// <summary>
@@ -45,8 +50,21 @@ namespace PoseKart.Race
         [SerializeField, Min(1f)] private float goodImpulse = 7.5f;
         [SerializeField, Min(0.1f)] private float goodDuration = 0.95f;
 
+        [Header("AI Rocket Start")]
+        [Tooltip("Allows server-owned AI to enter the same authoritative Rocket Start flow as human racers.")]
+        [SerializeField] private bool enableAiRocketStart = true;
+        [Tooltip("0 = inconsistent/no boost, 1 = highly reliable. AI still has a chance to miss and will not always Perfect.")]
+        [SerializeField, Range(0f, 1f)] private float aiSkill = 0.55f;
+        [Tooltip("Maximum deterministic timing variation applied to AI attempts.")]
+        [SerializeField, Range(0f, 0.15f)] private float aiTimingJitter = 0.05f;
+
         [Header("Visual & Effects References")]
         [SerializeField] private ParticleSystem[] exhaustParticles;
+        [Tooltip("Optional one-shot/looping Rocket Start VFX prefab. It is instantiated locally under the anchor when the Server-approved result arrives.")]
+        [SerializeField] private GameObject rocketStartVfxPrefab;
+        [Tooltip("Muzzle/wheel anchor for the separate Rocket Start VFX prefab. Falls back to this vehicle transform when empty.")]
+        [SerializeField] private Transform rocketStartVfxAnchor;
+        [SerializeField, Min(0.1f)] private float rocketStartVfxLifetime = 1.25f;
 
         [Header("UI Feedback (Editable Hierarchy)")]
         [SerializeField] private GameObject feedbackRoot;
@@ -69,8 +87,21 @@ namespace PoseKart.Race
         private int lastHandNitroId = 0;
         private bool wasHandThrottleHigh = false;
         private float feedbackFadeTimer = 0f;
+        private PoseKartNetworkItemBridge networkBridge;
+        private bool countdownCycleActive;
+        private bool authoritativeInputRegistered;
+        private float authoritativeSecondsBeforeGo = -1f;
+        private bool resultPublished;
+        private bool resultApplied;
+        private bool aiWillAttempt;
+        private float aiTargetSecondsBeforeGo;
+        private RaceManager subscribedRaceManager;
+        private GameObject activeRocketStartVfx;
+        private bool preparingVisualActive;
 
         public RocketStartQuality Quality => quality;
+        public bool IsPreparingVisual =>
+            preparingVisualActive && !resultPublished && !resultApplied;
 
         private void Reset()
         {
@@ -85,25 +116,26 @@ namespace PoseKart.Race
         private void OnEnable()
         {
             ResolveReferences();
-            if (raceManager != null)
-            {
-                raceManager.RaceStartedEvent += HandleRaceStarted;
-            }
+            SubscribeRaceManager();
             ResetState();
         }
 
         private void OnDisable()
         {
-            if (raceManager != null)
+            if (subscribedRaceManager != null)
             {
-                raceManager.RaceStartedEvent -= HandleRaceStarted;
+                subscribedRaceManager.RaceStartedEvent -= HandleRaceStarted;
+                subscribedRaceManager = null;
             }
+
+            StopRocketStartVfx();
         }
 
         public void ResolveReferences()
         {
             if (carController == null) carController = GetComponent<CarController>();
             if (raceManager == null) raceManager = FindFirstObjectByType<RaceManager>();
+            if (networkBridge == null) networkBridge = GetComponent<PoseKartNetworkItemBridge>();
             if (handProvider == null) handProvider = GetComponent<PoseKartHandInputProvider>();
             if (udpReceiver == null) udpReceiver = FindFirstObjectByType<PoseKartHandUdpReceiver>();
             if (cinematicCamera == null) cinematicCamera = FindFirstObjectByType<PoseKartCinematicCamera>();
@@ -140,6 +172,13 @@ namespace PoseKart.Race
             inputRegistered = false;
             registeredTimeBeforeGo = -1f;
             wasHandThrottleHigh = false;
+            authoritativeInputRegistered = false;
+            authoritativeSecondsBeforeGo = -1f;
+            resultPublished = false;
+            resultApplied = false;
+            aiWillAttempt = false;
+            aiTargetSecondsBeforeGo = -1f;
+            preparingVisualActive = false;
             if (udpReceiver != null)
             {
                 lastHandNitroId = udpReceiver.NitroPressId;
@@ -152,62 +191,115 @@ namespace PoseKart.Race
             {
                 feedbackRoot.SetActive(false);
             }
+
+            StopRocketStartVfx();
+        }
+
+        private void BeginCountdownCycle()
+        {
+            ResetState();
+            countdownCycleActive = true;
+
+            if (IsAiRacer())
+                PlanAiAttempt();
         }
 
         private void Update()
         {
             UpdateFeedbackAnimation();
 
-            if (raceManager == null) return;
+            if (raceManager == null)
+                ResolveReferences();
+            if (raceManager == null)
+                return;
+            SubscribeRaceManager();
 
-            // Chỉ lắng nghe và phân tích input trong giai đoạn Countdown
             if (!raceManager.IsInCountdown)
             {
+                // Waiting means a new race start may be armed later. Keep the
+                // component safe for restart/cancel without touching Racing.
+                if (raceManager.State != RaceState.Racing && countdownCycleActive)
+                {
+                    ResetState();
+                    countdownCycleActive = false;
+                }
                 return;
             }
+
+            if (!countdownCycleActive)
+                BeginCountdownCycle();
+
+            if (!CanReadLocalInput())
+                return;
 
             float secondsUntilGo = raceManager.SecondsUntilGo;
 
-            // 1. Kiểm tra giữ ga quá sớm trước khi cửa sổ mở
-            if (penalizeEarlyHold && !heldTooEarly)
+            if (IsAiRacer())
             {
-                if (secondsUntilGo > goodWindow && IsAcceleratingCurrentFrame())
+                if (enableAiRocketStart && aiWillAttempt && !inputRegistered &&
+                    secondsUntilGo <= aiTargetSecondsBeforeGo && secondsUntilGo > 0f)
                 {
-                    heldTooEarly = true;
-                    quality = RocketStartQuality.DisqualifiedEarly;
+                    SubmitAttempt();
                 }
-            }
-
-            // 2. Nếu đã bị phạm quy giữ sớm, không cho nhận thêm
-            if (heldTooEarly)
-            {
                 return;
             }
 
-            // 3. Kiểm tra cú bấm tăng tốc đúng nhịp trong cửa sổ hợp lệ
-            if (!inputRegistered && secondsUntilGo <= goodWindow && secondsUntilGo > 0f)
-            {
-                if (WasAccelerationTriggeredThisFrame())
-                {
-                    inputRegistered = true;
-                    registeredTimeBeforeGo = secondsUntilGo;
+            // Holding the existing accelerator is intentional. The first
+            // observed hold is sent once; the Server measures its own receipt
+            // time against the shared countdown clock.
+            if (!inputRegistered && IsAccelerationHeld())
+                SubmitAttempt();
+        }
 
-                    if (secondsUntilGo <= perfectWindow)
-                    {
-                        quality = RocketStartQuality.Perfect;
-                    }
-                    else
-                    {
-                        quality = RocketStartQuality.Good;
-                    }
-                }
+        private void SubscribeRaceManager()
+        {
+            if (subscribedRaceManager == raceManager)
+                return;
+
+            if (subscribedRaceManager != null)
+                subscribedRaceManager.RaceStartedEvent -= HandleRaceStarted;
+
+            subscribedRaceManager = raceManager;
+            if (subscribedRaceManager != null)
+                subscribedRaceManager.RaceStartedEvent += HandleRaceStarted;
+        }
+
+        private bool IsAiRacer()
+        {
+            // The human NetworkPlayer prefab also carries an AIInputProvider
+            // component for reuse, but it is disabled there. Only an enabled
+            // provider identifies a server-driven AI racer.
+            AIInputProvider aiProvider = GetComponent<AIInputProvider>();
+            return aiProvider != null && aiProvider.enabled;
+        }
+
+        private void SubmitAttempt()
+        {
+            if (inputRegistered || resultPublished)
+                return;
+
+            inputRegistered = true;
+
+            // Bật phản hồi bánh xe ngay trên máy người bấm để không phải chờ
+            // round-trip tới Server. Đây chỉ là visual preparation; kết quả
+            // Rocket Start và boost gameplay vẫn do Server xác nhận.
+            SetPreparingVisual(true);
+
+            if (networkBridge != null &&
+                networkBridge.IsSpawned &&
+                PoseKartNetworkItemBridge.IsOnlineRace)
+            {
+                networkBridge.RequestRocketStartInput();
+                return;
             }
+
+            RegisterAuthoritativeInput(GetRaceClockNow());
         }
 
         /// <summary>
         /// Kiểm tra xem người chơi có đang giữ bất kỳ phím/cử chỉ ga nào ở frame hiện tại không.
         /// </summary>
-        private bool IsAcceleratingCurrentFrame()
+        private bool IsAccelerationHeld()
         {
             Keyboard kb = Keyboard.current;
             if (kb != null)
@@ -216,6 +308,12 @@ namespace PoseKart.Race
                 {
                     return true;
                 }
+            }
+
+            Gamepad pad = Gamepad.current;
+            if (pad != null && pad.rightTrigger.isPressed)
+            {
+                return true;
             }
 
             if (udpReceiver != null && udpReceiver.IsTracking)
@@ -229,47 +327,14 @@ namespace PoseKart.Race
             return false;
         }
 
-        /// <summary>
-        /// Phát hiện cú nhấn ga mới toanh (fresh press / surge) trong frame này.
-        /// Hỗ trợ cả Bàn phím lẫn MediaPipe webcam gesture.
-        /// </summary>
-        private bool WasAccelerationTriggeredThisFrame()
+        private double GetRaceClockNow()
         {
-            // Keyboard Trigger
-            Keyboard kb = Keyboard.current;
-            if (kb != null)
-            {
-                if (kb.wKey.wasPressedThisFrame || kb.upArrowKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame)
-                {
-                    return true;
-                }
-            }
+            PoseKart.Multiplayer.PoseKartNetworkRaceClock clock =
+                PoseKart.Multiplayer.PoseKartNetworkRaceClock.Instance;
+            if (clock != null && clock.IsSpawned)
+                return clock.ServerNow;
 
-            // MediaPipe Hand Control Trigger
-            if (udpReceiver != null && udpReceiver.IsTracking)
-            {
-                // Cách 1: Nắm tay (Fist / Nitro gesture event)
-                if (udpReceiver.NitroPressId > lastHandNitroId)
-                {
-                    lastHandNitroId = udpReceiver.NitroPressId;
-                    return true;
-                }
-
-                // Cách 2: Vung tay ga (Throttle surge từ < 0.25 vọt lên >= 0.65)
-                float handThrottle = udpReceiver.Throttle;
-                bool isHigh = handThrottle >= 0.65f;
-                if (isHigh && !wasHandThrottleHigh)
-                {
-                    wasHandThrottleHigh = true;
-                    return true;
-                }
-                if (handThrottle < 0.30f)
-                {
-                    wasHandThrottleHigh = false;
-                }
-            }
-
-            return false;
+            return Time.timeAsDouble;
         }
 
         /// <summary>
@@ -277,51 +342,315 @@ namespace PoseKart.Race
         /// </summary>
         private void HandleRaceStarted()
         {
-            if (quality == RocketStartQuality.Perfect)
+            bool isOnline = NetworkManager.Singleton != null &&
+                            NetworkManager.Singleton.IsListening;
+
+            // Only the Server finalizes network results. Offline keeps the
+            // same component and event flow without creating another start path.
+            if (!isOnline || NetworkManager.Singleton.IsServer)
+                FinalizeAtGo();
+        }
+
+        private void PlanAiAttempt()
+        {
+            aiWillAttempt = false;
+            aiTargetSecondsBeforeGo = -1f;
+
+            if (!enableAiRocketStart)
+                return;
+
+            float firstRoll = Deterministic01(17);
+            float noBoostChance = Mathf.Lerp(0.48f, 0.04f, aiSkill);
+            if (firstRoll < noBoostChance)
+                return;
+
+            float perfectChance = Mathf.Lerp(0.08f, 0.72f, aiSkill);
+            float secondRoll = Deterministic01(31);
+            bool perfect = secondRoll < perfectChance;
+            float jitter = (Deterministic01(47) * 2f - 1f) * aiTimingJitter;
+
+            if (perfect)
             {
-                ExecuteLaunch(perfectImpulse, perfectDuration, "PERFECT START!", perfectStartClip, new Color(0.15f, 0.95f, 1f));
+                aiTargetSecondsBeforeGo = Mathf.Clamp(
+                    perfectWindow * 0.55f + jitter,
+                    0.02f,
+                    Mathf.Max(0.02f, perfectWindow));
             }
-            else if (quality == RocketStartQuality.Good)
+            else
             {
-                ExecuteLaunch(goodImpulse, goodDuration, "GOOD START!", goodStartClip, new Color(1f, 0.85f, 0.2f));
+                aiTargetSecondsBeforeGo = Mathf.Clamp(
+                    Mathf.Lerp(perfectWindow + 0.03f, goodWindow - 0.03f, Deterministic01(61)) + jitter,
+                    perfectWindow + 0.01f,
+                    Mathf.Max(perfectWindow + 0.01f, goodWindow));
             }
-            else if (heldTooEarly)
+
+            aiWillAttempt = true;
+        }
+
+        private float Deterministic01(int salt)
+        {
+            uint hash = (uint)(GetInstanceID() * 397 ^ salt);
+            NetworkObject networkObject = GetComponent<NetworkObject>();
+            if (networkObject != null && networkObject.IsSpawned)
+                hash ^= (uint)networkObject.NetworkObjectId;
+
+            hash ^= hash >> 16;
+            hash *= 0x7feb352d;
+            hash ^= hash >> 15;
+            hash *= 0x846ca68b;
+            hash ^= hash >> 16;
+            return (hash & 0x00ffffffu) / 16777215f;
+        }
+
+        /// <summary>
+        /// Called only by the authoritative Server-side bridge or the offline
+        /// local path. The caller supplies no client tier or boost values.
+        /// </summary>
+        public bool RegisterAuthoritativeInput(double serverTime)
+        {
+            if (resultPublished || authoritativeInputRegistered || raceManager == null)
+                return false;
+
+            if (!raceManager.IsInCountdown)
+                return false;
+
+            float secondsBeforeGo = raceManager.SecondsUntilGo;
+            if (float.IsNaN(secondsBeforeGo) || float.IsInfinity(secondsBeforeGo))
+                return false;
+
+            authoritativeInputRegistered = true;
+            authoritativeSecondsBeforeGo = Mathf.Max(0f, secondsBeforeGo);
+            registeredTimeBeforeGo = authoritativeSecondsBeforeGo;
+
+            Debug.Log(
+                $"[RocketStart] input accepted | racer={name} | " +
+                $"serverTime={serverTime:0.000} | " +
+                $"secondsBeforeGo={authoritativeSecondsBeforeGo:0.000}",
+                this);
+            return true;
+        }
+
+        public void SetPreparingVisual(bool active)
+        {
+            preparingVisualActive = active &&
+                                    !resultPublished &&
+                                    !resultApplied;
+        }
+
+        public void FinalizeAtGo()
+        {
+            if (resultPublished)
+                return;
+
+            resultPublished = true;
+            preparingVisualActive = false;
+
+            RocketStartQuality finalQuality = RocketStartQuality.NoBoost;
+            float impulse = 0f;
+            float duration = 0f;
+
+            if (authoritativeInputRegistered)
             {
-                ShowFeedback("TOO EARLY!", new Color(1f, 0.35f, 0.35f), stallClip);
+                if (authoritativeSecondsBeforeGo > goodWindow)
+                {
+                    finalQuality = RocketStartQuality.TooEarly;
+                    heldTooEarly = true;
+                }
+                else if (authoritativeSecondsBeforeGo <= 0.001f)
+                {
+                    finalQuality = RocketStartQuality.TooLate;
+                }
+                else if (authoritativeSecondsBeforeGo <= perfectWindow)
+                {
+                    finalQuality = RocketStartQuality.Perfect;
+                    impulse = perfectImpulse;
+                    duration = perfectDuration;
+                }
+                else
+                {
+                    finalQuality = RocketStartQuality.Good;
+                    impulse = goodImpulse;
+                    duration = goodDuration;
+                }
+            }
+
+            quality = finalQuality;
+
+            Debug.Log(
+                $"[RocketStart] result | racer={name} | tier={finalQuality} | " +
+                $"authoritative=true | boost={(impulse > 0f ? "yes" : "no")}",
+                this);
+
+            if (networkBridge != null && networkBridge.IsSpawned && networkBridge.IsServer)
+            {
+                networkBridge.ServerPublishRocketStartResult(
+                    finalQuality,
+                    impulse,
+                    duration);
+            }
+            else
+            {
+                ApplyReplicatedResult(finalQuality, impulse, duration, true);
             }
         }
 
-        private void ExecuteLaunch(float impulse, float duration, string bannerText, AudioClip sound, Color textColor)
+        /// <summary>
+        /// Applies a Server-approved result. Gameplay is applied only on the
+        /// physics authority; all peers may still show the launch presentation.
+        /// </summary>
+        public void ApplyReplicatedResult(
+            RocketStartQuality finalQuality,
+            float impulse,
+            float duration,
+            bool applyGameplay)
         {
-            if (carController != null)
+            if (resultApplied)
+                return;
+
+            resultApplied = true;
+            preparingVisualActive = false;
+            quality = finalQuality;
+            heldTooEarly = finalQuality == RocketStartQuality.TooEarly;
+
+            bool isLocalHuman = IsLocalHumanOwner();
+            bool hasBoost = finalQuality == RocketStartQuality.Perfect ||
+                            finalQuality == RocketStartQuality.Good;
+
+            if (applyGameplay && hasBoost && carController != null)
             {
-                // Áp dụng tăng tốc an toàn qua kiến trúc speed boost hiện có của CarController
                 carController.ApplySpeedBoost(duration, impulse);
             }
 
-            // Kích hoạt hiệu ứng ống xả
-            if (exhaustParticles != null)
+            PlayLaunchPresentation(finalQuality, isLocalHuman);
+        }
+
+        private bool CanReadLocalInput()
+        {
+            NetworkObject networkObject = GetComponent<NetworkObject>();
+            if (networkObject == null || !networkObject.IsSpawned)
+                return true;
+
+            if (networkObject.IsPlayerObject)
+                return networkObject.IsOwner;
+
+            // AI is server-owned and must be evaluated only by the Server.
+            return NetworkManager.Singleton != null &&
+                   NetworkManager.Singleton.IsServer;
+        }
+
+        private bool IsLocalHumanOwner()
+        {
+            NetworkObject networkObject = GetComponent<NetworkObject>();
+            if (networkObject == null || !networkObject.IsSpawned)
+                return !IsAiRacer();
+
+            return networkObject.IsPlayerObject && networkObject.IsOwner;
+        }
+
+        private void PlayLaunchPresentation(
+            RocketStartQuality finalQuality,
+            bool showLocalFeedback)
+        {
+            string bannerText = null;
+            Color textColor = Color.white;
+            AudioClip sound = null;
+
+            switch (finalQuality)
+            {
+                case RocketStartQuality.Perfect:
+                    bannerText = "PERFECT START!";
+                    textColor = new Color(0.15f, 0.95f, 1f);
+                    sound = perfectStartClip;
+                    break;
+                case RocketStartQuality.Good:
+                    bannerText = "GOOD START!";
+                    textColor = new Color(1f, 0.85f, 0.2f);
+                    sound = goodStartClip;
+                    break;
+                case RocketStartQuality.TooEarly:
+                    bannerText = "TOO EARLY!";
+                    textColor = new Color(1f, 0.35f, 0.35f);
+                    sound = stallClip;
+                    break;
+                case RocketStartQuality.TooLate:
+                    bannerText = "TOO LATE!";
+                    textColor = new Color(1f, 0.55f, 0.25f);
+                    sound = stallClip;
+                    break;
+                case RocketStartQuality.NoBoost:
+                    bannerText = "NO BOOST";
+                    textColor = new Color(0.75f, 0.75f, 0.75f);
+                    break;
+            }
+
+            bool launchSucceeded = finalQuality == RocketStartQuality.Perfect ||
+                                   finalQuality == RocketStartQuality.Good;
+
+            // Prefer the separately assigned Rocket Start prefab. The existing
+            // exhaust list remains a compatibility fallback for vehicles that
+            // have not been given the new prefab yet.
+            if (launchSucceeded && rocketStartVfxPrefab != null)
+            {
+                PlayRocketStartVfxPrefab();
+            }
+            else if (launchSucceeded && exhaustParticles != null)
             {
                 for (int i = 0; i < exhaustParticles.Length; i++)
                 {
                     ParticleSystem ps = exhaustParticles[i];
-                    if (ps != null && ps.name.IndexOf("exhaust", StringComparison.OrdinalIgnoreCase) >= 0
-                        || (ps != null && ps.name.IndexOf("tube", StringComparison.OrdinalIgnoreCase) >= 0)
-                        || (ps != null && ps.name.IndexOf("flame", StringComparison.OrdinalIgnoreCase) >= 0))
+                    if (ps != null &&
+                        (ps.name.IndexOf("exhaust", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         ps.name.IndexOf("tube", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         ps.name.IndexOf("flame", StringComparison.OrdinalIgnoreCase) >= 0))
                     {
                         ps.Play(true);
                     }
                 }
             }
 
-            // Kích hoạt camera punch
-            if (cinematicCamera != null)
+            if (sound != null && PoseKart.Audio.AudioManager.Instance != null)
             {
-                cinematicCamera.PlayImpact(0.85f);
+                PoseKart.Audio.AudioManager.Instance.PlaySFX(sound, launchAudioVolume);
             }
 
-            // Hiển thị chữ chúc mừng và âm thanh
-            ShowFeedback(bannerText, textColor, sound);
+            if (showLocalFeedback)
+            {
+                if (cinematicCamera != null)
+                    cinematicCamera.PlayImpact(0.85f);
+
+                if (!string.IsNullOrEmpty(bannerText))
+                    ShowFeedback(bannerText, textColor, null);
+            }
+        }
+
+        private void PlayRocketStartVfxPrefab()
+        {
+            StopRocketStartVfx();
+
+            Transform anchor = rocketStartVfxAnchor != null
+                ? rocketStartVfxAnchor
+                : transform;
+
+            activeRocketStartVfx = Instantiate(
+                rocketStartVfxPrefab,
+                anchor,
+                false);
+            activeRocketStartVfx.transform.localPosition = Vector3.zero;
+            activeRocketStartVfx.transform.localRotation = Quaternion.identity;
+
+            if (rocketStartVfxLifetime > 0f)
+            {
+                Destroy(activeRocketStartVfx, rocketStartVfxLifetime);
+            }
+        }
+
+        private void StopRocketStartVfx()
+        {
+            if (activeRocketStartVfx == null)
+                return;
+
+            Destroy(activeRocketStartVfx);
+            activeRocketStartVfx = null;
         }
 
         private void ShowFeedback(string text, Color color, AudioClip clip)

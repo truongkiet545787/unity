@@ -229,6 +229,21 @@ namespace PoseKart.Race
             return TryConsumeShield(impactPoint, protectAgainstMissiles);
         }
 
+        /// <summary>
+        /// Mirrors the shield surface reaction on a peer that did not execute
+        /// the authoritative block. Gameplay state is not changed here.
+        /// </summary>
+        public void PlayShieldImpactVisual(Vector3 impactPoint)
+        {
+            if (shieldVisual == null)
+                return;
+
+            PoseKartShieldVisualAnimator animator =
+                shieldVisual.GetComponent<PoseKartShieldVisualAnimator>();
+            if (animator != null)
+                animator.FlashImpact(impactPoint);
+        }
+
         public bool TryBlockMajorCollision(Vector3 impactPoint, bool vehicleImpact, float relativeSpeed)
         {
             if (relativeSpeed < minimumMajorCollisionSpeed)
@@ -279,7 +294,7 @@ namespace PoseKart.Race
             {
                 PoseKartShieldVisualAnimator animator = shieldVisual.GetComponent<PoseKartShieldVisualAnimator>();
                 if (animator != null)
-                    animator.FlashImpact();
+                    animator.FlashImpact(impactPoint);
             }
 
             // 3. Energy sparks burst & radial deflect shockwave pushing outwards

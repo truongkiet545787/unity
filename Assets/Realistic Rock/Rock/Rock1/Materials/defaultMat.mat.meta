@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 878eb9f9a1e334641b3b289bedbfdefd
+timeCreated: 1445792556
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 51251
+  packageName: Realistic Rock
+  packageVersion: 1.0
+  assetPath: Assets/Realistic Rock/Rock/Rock1/Materials/defaultMat.mat
+  uploadId: 101913

@@ -1,6 +1,7 @@
 using PoseKart.AI;
 using PoseKart.Race;
 using PoseKart.Vehicle;
+using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 namespace PoseKart.Multiplayer
@@ -17,6 +18,16 @@ namespace PoseKart.Multiplayer
         [SerializeField] private AIInputProvider aiInput;
         [SerializeField] private CarController carController;
         [SerializeField] private RaceParticipant raceParticipant;
+
+        private readonly NetworkVariable<FixedString64Bytes>
+            networkDisplayName =
+                new NetworkVariable<FixedString64Bytes>(
+                    default,
+                    NetworkVariableReadPermission.Everyone,
+                    NetworkVariableWritePermission.Server
+                );
+
+        private string pendingDisplayName;
 
         private readonly NetworkVariable<PoseKartRaceProgressState>
             networkRaceProgress =
@@ -71,12 +82,22 @@ namespace PoseKart.Multiplayer
         {
             base.OnNetworkSpawn();
 
+            networkDisplayName.OnValueChanged +=
+                OnNetworkDisplayNameChanged;
             networkRaceProgress.OnValueChanged +=
                 OnNetworkRaceProgressChanged;
             networkNitroFill01.OnValueChanged +=
                 OnNetworkNitroStateChanged;
             networkNitroMode.OnValueChanged +=
                 OnNetworkNitroStateChanged;
+
+            if (IsServer && !string.IsNullOrWhiteSpace(pendingDisplayName))
+            {
+                networkDisplayName.Value =
+                    new FixedString64Bytes(pendingDisplayName);
+            }
+
+            ApplyNetworkDisplayName();
             ApplyNetworkRaceProgress(networkRaceProgress.Value);
             ApplyNetworkNitroState();
 
@@ -157,6 +178,8 @@ namespace PoseKart.Multiplayer
 
         public override void OnNetworkDespawn()
         {
+            networkDisplayName.OnValueChanged -=
+                OnNetworkDisplayNameChanged;
             networkRaceProgress.OnValueChanged -=
                 OnNetworkRaceProgressChanged;
             networkNitroFill01.OnValueChanged -=
@@ -166,6 +189,36 @@ namespace PoseKart.Multiplayer
             if (carController != null)
                 carController.ClearRemoteNitroPresentation();
             base.OnNetworkDespawn();
+        }
+
+        public void SetServerDisplayName(string displayName)
+        {
+            pendingDisplayName = displayName?.Trim();
+
+            if (IsSpawned && IsServer &&
+                !string.IsNullOrWhiteSpace(pendingDisplayName))
+            {
+                networkDisplayName.Value =
+                    new FixedString64Bytes(pendingDisplayName);
+                ApplyNetworkDisplayName();
+            }
+        }
+
+        private void OnNetworkDisplayNameChanged(
+            FixedString64Bytes oldName,
+            FixedString64Bytes newName)
+        {
+            ApplyNetworkDisplayName();
+        }
+
+        private void ApplyNetworkDisplayName()
+        {
+            if (raceParticipant == null)
+                raceParticipant = GetComponent<RaceParticipant>();
+
+            string displayName = networkDisplayName.Value.ToString();
+            if (raceParticipant != null && !string.IsNullOrWhiteSpace(displayName))
+                raceParticipant.SetRacerName(displayName);
         }
 
         private void OnNetworkRaceProgressChanged(

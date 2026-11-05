@@ -21,14 +21,25 @@ namespace PoseKart.Race
         [SerializeField, Min(.01f)] private float fadeInDuration = .2f;
         [SerializeField, Min(.01f)] private float fadeOutDuration = .3f;
 
+        [Header("Impact Surface Reaction")]
+        [Tooltip("Thời gian gợn/lõm trên shader khi projectile chạm khiên.")]
+        [SerializeField, Min(.01f)] private float impactDisplacementDuration = .38f;
+        [Tooltip("Biên độ displacement truyền vào shader nếu material có _DisplacementStrength.")]
+        [SerializeField, Min(0f)] private float impactDisplacementMagnitude = .4f;
+        [Tooltip("Mức dissolve cộng tạm thời nếu material có _Disolve hoặc _Dissolve.")]
+        [SerializeField, Min(0f)] private float impactDissolveAmount = .12f;
+
         private Renderer[] renderers;
         private Material[] materials;
         private float[] baseGlow;
+        private float[] baseDisplacement;
+        private float[] baseDissolve;
         private Color configuredColor = new Color(.15f, .85f, 1f, 1f);
         private float fade;
         private bool fadingOut;
         private bool initialized;
         private float flashUntil;
+        private float impactStartedAt = -1f;
 
         private void Awake()
         {
@@ -92,7 +103,25 @@ namespace PoseKart.Race
 
         public void FlashImpact()
         {
+            FlashImpact(transform.position);
+        }
+
+        public void FlashImpact(Vector3 impactPoint)
+        {
             flashUntil = Mathf.Max(flashUntil, Time.time + .18f);
+            impactStartedAt = Time.time;
+
+            if (materials == null)
+                return;
+
+            // The sample Shield shader expects a world-space hit position.
+            // Only write it when the assigned material actually supports it.
+            for (int i = 0; i < materials.Length; i++)
+            {
+                Material material = materials[i];
+                if (material != null && material.HasProperty("_HitPos"))
+                    material.SetVector("_HitPos", impactPoint);
+            }
         }
 
         private void Update()
@@ -134,6 +163,8 @@ namespace PoseKart.Race
 
             materials = new Material[materialCount];
             baseGlow = new float[materialCount];
+            baseDisplacement = new float[materialCount];
+            baseDissolve = new float[materialCount];
             int index = 0;
             foreach (Renderer renderer in renderers)
             {
@@ -147,6 +178,13 @@ namespace PoseKart.Race
                     materials[index] = material;
                     baseGlow[index] = material.HasProperty("_GlowIntensity")
                         ? material.GetFloat("_GlowIntensity") : 1f;
+                    baseDisplacement[index] = material.HasProperty("_DisplacementStrength")
+                        ? material.GetFloat("_DisplacementStrength") : 0f;
+                    baseDissolve[index] = material.HasProperty("_Disolve")
+                        ? material.GetFloat("_Disolve")
+                        : (material.HasProperty("_Dissolve")
+                            ? material.GetFloat("_Dissolve")
+                            : 0f);
                     MakeTransparentIfSupported(material);
                     index++;
                 }
@@ -164,6 +202,23 @@ namespace PoseKart.Race
             float flashFactor = Time.time < flashUntil
                 ? Mathf.Clamp01((flashUntil - Time.time) / 0.18f)
                 : 0f;
+            float impactFactor = 0f;
+            if (impactStartedAt >= 0f)
+            {
+                float impactTime = Time.time - impactStartedAt;
+                float normalizedImpact = impactTime / Mathf.Max(.01f, impactDisplacementDuration);
+                if (normalizedImpact < 1f)
+                {
+                    // A short positive/negative wave reads as a dent followed
+                    // by a ripple without creating a new material per frame.
+                    impactFactor = Mathf.Sin(normalizedImpact * Mathf.PI * 2f)
+                        * (1f - normalizedImpact);
+                }
+                else
+                {
+                    impactStartedAt = -1f;
+                }
+            }
 
             for (int i = 0; i < materials.Length; i++)
             {
@@ -182,6 +237,24 @@ namespace PoseKart.Race
                 {
                     float glow = baseGlow[i] * Mathf.Lerp(.35f, 1f, normalized) + flashFactor * 2.5f;
                     material.SetFloat("_GlowIntensity", glow);
+                }
+                if (material.HasProperty("_DisplacementStrength"))
+                {
+                    material.SetFloat(
+                        "_DisplacementStrength",
+                        baseDisplacement[i] + impactFactor * impactDisplacementMagnitude);
+                }
+                if (material.HasProperty("_Disolve"))
+                {
+                    material.SetFloat(
+                        "_Disolve",
+                        baseDissolve[i] + flashFactor * impactDissolveAmount);
+                }
+                if (material.HasProperty("_Dissolve"))
+                {
+                    material.SetFloat(
+                        "_Dissolve",
+                        baseDissolve[i] + flashFactor * impactDissolveAmount);
                 }
                 if (material.HasProperty("_EmissionColor"))
                 {

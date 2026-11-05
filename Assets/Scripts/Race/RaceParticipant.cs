@@ -54,6 +54,12 @@ namespace PoseKart.Race
             lapTracker = tracker;
         }
 
+        public void SetRacerName(string displayName)
+        {
+            if (!string.IsNullOrWhiteSpace(displayName))
+                racerName = displayName.Trim();
+        }
+
         public void PrepareRace(int totalLaps, int checkpointCount)
         {
             RestoreFinishedPresence();

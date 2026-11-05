@@ -35,6 +35,8 @@ namespace PoseKart.Vehicle
         [SerializeField] private Transform frontWheels;
         [Tooltip("Rear wheel transform (or axle) that rolls with speed.")]
         [SerializeField] private Transform backWheels;
+        [Tooltip("Visible rear wheel meshes. Auto-resolved when Backwheel is only an empty anchor.")]
+        [SerializeField] private Transform[] rearWheelVisuals = Array.Empty<Transform>();
         [Tooltip("Steering wheel inside the cockpit.")]
         [SerializeField] private Transform steeringWheel;
 
@@ -48,6 +50,10 @@ namespace PoseKart.Vehicle
         [SerializeField, Range(0f, 25f)] private float driftLeanAngle = 10f;
         [SerializeField, Range(0f, 20f)] private float counterSteerYawAngle = 8f;
         [SerializeField, Min(0.1f)] private float leanSmoothSpeed = 10f;
+        [Header("Rocket Start Wheel Spin")]
+        [SerializeField] private PoseKart.Race.PoseKartRocketStart rocketStart;
+        [Tooltip("Visual-only rear wheel spin while the racer is holding acceleration for Rocket Start.")]
+        [SerializeField, Min(180f)] private float rocketStartRearWheelSpinSpeed = 1450f;
 
         [Header("DOTween Hop & Juice")]
         [Tooltip("Vertical hop height when initiating a drift.")]
@@ -102,10 +108,12 @@ namespace PoseKart.Vehicle
         private Quaternion baseModelRotation = Quaternion.identity;
         private Quaternion baseFrontWheelsRotation = Quaternion.identity;
         private Quaternion baseBackWheelsRotation = Quaternion.identity;
+        private readonly List<Quaternion> baseRearWheelVisualRotations = new List<Quaternion>();
         private Quaternion baseSteeringWheelRotation = Quaternion.identity;
         private Vector3 baseModelLocalPosition = Vector3.zero;
 
         private float wheelSpinAngle;
+        private float rocketStartWheelSpinAngle;
         private bool wasDrifting;
         private int driftDirection = 1;
         private float driftPower;
@@ -124,6 +132,7 @@ namespace PoseKart.Vehicle
             if (body == null) body = GetComponent<Rigidbody>();
             if (body == null && car != null) body = car.TargetBody;
             if (stuntController == null) stuntController = GetComponent<PoseKart.Stunts.PoseKartStuntController>();
+            if (rocketStart == null) rocketStart = GetComponent<PoseKart.Race.PoseKartRocketStart>();
 
             ResolveModelParts();
             CacheBaseRotations();
@@ -162,6 +171,8 @@ namespace PoseKart.Vehicle
                 if (backWheels == null) backWheels = FindChildByName(transform, "rear_wheel");
             }
 
+            ResolveRearWheelVisuals();
+
             if (steeringWheel == null)
             {
                 steeringWheel = FindChildByName(transform, "steer");
@@ -190,7 +201,65 @@ namespace PoseKart.Vehicle
             }
             if (frontWheels != null) baseFrontWheelsRotation = frontWheels.localRotation;
             if (backWheels != null) baseBackWheelsRotation = backWheels.localRotation;
+
+            baseRearWheelVisualRotations.Clear();
+            for (int i = 0; i < rearWheelVisuals.Length; i++)
+            {
+                if (rearWheelVisuals[i] != null)
+                    baseRearWheelVisualRotations.Add(rearWheelVisuals[i].localRotation);
+            }
             if (steeringWheel != null) baseSteeringWheelRotation = steeringWheel.localRotation;
+        }
+
+        private void ResolveRearWheelVisuals()
+        {
+            bool hasVisibleWheel = false;
+            for (int i = 0; i < rearWheelVisuals.Length; i++)
+            {
+                if (rearWheelVisuals[i] != null &&
+                    rearWheelVisuals[i].GetComponent<Renderer>() != null)
+                {
+                    hasVisibleWheel = true;
+                    break;
+                }
+            }
+
+            // The current NetworkPlayer prefab assigns an empty Backwheel
+            // anchor. Prefer the actual active rear wheel mesh transforms.
+            if (hasVisibleWheel)
+                return;
+
+            var found = new List<Transform>();
+            Transform[] allTransforms = GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < allTransforms.Length; i++)
+            {
+                Transform candidate = allTransforms[i];
+                if (candidate == null ||
+                    !candidate.gameObject.activeInHierarchy ||
+                    candidate.GetComponent<Renderer>() == null)
+                {
+                    continue;
+                }
+
+                string lowerName = candidate.name.ToLowerInvariant();
+                bool isRearWheel = lowerName.Contains("rear_wheel") ||
+                                   lowerName.Contains("rearwheel") ||
+                                   lowerName.Contains("backwheel");
+                if (isRearWheel && !found.Contains(candidate))
+                    found.Add(candidate);
+            }
+
+            if (found.Count > 0)
+            {
+                rearWheelVisuals = found.ToArray();
+                backWheels = rearWheelVisuals[0];
+            }
+            else if (backWheels != null)
+            {
+                // Keep the serialized anchor as a safe fallback for vehicles
+                // whose wheel mesh is not split into separate renderers.
+                rearWheelVisuals = new[] { backWheels };
+            }
         }
 
         private void ResolveParticles()
@@ -377,7 +446,8 @@ namespace PoseKart.Vehicle
             }
 
             // Model & Wheel Animations
-            UpdateWheelAnimations(steerInput, forwardSpeed);
+            bool rocketStartPreparing = rocketStart != null && rocketStart.IsPreparingVisual;
+            UpdateWheelAnimations(steerInput, forwardSpeed, rocketStartPreparing);
             UpdateKartModelLean(isDrifting, steerInput, stuntActive);
 
             wasDrifting = isDrifting;
@@ -616,11 +686,27 @@ namespace PoseKart.Vehicle
             }
         }
 
-        private void UpdateWheelAnimations(float steerInput, float forwardSpeed)
+        private void UpdateWheelAnimations(
+            float steerInput,
+            float forwardSpeed,
+            bool rocketStartPreparing)
         {
             // Spin wheels around X pitch axis based on vehicle speed
             float rollDelta = (forwardSpeed / Mathf.Max(0.05f, wheelRadius)) * Mathf.Rad2Deg * Time.deltaTime;
             wheelSpinAngle = (wheelSpinAngle + rollDelta) % 360f;
+
+            float rearWheelAngle = wheelSpinAngle;
+            if (rocketStartPreparing)
+            {
+                rocketStartWheelSpinAngle =
+                    (rocketStartWheelSpinAngle + rocketStartRearWheelSpinSpeed * Time.deltaTime) % 360f;
+                rearWheelAngle = rocketStartWheelSpinAngle;
+            }
+            else
+            {
+                // Rejoin the normal speed-based rotation without a visible snap.
+                rocketStartWheelSpinAngle = wheelSpinAngle;
+            }
 
             // Front wheels: Steer yaw + roll spin
             if (frontWheels != null)
@@ -631,11 +717,20 @@ namespace PoseKart.Vehicle
                 frontWheels.localRotation = baseFrontWheelsRotation * steerRot * spinRot;
             }
 
-            // Back wheels: Roll spin only
-            if (backWheels != null)
+            // Back wheels: Roll spin on every visible rear wheel. The old
+            // Backwheel anchor remains supported as a fallback.
+            Quaternion rearSpinRot = Quaternion.Euler(rearWheelAngle, 0f, 0f);
+            int baseRotationIndex = 0;
+            for (int i = 0; i < rearWheelVisuals.Length; i++)
             {
-                Quaternion spinRot = Quaternion.Euler(wheelSpinAngle, 0f, 0f);
-                backWheels.localRotation = baseBackWheelsRotation * spinRot;
+                Transform wheel = rearWheelVisuals[i];
+                if (wheel == null) continue;
+
+                Quaternion baseRotation = baseRotationIndex < baseRearWheelVisualRotations.Count
+                    ? baseRearWheelVisualRotations[baseRotationIndex]
+                    : wheel.localRotation;
+                wheel.localRotation = baseRotation * rearSpinRot;
+                baseRotationIndex++;
             }
 
             // Steering wheel: Turn cockpit wheel with steering input
@@ -675,6 +770,7 @@ namespace PoseKart.Vehicle
             if (kartModel == null) return;
 
             Quaternion targetRotation;
+            float turnDirection = ResolveVisualTurnDirection(steerInput);
 
             if (stuntActive)
             {
@@ -685,19 +781,36 @@ namespace PoseKart.Vehicle
             else if (!isDrifting)
             {
                 // Normal driving: gentle lean into corners
-                float targetRoll = -steerInput * normalSteerLeanAngle;
+                float targetRoll = -turnDirection * normalSteerLeanAngle;
                 float targetYaw = steerInput * normalSteerYawAngle;
                 targetRotation = baseModelRotation * Quaternion.Euler(0f, targetYaw, targetRoll);
             }
             else
             {
                 // Drift stance: kart body angles into the drift with counter-steering responsiveness
-                float driftRoll = -driftDirection * driftLeanAngle;
+                float driftRoll = -turnDirection * driftLeanAngle;
                 float driftYaw = (driftDirection * driftYawAngle) + (steerInput * counterSteerYawAngle);
                 targetRotation = baseModelRotation * Quaternion.Euler(0f, driftYaw, driftRoll);
             }
 
             kartModel.localRotation = Quaternion.Slerp(kartModel.localRotation, targetRotation, Time.deltaTime * leanSmoothSpeed);
+        }
+
+        private float ResolveVisualTurnDirection(float steerInput)
+        {
+            // Steering input is the correct fallback while the kart is almost
+            // stationary. Once the body is actually turning, use its yaw rate so
+            // the visual bank follows the real turn direction (especially for
+            // Rally/drift cases where steering and velocity can disagree).
+            float inputDirection = Mathf.Sign(steerInput);
+            if (body == null)
+                return inputDirection;
+
+            float yawRate = Vector3.Dot(body.angularVelocity, body.transform.up);
+            if (Mathf.Abs(yawRate) < 0.05f)
+                return inputDirection;
+
+            return Mathf.Sign(yawRate);
         }
 
         protected void OnDisable()

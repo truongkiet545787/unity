@@ -46,7 +46,13 @@ namespace PoseKart.Race
         [Header("Custom 3D Reticle Prefab (Tùy chọn)")]
         [Tooltip("Prefab vòng ngắm 3D lơ lửng trên nóc xe bị ngắm. Nếu để trống sẽ dùng vòng ngắm procedural.")]
         [SerializeField] private GameObject customWorldReticlePrefab;
+        [Tooltip("Hiển thị vòng khóa mục tiêu trên mọi máy chơi khi Missile đang bám một Player/AI.")]
+        [SerializeField] private bool showTargetReticleToAllPlayers = true;
         [SerializeField] private float reticleHeightOffset = 1.35f;
+        [SerializeField, Min(0.1f)] private float reticleScale = 1.6f;
+        [SerializeField] private float reticleRotationSpeed = 180f;
+        [SerializeField, Range(0f, 0.5f)] private float reticlePulseAmplitude = 0.15f;
+        [SerializeField, Min(0f)] private float reticlePulseSpeed = 12f;
 
         [Header("Audio Alert Settings")]
         [SerializeField] private bool enableWarningAudio = true;
@@ -59,7 +65,10 @@ namespace PoseKart.Race
         [Header("Target Reticle Colors & Text")]
         [SerializeField] private string warningTitle = "MISSILE LOCK-ON!";
         [SerializeField] private string distanceFormat = "{0:0}m";
+        [SerializeField, Min(1f)] private float clientIncomingDetectionRange = 100f;
+        [SerializeField, Range(-1f, 1f)] private float clientIncomingDirectionThreshold = 0.15f;
         [SerializeField] private Color reticleColor = new Color(1f, 0.12f, 0.18f, 0.95f);
+        [SerializeField] private Color remoteTargetReticleColor = new Color(1f, 0.55f, 0.08f, 0.95f);
         [SerializeField] private Color warningTextColor = new Color(1f, 0.2f, 0.2f, 1f);
 
         private CarController playerCar;
@@ -172,6 +181,17 @@ namespace PoseKart.Race
 
         private void Update()
         {
+            // ExecuteAlways also runs in the Scene View. Keep the editor preview
+            // visible instead of treating the absence of a runtime missile as a
+            // real warning timeout and fading the CanvasGroup back to zero.
+            if (!Application.isPlaying)
+            {
+                if (warningGroup != null)
+                    warningGroup.alpha = showInEditMode ? 1f : 0f;
+
+                return;
+            }
+
             if (playerCar == null || !playerCar.isActiveAndEnabled)
             {
                 FindPlayerCar();
@@ -183,18 +203,25 @@ namespace PoseKart.Race
             HomingKartMissile incomingToPlayer = null;
             float closestDistanceToPlayer = float.MaxValue;
 
-            // 2. Check for player missiles locking onto an opponent
-            HomingKartMissile playerChasingTarget = null;
+            // 2. Find the closest active lock-on target. The missile publishes
+            // its NetworkObjectReference, so this works for Player and AI on
+            // every client instead of only on the firing machine.
+            HomingKartMissile globallyLockedMissile = null;
+            float closestLockedTargetDistance = float.MaxValue;
 
             for (int i = 0; i < activeMissiles.Count; i++)
             {
                 HomingKartMissile missile = activeMissiles[i];
                 if (missile == null || missile.IsSpent) continue;
 
-                // Incoming threat to local player
-                if (playerCar != null && missile.Target == playerCar)
+                // Incoming threat to local player. On the Server/Host the target
+                // reference is configured directly. On a Client it is resolved
+                // from the missile's replicated NetworkObjectReference; the
+                // flight-direction check remains only as a safe fallback while
+                // that reference is still arriving.
+                if (playerCar != null && IsIncomingMissileForLocalPlayer(missile))
                 {
-                    float d = Vector3.Distance(missile.transform.position, playerCar.transform.position);
+                    float d = Vector3.Distance(missile.transform.position, GetPlayerWarningPoint());
                     if (d < closestDistanceToPlayer)
                     {
                         closestDistanceToPlayer = d;
@@ -202,10 +229,20 @@ namespace PoseKart.Race
                     }
                 }
 
-                // Player's missile chasing enemy
-                if (playerCar != null && missile.Owner == playerCar && missile.Target != null && missile.Target != playerCar)
+                CarController lockedTarget = missile.Target;
+                if (showTargetReticleToAllPlayers && lockedTarget != null &&
+                    lockedTarget.isActiveAndEnabled &&
+                    lockedTarget.TargetBody != null &&
+                    lockedTarget != missile.Owner)
                 {
-                    playerChasingTarget = missile;
+                    float targetDistance = Vector3.Distance(
+                        missile.transform.position,
+                        lockedTarget.TargetBody.worldCenterOfMass);
+                    if (targetDistance < closestLockedTargetDistance)
+                    {
+                        closestLockedTargetDistance = targetDistance;
+                        globallyLockedMissile = missile;
+                    }
                 }
             }
 
@@ -221,8 +258,6 @@ namespace PoseKart.Race
                 // 2. Visual HUD Warning on Screen
                 UpdateWarningHUD(closestDistanceToPlayer, incomingToPlayer);
 
-                // 3. World Reticle on player kart
-                UpdateWorldReticle(playerCar.transform, isVictim: true);
             }
             else
             {
@@ -234,16 +269,64 @@ namespace PoseKart.Race
                     warningGroup.alpha = Mathf.MoveTowards(warningGroup.alpha, 0f, Time.deltaTime * 6f);
                 }
 
-                // If player is attacking someone, show reticle on victim instead
-                if (playerChasingTarget != null && playerChasingTarget.Target != null)
-                {
-                    UpdateWorldReticle(playerChasingTarget.Target.transform, isVictim: false);
-                }
-                else
-                {
-                    HideWorldReticle();
-                }
             }
+
+            if (globallyLockedMissile != null && globallyLockedMissile.Target != null)
+            {
+                CarController lockedTarget = globallyLockedMissile.Target;
+                UpdateWorldReticle(
+                    lockedTarget.transform,
+                    isVictim: lockedTarget == playerCar);
+            }
+            else
+            {
+                HideWorldReticle();
+            }
+        }
+
+        private bool IsIncomingMissileForLocalPlayer(HomingKartMissile missile)
+        {
+            if (missile == null || playerCar == null)
+                return false;
+
+            // Authoritative path: exact target reference is available locally.
+            if (missile.Target == playerCar)
+                return true;
+
+            // Do not infer a warning for untargeted/offline missiles or on the
+            // Server, where the authoritative target check above is sufficient.
+            if (!PoseKartNetworkItemBridge.IsOnlineRace ||
+                Unity.Netcode.NetworkManager.Singleton == null ||
+                Unity.Netcode.NetworkManager.Singleton.IsServer ||
+                missile.Target != null)
+            {
+                return false;
+            }
+
+            Vector3 toPlayer = GetPlayerWarningPoint() - missile.transform.position;
+            float distance = toPlayer.magnitude;
+            if (distance <= 0.01f || distance > clientIncomingDetectionRange)
+                return false;
+
+            Vector3 missileDirection = missile.transform.forward;
+            if (missileDirection.sqrMagnitude <= 0.0001f)
+                return false;
+
+            float headingDot = Vector3.Dot(
+                missileDirection.normalized,
+                toPlayer / distance);
+
+            // A player's own missile travels away from its owner, so it fails
+            // this direction test and is not shown as an incoming warning.
+            return headingDot >= clientIncomingDirectionThreshold;
+        }
+
+        private Vector3 GetPlayerWarningPoint()
+        {
+            if (playerCar != null && playerCar.TargetBody != null)
+                return playerCar.TargetBody.worldCenterOfMass;
+
+            return playerCar != null ? playerCar.transform.position : Vector3.zero;
         }
 
         private void FindPlayerCar()
@@ -305,7 +388,8 @@ namespace PoseKart.Race
             }
 
             string titleStr = warningTitle;
-            string distStr = string.Format(distanceFormat, distance);
+            string format = string.IsNullOrWhiteSpace(distanceFormat) ? "{0:0}m" : distanceFormat;
+            string distStr = string.Format(format, distance);
 
             if (warningLabel != null) warningLabel.text = titleStr;
             if (legacyWarningLabel != null) legacyWarningLabel.text = titleStr;
@@ -330,14 +414,17 @@ namespace PoseKart.Race
             worldReticleObject.transform.position = hoverPos;
 
             // Reticle spins and pulses
-            worldReticleObject.transform.Rotate(Vector3.up, 180f * Time.deltaTime, Space.World);
+            worldReticleObject.transform.Rotate(
+                Vector3.up,
+                reticleRotationSpeed * Time.deltaTime,
+                Space.World);
 
-            float pulse = 1f + Mathf.Sin(Time.time * 12f) * 0.15f;
-            worldReticleObject.transform.localScale = Vector3.one * (1.6f * pulse);
+            float pulse = 1f + Mathf.Sin(Time.time * reticlePulseSpeed) * reticlePulseAmplitude;
+            worldReticleObject.transform.localScale = Vector3.one * (reticleScale * pulse);
 
             if (worldReticleRenderer != null)
             {
-                Color c = isVictim ? reticleColor : new Color(0.2f, 0.85f, 1f, 0.9f);
+                Color c = isVictim ? reticleColor : remoteTargetReticleColor;
                 c.a = Mathf.PingPong(Time.time * 7f, 0.4f) + 0.6f;
                 worldReticleRenderer.color = c;
             }
@@ -357,6 +444,8 @@ namespace PoseKart.Race
             {
                 worldReticleObject = Instantiate(customWorldReticlePrefab);
                 worldReticleObject.name = "[Custom_World_Reticle]";
+                worldReticleRenderer =
+                    worldReticleObject.GetComponentInChildren<SpriteRenderer>(true);
                 worldReticleObject.SetActive(false);
                 return;
             }

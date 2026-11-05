@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using Unity.Netcode;
 using PoseKart.Race;
 
 namespace PoseKart.Vehicle
@@ -77,6 +78,7 @@ namespace PoseKart.Vehicle
         private readonly List<CarController> cachedOpponents = new List<CarController>();
         private float nextOpponentRefreshTime = 0f;
         private bool wasActiveSoundPlayed = false;
+        private PoseKart.Stunts.PoseKartStuntController stuntController;
 
         public SlipstreamPhase CurrentPhase => currentPhase;
         public float DraftCharge01 => Mathf.Clamp01(draftCharge / Mathf.Max(0.01f, chargeDuration));
@@ -114,6 +116,7 @@ namespace PoseKart.Vehicle
             if (targetBody == null && carController != null) targetBody = carController.TargetBody;
             if (targetBody == null) targetBody = GetComponent<Rigidbody>();
             if (raceManager == null) raceManager = FindFirstObjectByType<RaceManager>();
+            if (stuntController == null) stuntController = GetComponent<PoseKart.Stunts.PoseKartStuntController>();
 
             if (hudIndicatorRoot == null)
             {
@@ -197,7 +200,7 @@ namespace PoseKart.Vehicle
 
         private void FixedUpdate()
         {
-            if (carController == null || targetBody == null) return;
+            if (!HasSimulationAuthority() || carController == null || targetBody == null) return;
 
             // Áp dụng lực hút khí động học khi đang ở pha Active hoặc Slingshot
             if (currentPhase == SlipstreamPhase.Active)
@@ -225,7 +228,7 @@ namespace PoseKart.Vehicle
 
         private void Update()
         {
-            if (carController == null || targetBody == null) return;
+            if (!HasSimulationAuthority() || carController == null || targetBody == null) return;
 
             // 1. Chỉ hoạt động khi cuộc đua đang chạy
             if (raceManager != null && (raceManager.State != RaceState.Racing || raceManager.PlayerFinished))
@@ -303,6 +306,23 @@ namespace PoseKart.Vehicle
             UpdateHUD();
         }
 
+        private bool HasSimulationAuthority()
+        {
+            NetworkManager network = NetworkManager.Singleton;
+            if (network == null || !network.IsListening)
+                return true;
+
+            NetworkObject networkObject = GetComponent<NetworkObject>();
+            if (networkObject == null || !networkObject.IsSpawned)
+                return true;
+
+            // Human physics runs on its owner; server-owned AI runs on Server.
+            // Remote clones only receive the resulting transform/VFX state.
+            return networkObject.IsPlayerObject
+                ? networkObject.IsOwner
+                : network.IsServer;
+        }
+
         private CarController FindTargetOpponentInDraftCone()
         {
             Vector3 myPos = targetBody.worldCenterOfMass;
@@ -357,7 +377,7 @@ namespace PoseKart.Vehicle
                     PoseKart.Audio.AudioManager.PlayBoostActivate(transform.position);
                 }
 
-                if (airflowBurst != null)
+                if (!IsStuntOwningAirflow() && airflowBurst != null)
                 {
                     airflowBurst.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
                     airflowBurst.Play(true);
@@ -369,6 +389,9 @@ namespace PoseKart.Vehicle
 
         private void UpdateWindStreaks(float intensity)
         {
+            if (IsStuntOwningAirflow())
+                return;
+
             if (leftWindTrail != null)
             {
                 if (!leftWindTrail.isPlaying) leftWindTrail.Play();
@@ -385,6 +408,9 @@ namespace PoseKart.Vehicle
 
         private void StopVFX()
         {
+            if (IsStuntOwningAirflow())
+                return;
+
             if (leftWindTrail != null && leftWindTrail.isPlaying)
             {
                 leftWindTrail.Stop(false, ParticleSystemStopBehavior.StopEmitting);
@@ -397,6 +423,14 @@ namespace PoseKart.Vehicle
             {
                 airflowBurst.Stop(false, ParticleSystemStopBehavior.StopEmitting);
             }
+        }
+
+        private bool IsStuntOwningAirflow()
+        {
+            if (stuntController == null)
+                stuntController = GetComponent<PoseKart.Stunts.PoseKartStuntController>();
+
+            return stuntController != null && stuntController.IsStuntActive;
         }
 
         private void UpdateHUD()

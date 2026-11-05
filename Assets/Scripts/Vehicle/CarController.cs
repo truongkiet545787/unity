@@ -45,9 +45,9 @@ namespace PoseKart.Vehicle
         [SerializeField, Min(0f)] private float perfectNitroDrain = 0.32f;
 
         [Header("Nitro Perfect Timing (seconds after first press)")]
-        [SerializeField, Min(0f)] private float perfectTimingStartSeconds = 0.35f;
-        [SerializeField, Min(0f)] private float perfectTimingEndSeconds = 0.58f;
-        [SerializeField, Min(0.05f)] private float quickDoubleTapWindow = 0.3f;
+        [SerializeField, Min(0f)] private float perfectTimingStartSeconds = 0.20f;
+        [SerializeField, Min(0f)] private float perfectTimingEndSeconds = 0.75f;
+        [SerializeField, Min(0.05f)] private float quickDoubleTapWindow = 0.45f;
 
         [Header("Shockwave Contact Knockdown")]
         [SerializeField, Min(0f)] private float shockwaveMinimumImpactSpeed = 3f;
@@ -80,6 +80,7 @@ namespace PoseKart.Vehicle
         [Header("References")]
         [SerializeField] private Rigidbody targetBody;
         [SerializeField] private MonoBehaviour inputProviderSource;
+        private PoseKartMultiRaySuspension multiRaySuspension;
 
         [Header("Speed and acceleration")]
         [SerializeField, Min(0.1f)] private float maxForwardSpeed = 22f;
@@ -168,6 +169,12 @@ namespace PoseKart.Vehicle
         [SerializeField, Min(0f)] private float maximumCollisionSpeedLoss = 8f;
         [SerializeField, Min(0f)] private float collisionLossCooldown = 0.2f;
         [SerializeField, Range(0f, 1f)] private float sideImpactLossMultiplier = 0.15f;
+        [Header("Vehicle Collision Presentation")]
+        [Tooltip("Minimum closing speed along the contact normal before a vehicle impact presentation is sent.")]
+        [SerializeField, Min(0f)] private float collisionPresentationMinimumSpeed = 3f;
+        [Tooltip("Maximum closing speed used to normalize impact VFX, audio and camera shake.")]
+        [SerializeField, Min(0.1f)] private float collisionPresentationMaximumSpeed = 18f;
+        [SerializeField, Min(0f)] private float collisionPresentationCooldown = 0.25f;
 
         [Header("Runtime Debug (Read Only)")]
         [InspectorName("Banana Stunned")]
@@ -230,6 +237,7 @@ namespace PoseKart.Vehicle
         private float impactRecoveryStartedAt = float.NegativeInfinity;
         private float impactRecoveryDuration;
         private float nextMissileImpactTime = float.NegativeInfinity;
+        private float nextCollisionPresentationTime = float.NegativeInfinity;
         private readonly RaycastHit[] groundProbeHits = new RaycastHit[8];
         private Vector3 previousObservedVelocity;
         private bool hasPreviousObservedVelocity;
@@ -304,6 +312,13 @@ namespace PoseKart.Vehicle
         /// </summary>
         public event Action<Vector3> MissileImpactEvent;
 
+        /// <summary>
+        /// Raised when the authoritative Nitro mode changes. The network
+        /// bridge uses this as a one-shot state update for remote immunity;
+        /// it is not a per-frame replication event.
+        /// </summary>
+        public event Action<NitroMode> NitroModeChanged;
+
         // Both HUDs and input use the same fuel-space zone, frozen on activation.
         public bool IsNitroTimingActive => CurrentNitroMode == NitroMode.Single && storedNitro > 0f;
         public float NitroTimingProgress01 => NitroFill01;
@@ -320,11 +335,25 @@ namespace PoseKart.Vehicle
         private float perfectZoneMin;
         private float perfectZoneMax;
         public bool IsShockwaveActive => CurrentNitroMode == NitroMode.Shockwave;
+        public float ShockwaveMinimumImpactSpeed => shockwaveMinimumImpactSpeed;
+        public float ShockwaveHitCooldown => shockwaveHitCooldown;
+        public float ShockwavePush => shockwavePush;
+        public float ShockwaveLift => shockwaveLift;
+        public float ShockwaveTorque => shockwaveTorque;
+        public float CollisionPresentationMinimumSpeed => collisionPresentationMinimumSpeed;
+        public float CollisionPresentationCooldown => collisionPresentationCooldown;
         public bool IsPerfectNitro => CurrentNitroMode == NitroMode.Perfect;
         public float NitroActivatedFill => nitroActivatedFill;
         public float NitroDrainRate01 => singleNitroDrain / MaxNitroChargeAmount;
         public float PerfectZoneMin01 => perfectZoneMin;
         public float PerfectZoneMax01 => perfectZoneMax;
+
+        /// <summary>
+        /// Raised only when an external charge operation changes the stored
+        /// Nitro amount. HUDs may use this for an immediate refresh; gameplay
+        /// authority remains in this component.
+        /// </summary>
+        public event Action NitroChargeChanged;
 
         public bool IsDrifting { get; private set; }
         public float DriftCharge => driftCharge;
@@ -336,6 +365,8 @@ namespace PoseKart.Vehicle
         public MonoBehaviour InputProviderSource => inputProviderSource;
         public bool ControlEnabled => controlEnabled;
         public float MaxForwardSpeed => maxForwardSpeed;
+        public bool AllowNaturalSuspensionBounce =>
+            multiRaySuspension != null && multiRaySuspension.AllowNaturalBounce;
 
         private float CurrentNitroSpeedLimit
         {
@@ -411,7 +442,29 @@ namespace PoseKart.Vehicle
         {
             if (float.IsNaN(amount) || amount <= 0f)
                 return;
+            float previousNitro = storedNitro;
             storedNitro = Mathf.Clamp(storedNitro + amount, 0f, MaxNitroChargeAmount);
+            if (storedNitro > previousNitro + 0.0001f)
+                NitroChargeChanged?.Invoke();
+        }
+
+        /// <summary>Adds a track Nitro pickup without changing Nitro mode.</summary>
+        public bool AddNitroPickup(float amount)
+        {
+            if (float.IsNaN(amount) || amount <= 0f)
+                return false;
+
+            float before = storedNitro;
+            AddNitro(amount);
+            return storedNitro > before + 0.0001f;
+        }
+
+        public bool CanAcceptNitroPickup(float amount)
+        {
+            if (float.IsNaN(amount) || amount <= 0f)
+                return false;
+
+            return storedNitro < MaxNitroChargeAmount - 0.0001f;
         }
 
         private void Update()
@@ -472,6 +525,7 @@ namespace PoseKart.Vehicle
                     NitroDrainRate01 * Mathf.Max(0f, perfectTimingStartSeconds));
                 nitroStartedAt = Time.time;
                 CurrentNitroMode = NitroMode.Single;
+                NitroModeChanged?.Invoke(CurrentNitroMode);
                 ApplyNitroImpulse(singleNitroImpulse);
             }
             else if (CurrentNitroMode == NitroMode.Single)
@@ -479,16 +533,19 @@ namespace PoseKart.Vehicle
                 if (IsShockwaveTimingNow)
                 {
                     CurrentNitroMode = NitroMode.Shockwave;
+                    NitroModeChanged?.Invoke(CurrentNitroMode);
                     ApplyNitroImpulse(shockwaveNitroImpulse);
                 }
                 else if (IsPerfectTimingNow)
                 {
                     CurrentNitroMode = NitroMode.Perfect;
+                    NitroModeChanged?.Invoke(CurrentNitroMode);
                     ApplyNitroImpulse(perfectNitroImpulse);
                 }
                 else
                 {
                     CurrentNitroMode = NitroMode.Double;
+                    NitroModeChanged?.Invoke(CurrentNitroMode);
                     ApplyNitroImpulse(doubleNitroImpulse);
                 }
             }
@@ -557,9 +614,12 @@ namespace PoseKart.Vehicle
         public void StopNitro()
         {
             nitroStartedFull = false;
+            bool changed = CurrentNitroMode != NitroMode.None;
             CurrentNitroMode = NitroMode.None;
             nitroStartedAt = float.NegativeInfinity;
             nextNitroPressTime = float.NegativeInfinity;
+            if (changed)
+                NitroModeChanged?.Invoke(CurrentNitroMode);
         }
 
         /// <summary>
@@ -627,6 +687,10 @@ namespace PoseKart.Vehicle
             float impactTorqueStrength,
             bool balancedMissileImpact = true)
         {
+            PoseKartWreckController wreck = GetComponent<PoseKartWreckController>();
+            if (wreck != null && wreck.IsGameplayProtected)
+                return;
+
             if (targetBody == null || IsShockwaveActive)
                 return;
 
@@ -797,6 +861,20 @@ namespace PoseKart.Vehicle
                 Time.time + flight + 0.8f);
         }
 
+        // Ramp stunt controllers apply their own launch velocity. Keep the
+        // ground-contact solver from cancelling that first upward impulse before
+        // the stunt controller can transition into its airborne state.
+        public void BeginRampTakeoff(float duration = 0.35f)
+        {
+            if (targetBody == null || !controlEnabled)
+                return;
+
+            launchedUntil = Mathf.Max(
+                launchedUntil,
+                Time.time + Mathf.Max(0.05f, duration));
+            grounded = false;
+        }
+
         // Called once by KartLandingEffects after a real, sufficiently hard road contact.
         // It never moves the chassis or changes its vertical velocity.
         public void BeginLandingRecovery(float severity01)
@@ -837,8 +915,20 @@ namespace PoseKart.Vehicle
                 return;
             Vector3 velocity = targetBody.linearVelocity;
             Vector3 horizontal = Vector3.ProjectOnPlane(velocity, Vector3.up);
-            // Preserve the contact solver's vertical result; reduce horizontal momentum only.
-            targetBody.linearVelocity = velocity - horizontal * pendingLandingSpeedLoss;
+            Vector3 forward = Vector3.ProjectOnPlane(transform.forward, Vector3.up).normalized;
+            if (forward.sqrMagnitude < 0.001f)
+                forward = Vector3.forward;
+
+            // Preserve forward momentum. Existing hard-landing recovery used to scale
+            // the whole horizontal vector, which also cut acceleration out of a clean
+            // landing. Only the current sideways component is reduced here; the stunt
+            // controller applies the stronger track-relative correction after its own
+            // genuine stunt landing confirmation.
+            float forwardSpeed = Vector3.Dot(horizontal, forward);
+            Vector3 lateral = horizontal - forward * forwardSpeed;
+            float lateralScale = Mathf.Clamp01(1f - pendingLandingSpeedLoss);
+            Vector3 recoveredHorizontal = forward * forwardSpeed + lateral * lateralScale;
+            targetBody.linearVelocity = recoveredHorizontal + Vector3.up * velocity.y;
             pendingLandingSpeedLoss = 0f;
         }
 
@@ -872,6 +962,10 @@ namespace PoseKart.Vehicle
 
         public void ApplyOilSlip(float duration = 2f)
         {
+            PoseKartWreckController wreck = GetComponent<PoseKartWreckController>();
+            if (wreck != null && wreck.IsGameplayProtected)
+                return;
+
             if (GetComponent<KartItemDefense>() != null
                 && GetComponent<KartItemDefense>().TryBlockIncomingItem(transform.position))
             {
@@ -885,6 +979,10 @@ namespace PoseKart.Vehicle
         // Returns false if the shield blocks the banana. The trap is consumed either way.
         public bool TryApplyBananaStun(float duration = 1.5f)
         {
+            PoseKartWreckController wreck = GetComponent<PoseKartWreckController>();
+            if (wreck != null && wreck.IsGameplayProtected)
+                return false;
+
             if (!controlEnabled || targetBody == null || IsShockwaveActive)
                 return false;
 
@@ -929,15 +1027,24 @@ namespace PoseKart.Vehicle
                 targetBody = GetComponent<Rigidbody>();
             }
 
+            multiRaySuspension = GetComponent<PoseKartMultiRaySuspension>();
+
             ApplyRigidbodySetup();
             ResolveInputProvider();
             if (inputProviderSource is KeyboardInputProvider)
             {
                 if (GetComponent<PoseKart.Input.PoseKartHandInputSwitcher>() == null) gameObject.AddComponent<PoseKart.Input.PoseKartHandInputSwitcher>();
                 if (GetComponent<PoseKart.Input.PoseKartHandControlDebugUI>() == null) gameObject.AddComponent<PoseKart.Input.PoseKartHandControlDebugUI>();
-                if (GetComponent<PoseKart.Race.PoseKartRocketStart>() == null) gameObject.AddComponent<PoseKart.Race.PoseKartRocketStart>();
                 if (GetComponent<PoseKart.Race.PoseKartWrongWayDetector>() == null) gameObject.AddComponent<PoseKart.Race.PoseKartWrongWayDetector>();
                 if (GetComponent<PoseKartPlayerSlipstream>() == null) gameObject.AddComponent<PoseKartPlayerSlipstream>();
+            }
+
+            // Rocket Start is also attached to server-owned AI. The component
+            // itself filters remote clones and only the Server schedules AI
+            // timing, so this does not grant input authority to other peers.
+            if (GetComponent<PoseKart.Race.PoseKartRocketStart>() == null)
+            {
+                gameObject.AddComponent<PoseKart.Race.PoseKartRocketStart>();
             }
             if (GetComponent<KartDriveEffects>() == null) gameObject.AddComponent<KartDriveEffects>();
             if (GetComponent<PoseKart.Race.KartItemInventory>() == null) gameObject.AddComponent<PoseKart.Race.KartItemInventory>();
@@ -946,6 +1053,7 @@ namespace PoseKart.Vehicle
             if (GetComponent<PoseKart.Stunts.PoseKartStuntController>() == null) gameObject.AddComponent<PoseKart.Stunts.PoseKartStuntController>();
             if (GetComponent<PoseKart.Race.PoseKartBananaTripleLauncher>() == null) gameObject.AddComponent<PoseKart.Race.PoseKartBananaTripleLauncher>();
             if (GetComponent<PoseKart.Race.PoseKartShieldGeneratorVisual>() == null) gameObject.AddComponent<PoseKart.Race.PoseKartShieldGeneratorVisual>();
+            if (GetComponent<PoseKart.Race.PoseKartWreckController>() == null) gameObject.AddComponent<PoseKart.Race.PoseKartWreckController>();
         }
 
         private void FixedUpdate()
@@ -1409,6 +1517,7 @@ namespace PoseKart.Vehicle
         private void LimitGroundContactImpulses()
         {
             if (Time.time < launchedUntil || !grounded) return;
+            if (AllowNaturalSuspensionBounce) return;
             Vector3 velocity = targetBody.linearVelocity;
             float separatingSpeed = Vector3.Dot(velocity, groundNormal);
             if (separatingSpeed <= maximumGroundedUpwardSpeed)
@@ -1496,22 +1605,104 @@ namespace PoseKart.Vehicle
             recentContactUpDot = minimumUpDot;
         }
 
+        private bool HasGameplayAuthority()
+        {
+            NetworkObject networkObject = GetComponentInParent<NetworkObject>();
+            NetworkManager manager = NetworkManager.Singleton;
+            if (networkObject == null || !networkObject.IsSpawned ||
+                manager == null || !manager.IsListening)
+            {
+                return true;
+            }
+
+            // Human network players simulate on their owner. Scene AI is
+            // server-owned and therefore simulates only on the Server.
+            return networkObject.IsPlayerObject
+                ? networkObject.IsOwner
+                : manager.IsServer;
+        }
+
+        private static float GetNormalImpactSpeed(Collision collision)
+        {
+            if (collision == null || collision.contactCount == 0)
+                return 0f;
+
+            float normalSpeed = 0f;
+            for (int index = 0; index < collision.contactCount; index++)
+            {
+                ContactPoint contact = collision.GetContact(index);
+                normalSpeed = Mathf.Max(
+                    normalSpeed,
+                    Mathf.Abs(Vector3.Dot(collision.relativeVelocity, contact.normal)));
+            }
+
+            return normalSpeed;
+        }
+
         private void OnCollisionEnter(Collision collision)
         {
             CaptureCollisionSnapshot(collision);
             if (IsShockwaveActive)
             {
-                CarController victim = collision.collider.GetComponentInParent<CarController>();
-                if (victim != null && victim != this && !victim.IsShockwaveActive &&
-                    Time.time >= nextShockwaveHitTime && collision.relativeVelocity.magnitude >= shockwaveMinimumImpactSpeed)
+                if (!HasGameplayAuthority())
+                {
+                    debugLastCollisionSpeedLoss = 0f;
+                    return;
+                }
+
+                CarController victim = collision.collider != null
+                    ? collision.collider.GetComponentInParent<CarController>()
+                    : null;
+                float closingSpeed = GetNormalImpactSpeed(collision);
+                if (victim != null && victim != this &&
+                    Time.time >= nextShockwaveHitTime &&
+                    closingSpeed >= shockwaveMinimumImpactSpeed)
                 {
                     nextShockwaveHitTime = Time.time + shockwaveHitCooldown;
                     Vector3 point = GetCollisionPoint(collision);
-                    KartItemDefense victimDefense = victim.GetComponent<KartItemDefense>();
-                    if (victimDefense == null || !victimDefense.TryBlockMissileExplosion(point))
+                    PoseKartNetworkItemBridge bridge =
+                        GetComponentInParent<PoseKartNetworkItemBridge>();
+                    if (bridge != null)
                     {
-                        Vector3 away = Vector3.ProjectOnPlane(victim.transform.position - transform.position, Vector3.up).normalized;
-                        victim.ApplyMissileExplosionImpact(away * shockwavePush + Vector3.up * shockwaveLift, 0.6f, point, shockwaveTorque, false);
+                        // The bridge owns the online authority hand-off. It
+                        // applies the impulse once on the victim authority and
+                        // separately broadcasts cosmetic presentation.
+                        bridge.NotifyShockwaveContact(
+                            victim,
+                            point,
+                            closingSpeed);
+                    }
+                    else if (!PoseKartNetworkItemBridge.IsOnlineRace &&
+                             !victim.IsShockwaveActive)
+                    {
+                        PoseKartWreckController victimWreck =
+                            victim.GetComponent<PoseKartWreckController>();
+                        KartItemDefense victimDefense =
+                            victim.GetComponent<KartItemDefense>();
+                        if ((victimWreck == null || !victimWreck.IsGameplayProtected) &&
+                            (victimDefense == null ||
+                             !victimDefense.TryBlockMissileExplosion(point)))
+                        {
+                            Vector3 away = Vector3.ProjectOnPlane(
+                                victim.transform.position - transform.position,
+                                Vector3.up);
+                            if (away.sqrMagnitude < 0.0001f)
+                                away = Vector3.ProjectOnPlane(
+                                    -transform.forward,
+                                    Vector3.up);
+                            if (away.sqrMagnitude < 0.0001f)
+                                away = Vector3.right;
+                            away.Normalize();
+
+                            victim.ApplyMissileExplosionImpact(
+                                away * shockwavePush + Vector3.up * shockwaveLift,
+                                0.6f,
+                                point,
+                                shockwaveTorque);
+                            PoseKartShockwaveImpactPresentation.PlayLocal(
+                                0.55f,
+                                point);
+                        }
                     }
                 }
                 debugLastCollisionSpeedLoss = 0f;
@@ -1526,6 +1717,9 @@ namespace PoseKart.Vehicle
                 return;
             }
 
+            if (!HasGameplayAuthority())
+                return;
+
             Vector3 planarRelativeVelocity = Vector3.ProjectOnPlane(collision.relativeVelocity, transform.up);
             float planarImpactSpeed = planarRelativeVelocity.magnitude;
             if (planarImpactSpeed <= 0.01f)
@@ -1533,13 +1727,17 @@ namespace PoseKart.Vehicle
                 return;
             }
 
+            float normalImpactSpeed = GetNormalImpactSpeed(collision);
+            if (normalImpactSpeed <= 0.01f)
+                return;
+
             float frontalAlignment = Mathf.Abs(
                 Vector3.Dot(planarRelativeVelocity / planarImpactSpeed, transform.forward));
             float impactWeight = Mathf.Lerp(
                 sideImpactLossMultiplier,
                 1f,
                 frontalAlignment * frontalAlignment);
-            float weightedImpactSpeed = planarImpactSpeed * impactWeight;
+            float weightedImpactSpeed = normalImpactSpeed * impactWeight;
             debugLastCollisionImpact = weightedImpactSpeed;
 
             KartItemDefense defense = GetComponent<KartItemDefense>();
@@ -1549,11 +1747,45 @@ namespace PoseKart.Vehicle
             if (defense != null && defense.TryBlockMajorCollision(
                     GetCollisionPoint(collision),
                     otherCar != null && otherCar != this,
-                    collision.relativeVelocity.magnitude))
+                    normalImpactSpeed))
             {
                 debugLastCollisionSpeedLoss = 0f;
                 lastCollisionLossTime = Time.time;
                 return;
+            }
+
+            if (otherCar != null && otherCar != this &&
+                normalImpactSpeed >= collisionPresentationMinimumSpeed &&
+                Time.time >= nextCollisionPresentationTime)
+            {
+                nextCollisionPresentationTime = Time.time +
+                    Mathf.Max(0f, collisionPresentationCooldown);
+                float intensity = Mathf.InverseLerp(
+                    collisionPresentationMinimumSpeed,
+                    Mathf.Max(
+                        collisionPresentationMinimumSpeed + 0.1f,
+                        collisionPresentationMaximumSpeed),
+                    normalImpactSpeed);
+                PoseKartNetworkItemBridge bridge =
+                    GetComponentInParent<PoseKartNetworkItemBridge>();
+                if (bridge != null)
+                {
+                    bridge.NotifyVehicleCollision(
+                        otherCar,
+                        GetCollisionPoint(collision),
+                        normalImpactSpeed,
+                        intensity);
+                }
+                else if (!PoseKartNetworkItemBridge.IsOnlineRace)
+                {
+                    KartParticleEffect.Burst(
+                        GetCollisionPoint(collision),
+                        new Color(1f, 0.55f, 0.16f, 1f),
+                        Mathf.RoundToInt(Mathf.Lerp(12f, 28f, intensity)));
+                    PoseKartShockwaveImpactPresentation.PlayLocal(
+                        Mathf.Lerp(0.15f, 0.65f, intensity),
+                        GetCollisionPoint(collision));
+                }
             }
 
             if (weightedImpactSpeed < minimumImpactSpeed ||

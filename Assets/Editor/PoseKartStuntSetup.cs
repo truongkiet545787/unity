@@ -24,6 +24,250 @@ namespace PoseKart.Editor
             Debug.Log("<color=#00E5FF><b>[PoseKart Stunt System]</b> All stunt features (HUD, Vehicles, Ramps) successfully configured!</color>");
         }
 
+        [MenuItem("PoseKart/Stunts/Convert Selected Object To Barrel Roll Ramp")]
+        public static void ConvertSelectedObjectToBarrelRollRamp()
+        {
+            GameObject selected = Selection.activeGameObject;
+            if (selected == null)
+            {
+                Debug.LogWarning("[PoseKart Stunt Setup] Select a ramp GameObject first.");
+                return;
+            }
+
+            Transform existing = selected.transform.Find("StuntTrigger_BarrelRoll");
+            GameObject triggerObject = existing != null ? existing.gameObject : null;
+            if (triggerObject == null)
+            {
+                triggerObject = new GameObject("StuntTrigger_BarrelRoll");
+                Undo.RegisterCreatedObjectUndo(triggerObject, "Create Barrel Roll Trigger");
+                triggerObject.transform.SetParent(selected.transform, false);
+            }
+
+            triggerObject.transform.localPosition = Vector3.zero;
+            triggerObject.transform.localRotation = Quaternion.identity;
+            triggerObject.transform.localScale = Vector3.one;
+
+            BoxCollider trigger = triggerObject.GetComponent<BoxCollider>();
+            if (trigger == null)
+                trigger = Undo.AddComponent<BoxCollider>(triggerObject);
+            trigger.isTrigger = true;
+
+            // Keep the trigger in world-sized dimensions. Imported ramp prefabs in
+            // this scene use a parent scale of 100, so assigning mesh-local bounds
+            // directly would create a trigger tens of metres wide.
+            Vector3 desiredWorldSize = new Vector3(4f, 3f, 2f);
+            Vector3 lossyScale = trigger.transform.lossyScale;
+            trigger.center = Vector3.zero;
+            trigger.size = new Vector3(
+                desiredWorldSize.x / Mathf.Max(0.0001f, Mathf.Abs(lossyScale.x)),
+                desiredWorldSize.y / Mathf.Max(0.0001f, Mathf.Abs(lossyScale.y)),
+                desiredWorldSize.z / Mathf.Max(0.0001f, Mathf.Abs(lossyScale.z)));
+
+            PoseKartStuntRamp stuntRamp = triggerObject.GetComponent<PoseKartStuntRamp>();
+            if (stuntRamp == null)
+                stuntRamp = Undo.AddComponent<PoseKartStuntRamp>(triggerObject);
+
+            SerializedObject serializedRamp = new SerializedObject(stuntRamp);
+            serializedRamp.FindProperty("rampType").enumValueIndex = (int)RampType.BarrelRollRamp;
+            serializedRamp.FindProperty("minimumForwardSpeed").floatValue = 8f;
+            serializedRamp.FindProperty("armWindow").floatValue = 1.4f;
+            serializedRamp.FindProperty("rotationDuration").floatValue = 0.82f;
+            serializedRamp.FindProperty("clockwise").boolValue = false;
+            serializedRamp.FindProperty("applyLaunchImpulse").boolValue = true;
+            serializedRamp.FindProperty("upwardVelocityChange").floatValue = 8f;
+            serializedRamp.FindProperty("forwardVelocityChange").floatValue = 5f;
+            serializedRamp.FindProperty("rewardMultiplier").floatValue = 1.15f;
+            serializedRamp.ApplyModifiedPropertiesWithoutUndo();
+
+            EditorUtility.SetDirty(triggerObject);
+            EditorUtility.SetDirty(stuntRamp);
+            if (PrefabUtility.IsPartOfPrefabInstance(selected))
+                PrefabUtility.RecordPrefabInstancePropertyModifications(selected);
+            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+
+            Selection.activeGameObject = triggerObject;
+            Debug.Log($"[PoseKart Stunt Setup] '{selected.name}' converted to Barrel Roll ramp with trigger '{triggerObject.name}'.");
+        }
+
+        [MenuItem("PoseKart/Stunts/Repair Selected Barrel Roll Exit Trigger")]
+        public static void RepairSelectedBarrelRollExitTrigger()
+        {
+            GameObject selected = Selection.activeGameObject;
+            if (selected == null)
+            {
+                Debug.LogWarning("[PoseKart Stunt Setup] Select BarrelRollExitTrigger first.");
+                return;
+            }
+
+            Transform rampRoot = selected.transform.parent;
+            if (rampRoot == null)
+            {
+                Debug.LogWarning("[PoseKart Stunt Setup] The selected trigger must be a child of the ramp mesh.");
+                return;
+            }
+
+            Undo.RecordObject(selected.transform, "Repair Barrel Roll Exit Trigger Transform");
+
+            Bounds localBounds = new Bounds(Vector3.zero, Vector3.one);
+            bool hasBounds = false;
+            Renderer[] renderers = rampRoot.GetComponentsInChildren<Renderer>(true);
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null || renderer.transform == selected.transform || renderer.transform.IsChildOf(selected.transform))
+                    continue;
+
+                Bounds worldBounds = renderer.bounds;
+                Vector3 min = worldBounds.min;
+                Vector3 max = worldBounds.max;
+                Vector3[] corners =
+                {
+                    new Vector3(min.x, min.y, min.z), new Vector3(min.x, min.y, max.z),
+                    new Vector3(min.x, max.y, min.z), new Vector3(min.x, max.y, max.z),
+                    new Vector3(max.x, min.y, min.z), new Vector3(max.x, min.y, max.z),
+                    new Vector3(max.x, max.y, min.z), new Vector3(max.x, max.y, max.z)
+                };
+
+                foreach (Vector3 corner in corners)
+                {
+                    Vector3 localCorner = rampRoot.InverseTransformPoint(corner);
+                    if (!hasBounds)
+                    {
+                        localBounds = new Bounds(localCorner, Vector3.zero);
+                        hasBounds = true;
+                    }
+                    else
+                    {
+                        localBounds.Encapsulate(localCorner);
+                    }
+                }
+            }
+
+            if (hasBounds)
+            {
+                float forwardSign = selected.transform.localPosition.z >= localBounds.center.z ? 1f : -1f;
+                Vector3 localPosition = selected.transform.localPosition;
+                localPosition.z = forwardSign > 0f
+                    ? localBounds.max.z + 0.5f
+                    : localBounds.min.z - 0.5f;
+                localPosition.x = Mathf.Clamp(localPosition.x, localBounds.min.x, localBounds.max.x);
+                selected.transform.localPosition = localPosition;
+            }
+
+            BoxCollider trigger = selected.GetComponent<BoxCollider>();
+            if (trigger == null)
+                trigger = Undo.AddComponent<BoxCollider>(selected);
+            Undo.RecordObject(trigger, "Resize Barrel Roll Exit Trigger Collider");
+            trigger.isTrigger = true;
+            trigger.center = Vector3.zero;
+            float rampWidth = hasBounds ? localBounds.size.x : 4f;
+            float rampHeight = hasBounds ? localBounds.size.y : 3f;
+            trigger.size = new Vector3(
+                Mathf.Clamp(rampWidth * 0.8f, 3f, 8f),
+                Mathf.Clamp(rampHeight + 1f, 2.5f, 8f),
+                2f);
+
+            PoseKartStuntRamp stuntRamp = selected.GetComponent<PoseKartStuntRamp>();
+            if (stuntRamp == null)
+                stuntRamp = Undo.AddComponent<PoseKartStuntRamp>(selected);
+
+            SerializedObject serializedRamp = new SerializedObject(stuntRamp);
+            serializedRamp.FindProperty("rampType").enumValueIndex = (int)RampType.BarrelRollRamp;
+            serializedRamp.FindProperty("minimumForwardSpeed").floatValue = 8f;
+            serializedRamp.FindProperty("armWindow").floatValue = 1.2f;
+            serializedRamp.FindProperty("rotationDuration").floatValue = 0.82f;
+            serializedRamp.FindProperty("clockwise").boolValue = false;
+            serializedRamp.FindProperty("applyLaunchImpulse").boolValue = true;
+            serializedRamp.FindProperty("upwardVelocityChange").floatValue = 8f;
+            serializedRamp.FindProperty("forwardVelocityChange").floatValue = 5f;
+            serializedRamp.FindProperty("rewardMultiplier").floatValue = 1.15f;
+            serializedRamp.ApplyModifiedPropertiesWithoutUndo();
+
+            PoseKartBarrelRollRamp legacyRamp = selected.GetComponent<PoseKartBarrelRollRamp>();
+            if (legacyRamp != null)
+            {
+                Undo.DestroyObjectImmediate(legacyRamp);
+            }
+
+            EditorUtility.SetDirty(selected);
+            EditorUtility.SetDirty(trigger);
+            EditorUtility.SetDirty(stuntRamp);
+            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            Selection.activeGameObject = selected;
+
+            Debug.Log($"[PoseKart Stunt Setup] Repaired '{selected.name}': unified Barrel Roll trigger at local Z {selected.transform.localPosition.z:0.00}, collider {trigger.size}.");
+        }
+
+        [MenuItem("PoseKart/Stunts/Fix Selected Stunt Trigger Collider Scale")]
+        public static void FixSelectedStuntTriggerColliderScale()
+        {
+            GameObject selected = Selection.activeGameObject;
+            if (selected == null)
+            {
+                Debug.LogWarning("[PoseKart Stunt Setup] Select a stunt trigger first.");
+                return;
+            }
+
+            BoxCollider trigger = selected.GetComponent<BoxCollider>();
+            if (trigger == null)
+            {
+                Debug.LogWarning($"[PoseKart Stunt Setup] '{selected.name}' has no BoxCollider.");
+                return;
+            }
+
+            // Work in world units so imported ramps with a large parent scale do not
+            // accidentally create a trigger covering half the track.
+            Vector3 desiredWorldSize = new Vector3(4f, 3f, 2f);
+            Vector3 lossyScale = trigger.transform.lossyScale;
+            Vector3 localSize = new Vector3(
+                desiredWorldSize.x / Mathf.Max(0.0001f, Mathf.Abs(lossyScale.x)),
+                desiredWorldSize.y / Mathf.Max(0.0001f, Mathf.Abs(lossyScale.y)),
+                desiredWorldSize.z / Mathf.Max(0.0001f, Mathf.Abs(lossyScale.z)));
+
+            Undo.RecordObject(trigger, "Fix Stunt Trigger Collider Scale");
+            trigger.center = Vector3.zero;
+            trigger.size = localSize;
+            trigger.isTrigger = true;
+
+            EditorUtility.SetDirty(trigger);
+            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+
+            Debug.Log($"[PoseKart Stunt Setup] Normalized '{selected.name}' collider to world size {desiredWorldSize} (local size {localSize}).");
+        }
+
+        [MenuItem("PoseKart/Stunts/Fix All Barrel Roll Trigger Collider Scales")]
+        public static void FixAllBarrelRollTriggerColliderScales()
+        {
+            const float targetWidth = 4f;
+            const float targetHeight = 3f;
+            const float targetDepth = 2f;
+            int fixedCount = 0;
+
+            PoseKartStuntRamp[] ramps = Object.FindObjectsByType<PoseKartStuntRamp>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (PoseKartStuntRamp ramp in ramps)
+            {
+                if (ramp == null || ramp.Type != RampType.BarrelRollRamp)
+                    continue;
+
+                BoxCollider trigger = ramp.GetComponent<BoxCollider>();
+                if (trigger == null)
+                    continue;
+
+                Vector3 lossyScale = trigger.transform.lossyScale;
+                Undo.RecordObject(trigger, "Fix All Barrel Roll Trigger Collider Scales");
+                trigger.center = Vector3.zero;
+                trigger.size = new Vector3(
+                    targetWidth / Mathf.Max(0.0001f, Mathf.Abs(lossyScale.x)),
+                    targetHeight / Mathf.Max(0.0001f, Mathf.Abs(lossyScale.y)),
+                    targetDepth / Mathf.Max(0.0001f, Mathf.Abs(lossyScale.z)));
+                trigger.isTrigger = true;
+                EditorUtility.SetDirty(trigger);
+                fixedCount++;
+            }
+
+            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+            Debug.Log($"[PoseKart Stunt Setup] Normalized {fixedCount} Barrel Roll trigger collider(s) to world size 4 x 3 x 2 m.");
+        }
+
         [MenuItem("PoseKart/Stunts/Setup Stunt HUD in Canvas")]
         public static PoseKartStuntHUD SetupStuntHUD()
         {

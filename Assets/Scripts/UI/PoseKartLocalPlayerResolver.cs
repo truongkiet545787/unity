@@ -34,7 +34,12 @@ namespace PoseKart.UI
                 if (playerObject != null && playerObject.IsSpawned)
                 {
                     CarController ownedCar = playerObject.GetComponentInChildren<CarController>(true);
-                    if (IsLocalHuman(ownedCar))
+                    // LocalClient.PlayerObject is already NGO's authoritative
+                    // local human object. Prefer its CarController directly;
+                    // repeating the IsPlayerObject check here can reject a
+                    // valid car during the short spawn/ownership setup window
+                    // even though the Server has already accepted pickups.
+                    if (ownedCar != null && ownedCar.isActiveAndEnabled)
                         return ownedCar;
                 }
 

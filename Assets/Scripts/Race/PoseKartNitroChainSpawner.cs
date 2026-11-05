@@ -180,6 +180,10 @@ namespace PoseKart.Race
             }
 
             pickup.name = string.Format("Nitro Chain {0:00} {1}", spawnedPickups.Count + 1, lane);
+            // Dynamic pickups are created after the scene pickups have already
+            // initialized the cached list. Refresh after assigning the final
+            // deterministic name so every peer gets the same pickup index.
+            PoseKartNitroPickup.RefreshAllPickups();
             if (configuredPrefab == null)
                 KeepDoubleNitroVisual(pickup);
             spawnedPickups.Add(pickup);

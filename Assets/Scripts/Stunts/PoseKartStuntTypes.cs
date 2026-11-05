@@ -31,6 +31,6 @@ namespace PoseKart.Stunts
     {
         NormalRamp,
         BarrelRollRamp,
-        SpecialFlipRamp
+        FlipRamp
     }
 }

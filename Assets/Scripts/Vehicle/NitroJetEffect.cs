@@ -1,20 +1,52 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 namespace PoseKart.Vehicle
 {
     public sealed class NitroJetEffect : MonoBehaviour
     {
+        [Header("Custom Nitro VFX")]
+        [Tooltip("Optional Nitro VFX prefab. If assigned, it replaces the procedural line-renderer flames.")]
+        [SerializeField] private GameObject customNitroPrefab;
+        [Tooltip("Optional exhaust anchors. Assign one anchor per prefab instance (usually left and right exhaust). If empty, one instance is placed under the vehicle visual pivot.")]
+        [SerializeField] private Transform[] customNitroSpawnPoints;
+        [Tooltip("Optional glow/light prefab spawned at the same exhaust anchors. Leave empty if the Nitro prefab already contains its own glow.")]
+        [SerializeField] private GameObject customNitroGlowPrefab;
+        [Tooltip("Optional glow anchors. If empty, Custom Nitro Spawn Points are reused.")]
+        [SerializeField] private Transform[] customNitroGlowSpawnPoints;
+        [Tooltip("Starts/stops ParticleSystems inside the custom prefab when Nitro changes state.")]
+        [SerializeField] private bool controlCustomParticleSystems = true;
+        [Tooltip("Changes the custom prefab's ParticleSystem/Renderer tint when Nitro mode changes.")]
+        [SerializeField] private bool tintCustomNitroVfx = true;
+        [SerializeField] private Color customSingleColor = new Color(1f, 0.78f, 0.1f, 1f);
+        [SerializeField] private Color customDoubleColor = new Color(1f, 0.35f, 0.05f, 1f);
+        [SerializeField] private Color customPerfectColor = new Color(0.1f, 0.88f, 1f, 1f);
+        [SerializeField] private Color customShockwaveColor = new Color(0.85f, 0.15f, 1f, 1f);
+
         private CarController car;
         private LineRenderer[] jets;
         private Material material;
         private Material coreMaterial;
         private Light glow;
+        private readonly List<GameObject> customNitroInstances = new List<GameObject>();
+        private readonly List<GameObject> customNitroGlowInstances = new List<GameObject>();
+        // MaterialPropertyBlock wraps a native Unity object and must be created
+        // from a Unity lifecycle method, never from a MonoBehaviour field initializer.
+        private MaterialPropertyBlock customColorBlock;
+        private bool customNitroIsActive;
         private CarController.NitroMode lastMode = (CarController.NitroMode)(-1);
         private float currentLengthMultiplier = 1f;
         private float currentGlowIntensity = 4f;
+        private Vector3 previousVehiclePosition;
+        private bool hasPreviousVehiclePosition;
+        private bool resetVfxSuppressed;
+        private CarController.NitroMode resetSuppressionMode;
+
+        public bool HasCustomNitroVfx => customNitroPrefab != null || customNitroGlowPrefab != null;
 
         private void Start()
         {
+            customColorBlock = new MaterialPropertyBlock();
             car = GetComponent<CarController>();
 
             Transform parentPivot = transform.Find("StuntPivot");
@@ -29,6 +61,14 @@ namespace PoseKart.Vehicle
                 {
                     parentPivot = transform.Find("Visual") ?? transform;
                 }
+            }
+
+            if (HasCustomNitroVfx)
+            {
+                CreateCustomNitroInstances(parentPivot);
+                ApplyCustomModeVisuals(CarController.NitroMode.Single);
+                SetCustomNitroActive(false);
+                return;
             }
 
             Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
@@ -71,8 +111,41 @@ namespace PoseKart.Vehicle
 
         private void LateUpdate()
         {
+            if (car == null)
+                car = GetComponent<CarController>();
+
+            if (car != null)
+            {
+                if (hasPreviousVehiclePosition &&
+                    (transform.position - previousVehiclePosition).sqrMagnitude > 16f)
+                {
+                    resetVfxSuppressed = true;
+                    resetSuppressionMode = car.VisualNitroMode;
+                }
+                previousVehiclePosition = transform.position;
+                hasPreviousVehiclePosition = true;
+
+                if (resetVfxSuppressed &&
+                    (!car.IsVisualNitroBoosting ||
+                     car.VisualNitroMode != resetSuppressionMode))
+                {
+                    resetVfxSuppressed = false;
+                }
+            }
+
             // Boost pad chỉ tăng tốc chứ không kích hoạt nitrojet
-            bool active = car != null && car.IsVisualNitroBoosting;
+            bool active = car != null &&
+                car.IsVisualNitroBoosting &&
+                !resetVfxSuppressed;
+
+            if (HasCustomNitroVfx)
+            {
+                if (active && car != null && car.VisualNitroMode != lastMode)
+                    ApplyCustomModeVisuals(car.VisualNitroMode);
+                if (active != customNitroIsActive)
+                    SetCustomNitroActive(active);
+                return;
+            }
 
             if (car != null && active)
             {
@@ -104,6 +177,175 @@ namespace PoseKart.Vehicle
                 line.SetPosition(1, new Vector3(x, 0.45f, -1.5f));
                 line.SetPosition(2, new Vector3(x, 0.47f, -1.1f - length * 0.6f));
                 line.SetPosition(3, new Vector3(x, 0.45f, -1.1f - length));
+            }
+        }
+
+        private void CreateCustomNitroInstances(Transform parentPivot)
+        {
+            CreateCustomVfxInstances(
+                customNitroPrefab,
+                customNitroSpawnPoints,
+                parentPivot,
+                "Nitro VFX",
+                customNitroInstances);
+
+            Transform[] glowPoints = customNitroGlowSpawnPoints != null &&
+                customNitroGlowSpawnPoints.Length > 0
+                ? customNitroGlowSpawnPoints
+                : customNitroSpawnPoints;
+            CreateCustomVfxInstances(
+                customNitroGlowPrefab,
+                glowPoints,
+                parentPivot,
+                "Nitro Glow",
+                customNitroGlowInstances);
+        }
+
+        private void CreateCustomVfxInstances(
+            GameObject prefab,
+            Transform[] spawnPoints,
+            Transform parentPivot,
+            string suffix,
+            List<GameObject> destination)
+        {
+            destination.Clear();
+            if (prefab == null)
+                return;
+
+            if (spawnPoints != null && spawnPoints.Length > 0)
+            {
+                for (int i = 0; i < spawnPoints.Length; i++)
+                {
+                    Transform spawnPoint = spawnPoints[i];
+                    if (spawnPoint == null)
+                        continue;
+
+                    GameObject instance = Instantiate(prefab, spawnPoint, false);
+                    instance.name = prefab.name + " (" + suffix + ")";
+                    instance.transform.localPosition = Vector3.zero;
+                    instance.transform.localRotation = Quaternion.identity;
+                    instance.transform.localScale = Vector3.one;
+                    instance.SetActive(false);
+                    destination.Add(instance);
+                }
+            }
+            else if (parentPivot != null)
+            {
+                GameObject instance = Instantiate(prefab, parentPivot, false);
+                instance.name = prefab.name + " (" + suffix + ")";
+                instance.SetActive(false);
+                destination.Add(instance);
+            }
+        }
+
+        private void SetCustomNitroActive(bool active)
+        {
+            customNitroIsActive = active;
+
+            SetInstancesActive(customNitroInstances, active);
+            SetInstancesActive(customNitroGlowInstances, active);
+        }
+
+        private void SetInstancesActive(List<GameObject> instances, bool active)
+        {
+            for (int i = 0; i < instances.Count; i++)
+            {
+                GameObject instance = instances[i];
+                if (instance == null)
+                    continue;
+
+                if (!active)
+                {
+                    if (controlCustomParticleSystems)
+                    {
+                        ParticleSystem[] systems = instance.GetComponentsInChildren<ParticleSystem>(true);
+                        for (int j = 0; j < systems.Length; j++)
+                            systems[j].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    }
+
+                    instance.SetActive(false);
+                    continue;
+                }
+
+                instance.SetActive(true);
+                if (controlCustomParticleSystems)
+                {
+                    ParticleSystem[] systems = instance.GetComponentsInChildren<ParticleSystem>(true);
+                    for (int j = 0; j < systems.Length; j++)
+                        systems[j].Play(true);
+                }
+            }
+        }
+
+        private void ApplyCustomModeVisuals(CarController.NitroMode mode)
+        {
+            lastMode = mode;
+            if (!tintCustomNitroVfx)
+                return;
+
+            Color tint = GetCustomModeColor(mode);
+            ApplyCustomModeVisualsToInstances(customNitroInstances, tint);
+            ApplyCustomModeVisualsToInstances(customNitroGlowInstances, tint);
+        }
+
+        private void ApplyCustomModeVisualsToInstances(List<GameObject> instances, Color tint)
+        {
+            for (int i = 0; i < instances.Count; i++)
+            {
+                GameObject instance = instances[i];
+                if (instance == null)
+                    continue;
+
+                ParticleSystem[] systems = instance.GetComponentsInChildren<ParticleSystem>(true);
+                for (int j = 0; j < systems.Length; j++)
+                {
+                    ParticleSystem.MainModule main = systems[j].main;
+                    main.startColor = tint;
+                }
+
+                Renderer[] renderers = instance.GetComponentsInChildren<Renderer>(true);
+                for (int j = 0; j < renderers.Length; j++)
+                {
+                    Renderer renderer = renderers[j];
+                    if (renderer == null)
+                        continue;
+
+                    renderer.GetPropertyBlock(customColorBlock);
+                    Material sharedMaterial = renderer.sharedMaterial;
+                    if (sharedMaterial != null)
+                    {
+                        if (sharedMaterial.HasProperty("_BaseColor"))
+                            customColorBlock.SetColor("_BaseColor", tint);
+                        if (sharedMaterial.HasProperty("_Color"))
+                            customColorBlock.SetColor("_Color", tint);
+                        if (sharedMaterial.HasProperty("_TintColor"))
+                            customColorBlock.SetColor("_TintColor", tint);
+                    }
+                    renderer.SetPropertyBlock(customColorBlock);
+                }
+
+                Light[] lights = instance.GetComponentsInChildren<Light>(true);
+                for (int j = 0; j < lights.Length; j++)
+                {
+                    if (lights[j] != null)
+                        lights[j].color = tint;
+                }
+            }
+        }
+
+        private Color GetCustomModeColor(CarController.NitroMode mode)
+        {
+            switch (mode)
+            {
+                case CarController.NitroMode.Double:
+                    return customDoubleColor;
+                case CarController.NitroMode.Perfect:
+                    return customPerfectColor;
+                case CarController.NitroMode.Shockwave:
+                    return customShockwaveColor;
+                case CarController.NitroMode.Single:
+                default:
+                    return customSingleColor;
             }
         }
 
@@ -206,6 +448,9 @@ namespace PoseKart.Vehicle
 
         private void OnDestroy()
         {
+            DestroyInstances(customNitroInstances);
+            DestroyInstances(customNitroGlowInstances);
+
             if (jets != null)
             {
                 for (int i = 0; i < jets.Length; i++)
@@ -216,6 +461,15 @@ namespace PoseKart.Vehicle
             if (glow != null) Destroy(glow.gameObject);
             if (material != null) Destroy(material);
             if (coreMaterial != null) Destroy(coreMaterial);
+        }
+
+        private void DestroyInstances(List<GameObject> instances)
+        {
+            for (int i = 0; i < instances.Count; i++)
+            {
+                if (instances[i] != null)
+                    Destroy(instances[i]);
+            }
         }
     }
 }

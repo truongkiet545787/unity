@@ -52,11 +52,15 @@ namespace PoseKart.Stunts
             {
                 stunt.TryArmFromBarrelRollRamp(this);
             }
-
-            PoseKartBarrelRollController roll = other.GetComponentInParent<PoseKartBarrelRollController>();
-            if (roll != null)
+            else
             {
-                roll.TryArm(this);
+                // Legacy fallback only. A vehicle with the unified stunt controller
+                // must not run both systems on the same ramp.
+                PoseKartBarrelRollController roll = other.GetComponentInParent<PoseKartBarrelRollController>();
+                if (roll != null)
+                {
+                    roll.TryArm(this);
+                }
             }
         }
 

@@ -13078,8 +13078,8 @@ MonoBehaviour:
   tripleNitroDrain: 0.6
   perfectNitroDrain: 0.32
   nitroTimingDuration: 0.9
-  perfectTimingStartSeconds: 0.35
-  perfectTimingEndSeconds: 0.58
+  perfectTimingStartSeconds: 0.2
+  perfectTimingEndSeconds: 0.75
   shockwaveTimingEndSeconds: 0.85
   nitroPressCooldown: 0.08
   singleNitroAccelerationMultiplier: 1.35
@@ -35384,8 +35384,8 @@ MonoBehaviour:
   tripleNitroDrain: 0.6
   perfectNitroDrain: 0.32
   nitroTimingDuration: 0.9
-  perfectTimingStartSeconds: 0.35
-  perfectTimingEndSeconds: 0.58
+  perfectTimingStartSeconds: 0.2
+  perfectTimingEndSeconds: 0.75
   shockwaveTimingEndSeconds: 0.85
   nitroPressCooldown: 0.08
   singleNitroAccelerationMultiplier: 1.35
@@ -43329,8 +43329,8 @@ MonoBehaviour:
   tripleNitroDrain: 0.6
   perfectNitroDrain: 0.32
   nitroTimingDuration: 0.9
-  perfectTimingStartSeconds: 0.35
-  perfectTimingEndSeconds: 0.58
+  perfectTimingStartSeconds: 0.2
+  perfectTimingEndSeconds: 0.75
   shockwaveTimingEndSeconds: 0.85
   nitroPressCooldown: 0.08
   singleNitroAccelerationMultiplier: 1.35
@@ -50919,8 +50919,8 @@ MonoBehaviour:
   tripleNitroDrain: 0.6
   perfectNitroDrain: 0.32
   nitroTimingDuration: 0.9
-  perfectTimingStartSeconds: 0.35
-  perfectTimingEndSeconds: 0.58
+  perfectTimingStartSeconds: 0.2
+  perfectTimingEndSeconds: 0.75
   shockwaveTimingEndSeconds: 0.85
   nitroPressCooldown: 0.08
   singleNitroAccelerationMultiplier: 1.35

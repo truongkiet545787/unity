@@ -1,4 +1,5 @@
 using PoseKart.Race;
+using PoseKart.Stunts;
 using PoseKart.Vehicle;
 using System.Collections;
 using Unity.Collections;
@@ -11,10 +12,36 @@ namespace PoseKart.Multiplayer
     [DisallowMultipleComponent]
     public sealed class PoseKartNetworkPlayerOwner : NetworkBehaviour
     {
+        private struct StuntNetworkState : INetworkSerializable, System.IEquatable<StuntNetworkState>
+        {
+            public bool isActive;
+            public byte stuntType;
+            public float accumulatedAngle;
+            public byte completedRevolutions;
+
+            public void NetworkSerialize<T>(BufferSerializer<T> serializer)
+                where T : IReaderWriter
+            {
+                serializer.SerializeValue(ref isActive);
+                serializer.SerializeValue(ref stuntType);
+                serializer.SerializeValue(ref accumulatedAngle);
+                serializer.SerializeValue(ref completedRevolutions);
+            }
+
+            public bool Equals(StuntNetworkState other)
+            {
+                return isActive == other.isActive &&
+                       stuntType == other.stuntType &&
+                       Mathf.Abs(accumulatedAngle - other.accumulatedAngle) < 0.5f &&
+                       completedRevolutions == other.completedRevolutions;
+            }
+        }
+
         [Header("Race")]
         [SerializeField] private RaceParticipant raceParticipant;
         [SerializeField] private LapTracker lapTracker;
         [SerializeField] private CarController carController;
+        [SerializeField] private PoseKartStuntController stuntController;
         [Header("Local Owner Only")]
         [SerializeField]
         private Behaviour[] ownerOnlyBehaviours;
@@ -81,6 +108,16 @@ namespace PoseKart.Multiplayer
         private float nextNitroReplicationTime;
         private float lastPublishedNitroFill = -1f;
         private byte lastPublishedNitroMode = byte.MaxValue;
+        private float nextStuntReplicationTime;
+        private StuntNetworkState lastPublishedStuntState;
+
+        private readonly NetworkVariable<StuntNetworkState>
+            networkStuntState =
+                new NetworkVariable<StuntNetworkState>(
+                    default,
+                    NetworkVariableReadPermission.Everyone,
+                    NetworkVariableWritePermission.Owner
+                );
 
         private void Awake()
         {
@@ -99,6 +136,8 @@ namespace PoseKart.Multiplayer
                 carController = GetComponent<CarController>();
             if (body == null)
                 body = GetComponent<Rigidbody>();
+            if (stuntController == null)
+                stuntController = GetComponent<PoseKartStuntController>();
 
             SetLocalControl(false);
         }
@@ -115,6 +154,8 @@ namespace PoseKart.Multiplayer
                 OnNetworkNitroStateChanged;
             networkNitroMode.OnValueChanged +=
                 OnNetworkNitroStateChanged;
+            networkStuntState.OnValueChanged +=
+                OnNetworkStuntStateChanged;
 
             if (IsOwner)
                 networkRaceSetupReady.Value = false;
@@ -136,10 +177,15 @@ namespace PoseKart.Multiplayer
 
 
             SetLocalControl(IsOwner);
+            if (stuntController != null)
+            {
+                stuntController.SetNetworkPresentationOnly(!IsOwner);
+            }
 
             ConfigureRaceParticipant();
             ApplyNetworkRaceProgress(networkRaceProgress.Value);
             ApplyNetworkNitroState();
+            ApplyNetworkStuntState(networkStuntState.Value);
 
 
             if (IsOwner)
@@ -172,6 +218,8 @@ namespace PoseKart.Multiplayer
         {
             if (!IsSpawned || !IsOwner || carController == null)
                 return;
+
+            PublishNetworkStuntState();
 
             if (Time.unscaledTime < nextNitroReplicationTime &&
                 (byte)carController.CurrentNitroMode == lastPublishedNitroMode)
@@ -521,6 +569,8 @@ namespace PoseKart.Multiplayer
                 OnNetworkNitroStateChanged;
             networkNitroMode.OnValueChanged -=
                 OnNetworkNitroStateChanged;
+            networkStuntState.OnValueChanged -=
+                OnNetworkStuntStateChanged;
 
             if (carController != null)
                 carController.ClearRemoteNitroPresentation();
@@ -536,6 +586,64 @@ namespace PoseKart.Multiplayer
             SetLocalControl(false);
 
             base.OnNetworkDespawn();
+        }
+
+        private void PublishNetworkStuntState()
+        {
+            if (stuntController == null ||
+                Time.unscaledTime < nextStuntReplicationTime)
+            {
+                return;
+            }
+
+            StuntNetworkState next = new StuntNetworkState
+            {
+                isActive = stuntController.HasNetworkStuntState,
+                stuntType = (byte)stuntController.ActiveStunt,
+                accumulatedAngle = stuntController.NetworkRotationAngle,
+                completedRevolutions = (byte)Mathf.Clamp(
+                    stuntController.NetworkCompletedRevolutions,
+                    0,
+                    byte.MaxValue)
+            };
+
+            if (!next.Equals(lastPublishedStuntState))
+            {
+                networkStuntState.Value = next;
+                lastPublishedStuntState = next;
+            }
+
+            nextStuntReplicationTime = Time.unscaledTime + 0.05f;
+        }
+
+        private void OnNetworkStuntStateChanged(
+            StuntNetworkState oldState,
+            StuntNetworkState newState)
+        {
+            if (!IsOwner)
+            {
+                ApplyNetworkStuntState(newState);
+            }
+        }
+
+        private void ApplyNetworkStuntState(StuntNetworkState state)
+        {
+            if (stuntController == null || IsOwner)
+            {
+                return;
+            }
+
+            StuntType stuntType = (StuntType)state.stuntType;
+            if (!System.Enum.IsDefined(typeof(StuntType), stuntType))
+            {
+                stuntType = StuntType.None;
+            }
+
+            stuntController.ApplyNetworkStuntSnapshot(
+                state.isActive,
+                stuntType,
+                state.accumulatedAngle,
+                state.completedRevolutions);
         }
         private void OnNetworkDisplayNameChanged(
     FixedString64Bytes oldName,
@@ -577,6 +685,23 @@ namespace PoseKart.Multiplayer
             carController.ApplyRemoteNitroPresentation(
                 networkNitroFill01.Value,
                 mode);
+        }
+
+        public bool ServerCanAcceptNitroPickup(float amount)
+        {
+            if (float.IsNaN(amount) || amount <= 0f || carController == null)
+                return false;
+
+            // The Host's player is authoritative on the Server even if the
+            // ownership flag is not yet reflected during scene-spawn timing.
+            // Only a non-server owner must use the replicated presentation
+            // values for capacity validation.
+            if (NetworkManager.Singleton == null ||
+                OwnerClientId == NetworkManager.ServerClientId)
+                return carController.CanAcceptNitroPickup(amount);
+
+            return networkNitroFill01.Value * carController.MaxNitroChargeAmount <
+                carController.MaxNitroChargeAmount - 0.0001f;
         }
 
         private void ApplyNetworkRaceProgress(PoseKartRaceProgressState state)

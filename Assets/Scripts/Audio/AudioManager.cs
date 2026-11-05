@@ -627,7 +627,7 @@ namespace PoseKart.Audio
         public static void PlayNitroPickup(CarController car, Vector3 worldPosition, bool orange)
         {
             AudioManager mgr = Instance;
-            if (mgr == null || car == null) return;
+            if (mgr == null) return;
 
             AudioClip clip = orange ? mgr.orangeNitroPickupClip : mgr.blueNitroPickupClip;
             float volume = orange ? mgr.orangeNitroPickupVolume : mgr.blueNitroPickupVolume;
@@ -639,7 +639,7 @@ namespace PoseKart.Audio
             }
             if (clip == null) return;
 
-            if (IsPlayerCar(car))
+            if (car != null && IsPlayerCar(car))
                 mgr.PlaySFX(clip, volume);
             else
                 mgr.PlaySFXAtPosition(clip, worldPosition, volume);

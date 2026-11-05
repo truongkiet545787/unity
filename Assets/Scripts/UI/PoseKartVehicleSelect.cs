@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using System.Collections;
 
 namespace PoseKart.UI
 {
@@ -29,12 +30,28 @@ namespace PoseKart.UI
         [SerializeField] private Button nextColor;
         [SerializeField] private Button startRace;
 
+        [Header("Vehicle Change Animation")]
+        [Tooltip("How far the preview platform and vehicle lower before swapping models.")]
+        [SerializeField, Min(0f)] private float vehicleChangeDropDistance = 3.4f;
+        [Tooltip("Total time for one vehicle to leave and the next vehicle to arrive.")]
+        [SerializeField, Min(0.1f)] private float vehicleChangeDuration = 0.8f;
+        [SerializeField, Min(0f)] private float vehicleChangeHoldDuration = 0.05f;
+        [Tooltip("Small vertical launch above the platform before the new vehicle drops onto it.")]
+        [SerializeField, Min(0f)] private float vehicleArrivalHopHeight = 0.65f;
+        [SerializeField, Min(0.05f)] private float vehicleArrivalFallDuration = 0.35f;
+
         private int selectedVehicle;
         private int selectedColor;
 
         private bool started;
         private bool listenersBound;
         private bool raceLoading;
+        private Coroutine vehicleChangeRoutine;
+        private Vector3 previewBaseLocalPosition;
+        private bool previewBasePositionCached;
+        private Transform replacableSpinner;
+        private Vector3 spinnerBaseWorldPosition;
+        private bool spinnerBasePositionCached;
 
         public void Configure(
             PoseKartVehiclePaint paint,
@@ -104,6 +121,8 @@ namespace PoseKart.UI
                 return;
             }
 
+            CachePreviewPosition();
+
             selectedVehicle = Mathf.Clamp(
                 selectedVehicle, 0, preview.VehicleCount - 1);
 
@@ -152,11 +171,14 @@ namespace PoseKart.UI
             if (preview == null || preview.VehicleCount <= 0)
                 return;
 
-            selectedVehicle =
+            if (vehicleChangeRoutine != null)
+                return;
+
+            int nextVehicle =
                 (selectedVehicle + preview.VehicleCount - 1)
                 % preview.VehicleCount;
 
-            Refresh();
+            ChangeVehicle(nextVehicle);
         }
 
         private void NextVehicle()
@@ -164,15 +186,31 @@ namespace PoseKart.UI
             if (preview == null || preview.VehicleCount <= 0)
                 return;
 
-            selectedVehicle =
+            if (vehicleChangeRoutine != null)
+                return;
+
+            int nextVehicle =
                 (selectedVehicle + 1) % preview.VehicleCount;
 
-            Refresh();
+            ChangeVehicle(nextVehicle);
+        }
+
+        private void ChangeVehicle(int nextVehicle)
+        {
+            if (nextVehicle == selectedVehicle)
+                return;
+
+            selectedVehicle = Mathf.Clamp(nextVehicle, 0, preview.VehicleCount - 1);
+            RefreshLabels();
+            vehicleChangeRoutine = StartCoroutine(AnimateVehicleChange());
         }
 
         private void PreviousColor()
         {
             if (preview == null || preview.ColorCount <= 0)
+                return;
+
+            if (vehicleChangeRoutine != null)
                 return;
 
             selectedColor =
@@ -185,6 +223,9 @@ namespace PoseKart.UI
         private void NextColor()
         {
             if (preview == null || preview.ColorCount <= 0)
+                return;
+
+            if (vehicleChangeRoutine != null)
                 return;
 
             selectedColor =
@@ -200,6 +241,14 @@ namespace PoseKart.UI
 
             preview.Apply(selectedVehicle, selectedColor);
 
+            RefreshLabels();
+        }
+
+        private void RefreshLabels()
+        {
+            if (preview == null || vehicleName == null || colorName == null)
+                return;
+
             vehicleName.text =
                 "TYPE  /  " +
                 PoseKartVehiclePaint.VehicleNames[selectedVehicle];
@@ -207,6 +256,128 @@ namespace PoseKart.UI
             colorName.text =
                 "COLOR  /  " +
                 preview.GetColorName(selectedColor);
+        }
+
+        private void CachePreviewPosition()
+        {
+            if (preview == null || previewBasePositionCached)
+            {
+                ResolveSpinner();
+                return;
+            }
+
+            previewBaseLocalPosition = preview.transform.localPosition;
+            previewBasePositionCached = true;
+            ResolveSpinner();
+        }
+
+        private void ResolveSpinner()
+        {
+            if (replacableSpinner == null)
+            {
+                GameObject spinnerObject = GameObject.Find("ReplacableSpinner");
+                if (spinnerObject != null)
+                    replacableSpinner = spinnerObject.transform;
+            }
+
+            if (replacableSpinner != null && !spinnerBasePositionCached)
+            {
+                spinnerBaseWorldPosition = replacableSpinner.position;
+                spinnerBasePositionCached = true;
+            }
+        }
+
+        private IEnumerator AnimateVehicleChange()
+        {
+            CachePreviewPosition();
+
+            VehiclePreviewRotator rotator =
+                preview != null ? preview.GetComponent<VehiclePreviewRotator>() : null;
+            rotator?.SetRotation(false);
+
+            float halfDuration = Mathf.Max(0.05f, vehicleChangeDuration * 0.5f);
+            Vector3 loweredPosition = previewBaseLocalPosition +
+                Vector3.down * vehicleChangeDropDistance;
+
+            yield return MovePreviewAndSpinner(
+                previewBaseLocalPosition,
+                loweredPosition,
+                0f,
+                vehicleChangeDropDistance,
+                halfDuration,
+                false);
+
+            // Swap while the platform is below the camera's main view.
+            preview.Apply(selectedVehicle, selectedColor);
+
+            if (vehicleChangeHoldDuration > 0f)
+                yield return new WaitForSecondsRealtime(vehicleChangeHoldDuration);
+
+            Vector3 launchPosition = previewBaseLocalPosition +
+                Vector3.up * vehicleArrivalHopHeight;
+
+            // The platform rises with the new vehicle, but the vehicle continues
+            // slightly above it to create a small arcade-style launch.
+            yield return MovePreviewAndSpinner(
+                loweredPosition,
+                launchPosition,
+                vehicleChangeDropDistance,
+                0f,
+                halfDuration,
+                false);
+
+            // Let the new vehicle fall onto the platform instead of snapping.
+            yield return MovePreviewAndSpinner(
+                launchPosition,
+                previewBaseLocalPosition,
+                0f,
+                0f,
+                vehicleArrivalFallDuration,
+                true);
+
+            rotator?.SetRotation(true);
+            vehicleChangeRoutine = null;
+        }
+
+        private IEnumerator MovePreviewAndSpinner(
+            Vector3 from,
+            Vector3 to,
+            float fromSpinnerDrop,
+            float toSpinnerDrop,
+            float duration,
+            bool accelerateDown)
+        {
+            if (preview == null)
+                yield break;
+
+            Vector3 spinnerFrom = spinnerBaseWorldPosition +
+                Vector3.down * fromSpinnerDrop;
+            Vector3 spinnerTo = spinnerBaseWorldPosition +
+                Vector3.down * toSpinnerDrop;
+
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float normalized = Mathf.Clamp01(elapsed / duration);
+                float eased = accelerateDown
+                    ? normalized * normalized
+                    : normalized * normalized * (3f - 2f * normalized);
+                preview.transform.localPosition = Vector3.LerpUnclamped(from, to, eased);
+
+                if (replacableSpinner != null && spinnerBasePositionCached)
+                {
+                    replacableSpinner.position = Vector3.LerpUnclamped(
+                        spinnerFrom, spinnerTo, eased);
+                }
+
+                yield return null;
+            }
+
+            preview.transform.localPosition = to;
+
+            if (replacableSpinner != null && spinnerBasePositionCached)
+                replacableSpinner.position = spinnerTo;
         }
 
         private void StartRace()
@@ -282,6 +453,9 @@ namespace PoseKart.UI
 
         private void OnDestroy()
         {
+            if (vehicleChangeRoutine != null)
+                StopCoroutine(vehicleChangeRoutine);
+
             UnbindButtons();
         }
     }
